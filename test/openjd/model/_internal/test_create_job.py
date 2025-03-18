@@ -9,6 +9,7 @@ from pydantic import PositiveInt, ValidationError
 
 from openjd.model import SymbolTable
 from openjd.model._format_strings import FormatString
+from openjd.model._format_strings._dyn_constrained_str import DynamicConstrainedStr
 from openjd.model import SpecificationRevision
 from openjd.model._internal._create_job import instantiate_model
 from openjd.model._types import (
@@ -16,6 +17,7 @@ from openjd.model._types import (
     JobCreationMetadata,
     OpenJDModel,
 )
+from openjd.model.v2023_09 import ModelParsingContext as ModelParsingContext_v2023_09
 
 
 class BaseModelForTesting(OpenJDModel):
@@ -192,7 +194,7 @@ class TestInternalCreateJobNoMetadata:
 
 
 class TestInternalCreateJobResolvesFormatStrings:
-    """Tests that JobCreationMetadata.resolve_fields is respected.
+    """Tests that JobCreationMetadata.resolve_fields_as is respected.
     We support resolving fields that are:
      1. FormatStrings
      2. lists of FormatStrings
@@ -206,15 +208,19 @@ class TestInternalCreateJobResolvesFormatStrings:
         f1 = FormatString("{{ Param.V }}")
         f2 = FormatString("{{ Param.V2 }}")
 
+        class ResolvedModel(BaseModelForTesting):
+            f1: str
+            f2: str
+
         class Model(BaseModelForTesting):
             f1: FormatString
             f2: FormatString
 
-            _job_creation_metadata = JobCreationMetadata(resolve_fields={"f1"})
+            _job_creation_metadata = JobCreationMetadata(create_as=JobCreateAsMetadata(model=ResolvedModel), resolve_fields_as={"f1"})
 
         model = Model(f1=f1, f2=f2)
         symtab = SymbolTable(source={"Param.V": "ValueOfV"})
-        expected = Model(f1="ValueOfV", f2=f2)
+        expected = ResolvedModel(f1="ValueOfV", f2=f2)
 
         # WHEN
         result = instantiate_model(model, symtab)
@@ -233,7 +239,7 @@ class TestInternalCreateJobResolvesFormatStrings:
             f1: list[FormatString]
             f2: FormatString
 
-            _job_creation_metadata = JobCreationMetadata(resolve_fields={"f1"})
+            _job_creation_metadata = JobCreationMetadata(resolve_fields_as={"f1"})
 
         model = Model(f1=[f1, f1, f1], f2=f2)
         symtab = SymbolTable(source={"Param.V": "ValueOfV"})
@@ -257,7 +263,7 @@ class TestInternalCreateJobResolvesFormatStrings:
             f1: list[Union[int, FormatString]]
             f2: FormatString
 
-            _job_creation_metadata = JobCreationMetadata(resolve_fields={"f1"})
+            _job_creation_metadata = JobCreationMetadata(resolve_fields_as={"f1"})
 
         model = Model(f1=[f1, 12], f2=f2)
         symtab = SymbolTable(source={"Param.V": "ValueOfV"})
@@ -463,7 +469,7 @@ class TestInternalCreateJobExceptions:
             vv: int
             ff: FormatString
             _job_creation_metadata = JobCreationMetadata(
-                create_as=JobCreateAsMetadata(model=TargetModel), resolve_fields={"ff"}
+                create_as=JobCreateAsMetadata(model=TargetModel), resolve_fields_as={"ff"}
             )
 
         model = Model(vv=-10, ff="{{ Param.V }}")
@@ -498,7 +504,7 @@ class TestInternalCreateJobExceptions:
             vv: int
             ff: FormatString
             _job_creation_metadata = JobCreationMetadata(
-                create_as=JobCreateAsMetadata(model=TargetInner), resolve_fields={"ff"}
+                create_as=JobCreateAsMetadata(model=TargetInner), resolve_fields_as={"ff"}
             )
 
         class Model(BaseModelForTesting):
@@ -536,7 +542,7 @@ class TestInternalCreateJobExceptions:
             vv: int
             ff: FormatString
             _job_creation_metadata = JobCreationMetadata(
-                create_as=JobCreateAsMetadata(model=TargetInner), resolve_fields={"ff"}
+                create_as=JobCreateAsMetadata(model=TargetInner), resolve_fields_as={"ff"}
             )
 
         class Model(BaseModelForTesting):
@@ -580,7 +586,7 @@ class TestInternalCreateJobExceptions:
             _job_creation_metadata = JobCreationMetadata(
                 create_as=JobCreateAsMetadata(model=TargetInner),
                 exclude_fields={"name"},
-                resolve_fields={"ff"},
+                resolve_fields_as={"ff"},
             )
 
         class Model(BaseModelForTesting):
@@ -620,24 +626,25 @@ class TestInternalCreateJobExceptions:
         # GIVEN
         class TargetInner(BaseModelForTesting):
             vv: PositiveInt
-            ff: FormatString
+            ff: int
 
         class InnerModel(BaseModelForTesting):
             vv: int
             ff: FormatString
             _job_creation_metadata = JobCreationMetadata(
                 create_as=JobCreateAsMetadata(model=TargetInner),
-                resolve_fields={"ff"},
+                resolve_fields_as={"ff": int},
             )
 
         class Model(BaseModelForTesting):
             dd: dict[str, InnerModel]
 
         model = Model(
-            dd={"foo": {"vv": -10, "ff": "{{ Param.V }}"}, "bar": {"vv": -5, "ff": "{{ Param.V }}"}}
+            dd={"foo": {"vv": -10, "ff": FormatString("{{ Param.V }}", context=ModelParsingContext_v2023_09())},
+                "bar": {"vv": -5, "ff": FormatString("{{ Param.V }}", context=ModelParsingContext_v2023_09())}}
         )
         symtab = SymbolTable(
-            source={"Param.V": "{{ Foo.Bar"}  # a bad format string to fire an exception
+            source={"Param.V": "not an integer"}  # a non-integer to fire an exception
         )
 
         # WHEN
@@ -647,7 +654,7 @@ class TestInternalCreateJobExceptions:
         errors = exc.errors()
 
         # THEN
-        assert len(errors) == 4
+        assert len(errors) == 4, str(exc)
         locs = [err["loc"] for err in errors]
         assert ("dd", "foo", "vv") in locs
         assert ("dd", "foo", "ff") in locs

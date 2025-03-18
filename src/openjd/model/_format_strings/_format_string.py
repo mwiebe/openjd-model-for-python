@@ -2,12 +2,15 @@
 
 from dataclasses import dataclass
 from numbers import Real
-from typing import Optional, Union
+from typing import cast, Any, Optional, Union
+
+from pydantic import ValidationInfo
 
 from .._errors import ExpressionError, TokenError
 from .._symbol_table import SymbolTable
 from ._dyn_constrained_str import DynamicConstrainedStr
 from ._expression import InterpolationExpression
+from .._types import ModelParsingContextInterface
 
 
 @dataclass
@@ -35,7 +38,7 @@ class FormatStringError(ValueError):
 
 
 class FormatString(DynamicConstrainedStr):
-    def __init__(self, value: str):
+    def __new__(cls, value: str, *, context: ModelParsingContextInterface):
         """
         Instantiate a FormatString from a given string.
 
@@ -55,8 +58,10 @@ class FormatString(DynamicConstrainedStr):
         ------
         FormatStringError: if the original string is nonvalid.
         """
-        # Note: str is constructed in __new__, so don't call super __init__
-        self._processed_list: list[Union[str, ExpressionInfo]] = self._preprocess()
+        self = super().__new__(cls, value, context=context)
+        print(f"Preprocess with {context}")
+        self._processed_list = self._preprocess(context=context)
+        return self
 
     @property
     def original_value(self) -> str:
@@ -125,7 +130,7 @@ class FormatString(DynamicConstrainedStr):
 
         return "".join(resolved_list)
 
-    def _preprocess(self) -> list[Union[str, ExpressionInfo]]:
+    def _preprocess(self, *, context: ModelParsingContextInterface) -> list[Union[str, ExpressionInfo]]:
         """
         Scans through the original string to find all interpolation expressions inside of {{ }}.
         Also, validates the content of each interpolation expression inside of {{ }}.
@@ -187,7 +192,7 @@ class FormatString(DynamicConstrainedStr):
 
             expression_info = ExpressionInfo(braces_start, braces_end)
             try:
-                expr = InterpolationExpression(self[expression_start:expression_end])
+                expr = InterpolationExpression(self[expression_start:expression_end], context=context)
             except (ExpressionError, TokenError) as exc:
                 raise FormatStringError(
                     string=self.original_value,

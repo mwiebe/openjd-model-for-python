@@ -53,7 +53,7 @@ def _validate_capability_name(
 
 def validate_amount_capability_name(
     *,
-    capability_name: Union[FormatString, str],
+    capability_name: FormatString,
     standard_capabilities: Sequence[str],
 ) -> None:
     """Checks whether or not the given string's contents
@@ -67,7 +67,7 @@ def validate_amount_capability_name(
 
 def validate_attribute_capability_name(
     *,
-    capability_name: Union[FormatString, str],
+    capability_name: FormatString,
     standard_capabilities: Sequence[str],
 ) -> None:
     _validate_capability_name(capability_name, standard_capabilities, "attr.")

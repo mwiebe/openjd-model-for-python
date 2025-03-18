@@ -53,6 +53,7 @@ def instantiate_model(  # noqa: C901
             continue
 
         field = getattr(model, field_name)
+        print(f"Model field {field_name} : {field}")
         instantiated: Any
         # TODO - try/except. Collect errors
         try:
@@ -69,6 +70,7 @@ def instantiate_model(  # noqa: C901
                 )
             instantiated_fields[target_field_name] = instantiated
         except ValidationError as exc:
+            print(f"ValidE: {exc}")
             # Convert the ErrorDetails to InitErrorDetails by excluding the 'msg'
             for error_details in exc.errors():
                 init_error_details = {
@@ -79,9 +81,19 @@ def instantiate_model(  # noqa: C901
             errors.append(
                 InitErrorDetails(
                     type="value_error",
-                    loc=loc,
+                    loc=(*loc, field_name),
                     ctx={"error": ValueError(str(exc))},
                     input=exc.input,
+                )
+            )
+        except ValueError as exc:
+            print(f"VE: {exc}")
+            errors.append(
+                InitErrorDetails(
+                    type="value_error",
+                    loc=(*loc, field_name),
+                    ctx={"error": exc},
+                    input=field,
                 )
             )
 
@@ -98,10 +110,14 @@ def instantiate_model(  # noqa: C901
         if model._job_creation_metadata.create_as is not None:
             create_as_metadata = model._job_creation_metadata.create_as
             if create_as_metadata.model is not None:
+                from pprint import pprint
+                pprint(instantiated_fields)
+                print(f"Instantiating {create_as_metadata.model.__name__}")
                 return create_as_metadata.model(**instantiated_fields)
             elif create_as_metadata.callable is not None:
                 create_as_class = create_as_metadata.callable(model)
                 return create_as_class(**instantiated_fields)
+        print(f"Instantiating {model.__class__.__name__} (no create_as)")
         return model.__class__(**instantiated_fields)
     except ValidationError as exc:
         # Convert the ErrorDetails to InitErrorDetails by concatenating the 'loc' values and excluding the 'msg'
@@ -144,10 +160,16 @@ def _instantiate_noncollection_value(
         return instantiate_model(value, symtab, loc, field_name)
     elif (
         isinstance(value, FormatString)
-        and field_name in within_model._job_creation_metadata.resolve_fields
+        and field_name in within_model._job_creation_metadata.resolve_fields_as
     ):
         # Raises: FormatStringError
-        return value.resolve(symtab=symtab)
+        resolve_type = within_model._job_creation_metadata.resolve_fields_as[field_name]
+        print(f"Resolving {value} as type {resolve_type.__name__}")
+        value = value.resolve(symtab=symtab)
+        print(f"Resolved to {value!r}")
+        resolved = resolve_type(value)
+        print(f"Converted to {resolved!r}")
+        return resolved
 
     return value
 
@@ -195,9 +217,18 @@ def _instantiate_list_field(  # noqa: C901
                 errors.append(
                     InitErrorDetails(
                         type="value_error",
-                        loc=loc,
+                        loc=(*loc, field_name, idx),
                         ctx={"error": ValueError(str(exc))},
                         input=exc.input,
+                    )
+                )
+            except ValueError as exc:
+                errors.append(
+                    InitErrorDetails(
+                        type="value_error",
+                        loc=(*loc, field_name, idx),
+                        ctx={"error": exc},
+                        input=item,
                     )
                 )
     else:
@@ -225,9 +256,18 @@ def _instantiate_list_field(  # noqa: C901
                 errors.append(
                     InitErrorDetails(
                         type="value_error",
-                        loc=loc,
+                        loc=(*loc, field_name, idx),
                         ctx={"error": ValueError(str(exc))},
                         input=exc.input,
+                    )
+                )
+            except ValueError as exc:
+                errors.append(
+                    InitErrorDetails(
+                        type="value_error",
+                        loc=(*loc, field_name, idx),
+                        ctx={"error": exc},
+                        input=item,
                     )
                 )
 
@@ -258,6 +298,7 @@ def _instantiate_dict_field(
     errors = list[InitErrorDetails]()
     result = dict[str, Any]()
     for key, item in value.items():
+        print(f"Checking {key} : {item}")
         try:
             # Raises: ValidationError, FormatStringError
             result[key] = _instantiate_noncollection_value(
@@ -265,11 +306,7 @@ def _instantiate_dict_field(
                 key,  # We call the dictionary key the field name for adds_fields arguments to be correct
                 item,
                 symtab,
-                loc
-                + (
-                    field_name,
-                    key,
-                ),
+                (*loc, field_name, key),
             )
         except ValidationError as exc:
             # Convert the ErrorDetails to InitErrorDetails by excluding the 'msg'
@@ -282,9 +319,19 @@ def _instantiate_dict_field(
             errors.append(
                 InitErrorDetails(
                     type="value_error",
-                    loc=loc,
+                    loc=(*loc, field_name, key),
                     ctx={"error": ValueError(str(exc))},
                     input=exc.input,
+                )
+            )
+        except ValueError as exc:
+            print(f"Append error {exc}")
+            errors.append(
+                InitErrorDetails(
+                    type="value_error",
+                    loc=(*loc, field_name, key),
+                    ctx={"error": exc},
+                    input=item,
                 )
             )
 

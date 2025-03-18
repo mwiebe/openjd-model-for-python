@@ -3,40 +3,32 @@
 # Testing for the model metadata annotations that assist in generating a Job from the
 # Job Template
 
-from openjd.model import ParameterValue, ParameterValueType, create_job
+from openjd.model import ParameterValue, ParameterValueType, create_job, decode_job_template
 from openjd.model.v2023_09 import (
     Action,
     AmountRequirement,
-    AmountRequirementTemplate,
     AttributeRequirement,
-    AttributeRequirementTemplate,
     CancelationMethodNotifyThenTerminate,
     CancelationMethodTerminate,
-    ChunkIntTaskParameterDefinition,
     EmbeddedFileText,
     Environment,
     EnvironmentActions,
     EnvironmentScript,
-    FloatTaskParameterDefinition,
     HostRequirements,
-    HostRequirementsTemplate,
-    IntTaskParameterDefinition,
     Job,
-    JobFloatParameterDefinition,
-    JobIntParameterDefinition,
     JobParameter,
-    JobStringParameterDefinition,
-    JobTemplate,
     RangeExpressionTaskParameterDefinition,
     RangeListTaskParameterDefinition,
     Step,
     StepActions,
     StepParameterSpace,
-    StepParameterSpaceDefinition,
     StepScript,
-    StepTemplate,
-    StringTaskParameterDefinition,
     TaskChunksDefinition,
+    ModelParsingContext as ModelParsingContext_v2023_09,
+    FormatString,
+    CommandString,
+    DataString,
+    ArgString,
 )
 
 
@@ -54,19 +46,17 @@ class TestCreateJob:
         #     about those here.
 
         # GIVEN
-        extra_kwargs = {"$schema": "blah "}  # special snowflake due to field naming
-        template = JobTemplate(
-            **extra_kwargs,
+        template = decode_job_template(template=dict(
             specificationVersion="jobtemplate-2023-09",
             name="{{ Param.StringParam }}",
             description="job description",
             jobEnvironments=[
-                Environment(
+                dict(
                     name="JobEnv",
                     description="desc",
-                    script=EnvironmentScript(
+                    script=dict(
                         embeddedFiles=[
-                            EmbeddedFileText(
+                            dict(
                                 name="File",
                                 type="TEXT",
                                 data="some data {{ Param.IntParam }}",
@@ -74,18 +64,18 @@ class TestCreateJob:
                                 runnable=False,
                             )
                         ],
-                        actions=EnvironmentActions(
-                            onEnter=Action(
+                        actions=dict(
+                            onEnter=dict(
                                 command="{{ Param.IntParam }}",
                                 args=["{{ Param.FloatParam }}"],
                                 timeout=10,
-                                cancelation=CancelationMethodTerminate(mode="TERMINATE"),
+                                cancelation=dict(mode="TERMINATE"),
                             ),
-                            onExit=Action(
+                            onExit=dict(
                                 command="{{ Param.IntParam }}",
                                 args=["{{ Param.FloatParam }}"],
                                 timeout=10,
-                                cancelation=CancelationMethodNotifyThenTerminate(
+                                cancelation=dict(
                                     mode="NOTIFY_THEN_TERMINATE", notifyPeriodInSeconds=30
                                 ),
                             ),
@@ -94,7 +84,7 @@ class TestCreateJob:
                 )
             ],
             parameterDefinitions=[
-                JobStringParameterDefinition(
+                dict(
                     name="StringParam",
                     type="STRING",
                     description="desc",
@@ -103,7 +93,7 @@ class TestCreateJob:
                     allowedValues=["TheJobName", "TheOtherJobName"],
                     default="TheOtherJobName",
                 ),
-                JobStringParameterDefinition(
+                dict(
                     name="AttrCapabilityName",
                     type="STRING",
                     description="desc",
@@ -111,7 +101,7 @@ class TestCreateJob:
                     maxLength=20,
                     default="attr.mycapability",
                 ),
-                JobStringParameterDefinition(
+                dict(
                     name="AmountCapabilityName",
                     type="STRING",
                     description="desc",
@@ -119,7 +109,7 @@ class TestCreateJob:
                     maxLength=20,
                     default="amount.mycapability",
                 ),
-                JobIntParameterDefinition(
+                dict(
                     name="RangeExpressionParam",
                     type="INT",
                     description="desc",
@@ -128,7 +118,7 @@ class TestCreateJob:
                     allowedValues=[3, 75],
                     default=75,
                 ),
-                JobIntParameterDefinition(
+                dict(
                     name="IntParam",
                     type="INT",
                     description="desc",
@@ -137,7 +127,7 @@ class TestCreateJob:
                     allowedValues=[5, 10, 20],
                     default=20,
                 ),
-                JobFloatParameterDefinition(
+                dict(
                     name="FloatParam",
                     type="FLOAT",
                     description="desc",
@@ -148,16 +138,16 @@ class TestCreateJob:
                 ),
             ],
             steps=[
-                StepTemplate(
+                dict(
                     name="StepName",
                     description="desc",
                     stepEnvironments=[
-                        Environment(
+                        dict(
                             name="StepEnv",
                             description="desc",
-                            script=EnvironmentScript(
+                            script=dict(
                                 embeddedFiles=[
-                                    EmbeddedFileText(
+                                    dict(
                                         name="File",
                                         type="TEXT",
                                         data="some data {{ Param.IntParam }}",
@@ -165,18 +155,18 @@ class TestCreateJob:
                                         runnable=False,
                                     )
                                 ],
-                                actions=EnvironmentActions(
-                                    onEnter=Action(
+                                actions=dict(
+                                    onEnter=dict(
                                         command="{{ Param.IntParam }}",
                                         args=["{{ Param.FloatParam }}"],
                                         timeout=10,
-                                        cancelation=CancelationMethodTerminate(mode="TERMINATE"),
+                                        cancelation=dict(mode="TERMINATE"),
                                     ),
-                                    onExit=Action(
+                                    onExit=dict(
                                         command="{{ Param.IntParam }}",
                                         args=["{{ Param.FloatParam }}"],
                                         timeout=10,
-                                        cancelation=CancelationMethodNotifyThenTerminate(
+                                        cancelation=dict(
                                             mode="NOTIFY_THEN_TERMINATE", notifyPeriodInSeconds=30
                                         ),
                                     ),
@@ -184,20 +174,20 @@ class TestCreateJob:
                             ),
                         ),
                     ],
-                    parameterSpace=StepParameterSpaceDefinition(
+                    parameterSpace=dict(
                         taskParameterDefinitions=[
-                            IntTaskParameterDefinition(
+                            dict(
                                 name="ParamE",
                                 type="INT",
                                 range="2 - {{ Param.RangeExpressionParam }}",
                             ),
-                            IntTaskParameterDefinition(
+                            dict(
                                 name="ParamI", type="INT", range=[0, "{{ Param.IntParam }}"]
                             ),
-                            FloatTaskParameterDefinition(
+                            dict(
                                 name="ParamF", type="FLOAT", range=[1.1, "{{ Param.FloatParam }}"]
                             ),
-                            StringTaskParameterDefinition(
+                            dict(
                                 name="ParamS",
                                 type="STRING",
                                 range=["foo", "{{ Param.StringParam }}"],
@@ -205,9 +195,9 @@ class TestCreateJob:
                         ],
                         combination="ParamS * ParamF * ParamI * ParamE",
                     ),
-                    script=StepScript(
+                    script=dict(
                         embeddedFiles=[
-                            EmbeddedFileText(
+                            dict(
                                 name="File",
                                 type="TEXT",
                                 data="some data {{ Param.IntParam }}",
@@ -215,32 +205,32 @@ class TestCreateJob:
                                 runnable=False,
                             )
                         ],
-                        actions=StepActions(
-                            onRun=Action(
+                        actions=dict(
+                            onRun=dict(
                                 command="{{ Param.IntParam }}",
                                 args=["{{ Param.FloatParam }}"],
                                 timeout=10,
-                                cancelation=CancelationMethodTerminate(mode="TERMINATE"),
+                                cancelation=dict(mode="TERMINATE"),
                             )
                         ),
                     ),
-                    hostRequirements=HostRequirementsTemplate(
+                    hostRequirements=dict(
                         amounts=[
-                            AmountRequirementTemplate(name="amount.worker.vcpu", min=3, max=8),
-                            AmountRequirementTemplate(name="{{Param.AmountCapabilityName}}", min=2),
+                            dict(name="amount.worker.vcpu", min=3, max=8),
+                            dict(name="{{Param.AmountCapabilityName}}", min=2),
                         ],
                         attributes=[
-                            AttributeRequirementTemplate(
+                            dict(
                                 name="attr.worker.os.family", anyOf=["linux"]
                             ),
-                            AttributeRequirementTemplate(
+                            dict(
                                 name="{{Param.AttrCapabilityName}}", allOf=["{{Param.StringParam}}"]
                             ),
                         ],
                     ),
                 )
             ],
-        )
+        ))
         job_parameter_values = {
             "IntParam": ParameterValue(type=ParameterValueType.INT, value="10"),
             "FloatParam": ParameterValue(type=ParameterValueType.FLOAT, value="10"),
@@ -264,21 +254,21 @@ class TestCreateJob:
                             EmbeddedFileText(
                                 name="File",
                                 type="TEXT",
-                                data="some data {{ Param.IntParam }}",
+                                data=DataString("some data {{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
                                 filename="filename.txt",
                                 runnable=False,
                             )
                         ],
                         actions=EnvironmentActions(
                             onEnter=Action(
-                                command="{{ Param.IntParam }}",
-                                args=["{{ Param.FloatParam }}"],
+                                command=CommandString("{{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
+                                args=[ArgString("{{ Param.FloatParam }}", context=ModelParsingContext_v2023_09())],
                                 timeout=10,
                                 cancelation=CancelationMethodTerminate(mode="TERMINATE"),
                             ),
                             onExit=Action(
-                                command="{{ Param.IntParam }}",
-                                args=["{{ Param.FloatParam }}"],
+                                command=CommandString("{{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
+                                args=[ArgString("{{ Param.FloatParam }}", context=ModelParsingContext_v2023_09())],
                                 timeout=10,
                                 cancelation=CancelationMethodNotifyThenTerminate(
                                     mode="NOTIFY_THEN_TERMINATE", notifyPeriodInSeconds=30
@@ -315,21 +305,21 @@ class TestCreateJob:
                                     EmbeddedFileText(
                                         name="File",
                                         type="TEXT",
-                                        data="some data {{ Param.IntParam }}",
+                                        data=DataString("some data {{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
                                         filename="filename.txt",
                                         runnable=False,
                                     )
                                 ],
                                 actions=EnvironmentActions(
                                     onEnter=Action(
-                                        command="{{ Param.IntParam }}",
-                                        args=["{{ Param.FloatParam }}"],
+                                        command=CommandString("{{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
+                                        args=[ArgString("{{ Param.FloatParam }}", context=ModelParsingContext_v2023_09())],
                                         timeout=10,
                                         cancelation=CancelationMethodTerminate(mode="TERMINATE"),
                                     ),
                                     onExit=Action(
-                                        command="{{ Param.IntParam }}",
-                                        args=["{{ Param.FloatParam }}"],
+                                        command=CommandString("{{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
+                                        args=[ArgString("{{ Param.FloatParam }}", context=ModelParsingContext_v2023_09())],
                                         timeout=10,
                                         cancelation=CancelationMethodNotifyThenTerminate(
                                             mode="NOTIFY_THEN_TERMINATE", notifyPeriodInSeconds=30
@@ -361,15 +351,15 @@ class TestCreateJob:
                             EmbeddedFileText(
                                 name="File",
                                 type="TEXT",
-                                data="some data {{ Param.IntParam }}",
+                                data=DataString("some data {{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
                                 filename="filename.txt",
                                 runnable=False,
                             )
                         ],
                         actions=StepActions(
                             onRun=Action(
-                                command="{{ Param.IntParam }}",
-                                args=["{{ Param.FloatParam }}"],
+                                command=CommandString("{{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
+                                args=[ArgString("{{ Param.FloatParam }}", context=ModelParsingContext_v2023_09())],
                                 timeout=10,
                                 cancelation=CancelationMethodTerminate(mode="TERMINATE"),
                             )
@@ -409,14 +399,12 @@ class TestCreateJob:
         #     about those here.
 
         # GIVEN
-        extra_kwargs = {"$schema": "blah "}  # special snowflake due to field naming
-        template = JobTemplate(
-            **extra_kwargs,
+        template = decode_job_template(template=dict(
             specificationVersion="jobtemplate-2023-09",
             extensions=["TASK_CHUNKING"],
             name="Job {{ Param.IntParam }}",
             parameterDefinitions=[
-                JobIntParameterDefinition(
+                dict(
                     name="RangeExpressionParam",
                     type="INT",
                     description="desc",
@@ -425,7 +413,7 @@ class TestCreateJob:
                     allowedValues=[3, 75],
                     default=75,
                 ),
-                JobIntParameterDefinition(
+                dict(
                     name="IntParam",
                     type="INT",
                     description="desc",
@@ -436,15 +424,15 @@ class TestCreateJob:
                 ),
             ],
             steps=[
-                StepTemplate(
+                dict(
                     name="StepName",
-                    parameterSpace=StepParameterSpaceDefinition(
+                    parameterSpace=dict(
                         taskParameterDefinitions=[
-                            ChunkIntTaskParameterDefinition(
+                            dict(
                                 name="ParamE",
                                 type="CHUNK[INT]",
                                 range="2 - {{ Param.RangeExpressionParam }}",
-                                chunks=TaskChunksDefinition(
+                                chunks=dict(
                                     defaultTaskCount="{{Param.RangeExpressionParam}}",
                                     targetRuntimeSeconds="{{Param.IntParam}}",
                                     rangeConstraint="CONTIGUOUS",
@@ -453,16 +441,16 @@ class TestCreateJob:
                         ],
                         combination="ParamE",
                     ),
-                    script=StepScript(
-                        actions=StepActions(
-                            onRun=Action(
+                    script=dict(
+                        actions=dict(
+                            onRun=dict(
                                 command="{{ Param.IntParam }}",
                             )
                         ),
                     ),
                 )
             ],
-        )
+        ), supported_extensions=["TASK_CHUNKING"])
         job_parameter_values = {
             "IntParam": ParameterValue(type=ParameterValueType.INT, value="10"),
             "RangeExpressionParam": ParameterValue(type=ParameterValueType.STRING, value="3"),
@@ -488,8 +476,8 @@ class TestCreateJob:
                                 type="CHUNK[INT]",
                                 range="2 - 3",
                                 chunks=TaskChunksDefinition(
-                                    defaultTaskCount="3",
-                                    targetRuntimeSeconds="10",
+                                    defaultTaskCount=FormatString("3", context=ModelParsingContext_v2023_09()),
+                                    targetRuntimeSeconds=FormatString("10", context=ModelParsingContext_v2023_09()),
                                     rangeConstraint="CONTIGUOUS",
                                 ),
                             ),
@@ -499,7 +487,7 @@ class TestCreateJob:
                     script=StepScript(
                         actions=StepActions(
                             onRun=Action(
-                                command="{{ Param.IntParam }}",
+                                command=CommandString("{{ Param.IntParam }}", context=ModelParsingContext_v2023_09()),
                             )
                         ),
                     ),

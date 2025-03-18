@@ -6,7 +6,7 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, Iterable, Type, Union
 
 from pydantic import ConfigDict, BaseModel
 
@@ -219,9 +219,9 @@ class JobCreationMetadata:
     treatment the model needs during translation from Template to Job.
     """
 
-    resolve_fields: set[str] = field(default_factory=set)
+    resolve_fields_as: dict[str, type] = field(default_factory=set)
     """The names of fields in the model that may contain FormatStrings, and
-    if it does then those FormatStrings must be resolved into strings when
+    if it does then those FormatStrings must be resolved into the requested type when
     creating a job.
     We support resolving fields that are:
      1. FormatStrings
@@ -322,3 +322,34 @@ class JobParameterInterface(ABC):
             ValueError if the value does not meet at least one constraint
         """
         pass
+
+
+class ModelParsingContextInterface(ABC):
+    """Context required while parsing an OpenJDModel. A subclass
+    must be provided when calling model_validate.
+
+        OpenJDModelSubclass.model_validate(data, context=ModelParsingContext())
+
+    Individual validators receive this value as ValidationInfo.context.
+    """
+
+    spec_rev: SpecificationRevision
+    """This contains the revision of the Open Job Description being parsed (e.g. "2023-09").
+    By providing it in the context, shared code like the FormatString class can do
+    version-specific processing.
+    """
+
+    extensions: set[str]
+    """When parsing a top-level model instance, this is the set of supported extension names.
+    The 'extensions' field is second in the list of model properties for both the job template
+    and environment template, and when that field is processed it becomes the set of extensions
+    that the template requested.
+
+    When fields of a model that depend on an extension are processed, its validators should
+    check whether the needed extension is included in the context and adjust its parsing
+    as written in the specification.
+    """
+
+    def __init__(self, *, spec_rev: SpecificationRevision, supported_extensions: Optional[Iterable[str]]) -> None:
+        self.spec_rev = spec_rev
+        self.extensions = set(supported_extensions or [])

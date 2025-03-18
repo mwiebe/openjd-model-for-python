@@ -2,10 +2,12 @@
 
 from typing import Any, Callable, Optional, Pattern, Union
 
-from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler, ValidationInfo
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
 import re
+
+from .._types import ModelParsingContextInterface
 
 
 class DynamicConstrainedStr(str):
@@ -23,6 +25,11 @@ class DynamicConstrainedStr(str):
     # ================================
     # Reference: https://pydantic-docs.helpmanual.io/usage/types/#custom-data-types
 
+    def __new__(cls, value: str, *, context: ModelParsingContextInterface):
+        # This constructor establishes the interface for constructing values
+        # with a parsing context. See the FormatString class for example usage.
+        return super().__new__(cls, value)
+
     @classmethod
     def _get_max_length(cls) -> Optional[int]:
         if callable(cls._max_length):
@@ -30,7 +37,8 @@ class DynamicConstrainedStr(str):
         return cls._max_length
 
     @classmethod
-    def _validate(cls, value: str) -> Any:
+    def _validate(cls, value: str, info: ValidationInfo) -> Any:
+        print("Running DynamicConstrainedStr _validate!")
         if not isinstance(value, str):
             raise ValueError("String required")
 
@@ -46,13 +54,18 @@ class DynamicConstrainedStr(str):
                 pattern: str = cls._regex if isinstance(cls._regex, str) else cls._regex.pattern
                 raise ValueError(f"String does not match the required pattern: {pattern}")
 
-        return cls(value)
+        if type(value) == cls:
+            return value
+        else:
+            if info.context is None:
+                raise ValueError(f"Internal parsing error: value {value!r} type {type(value).__name__} should be {cls.__name__}")
+            return cls(value, context=info.context)
 
     @classmethod
     def __get_pydantic_core_schema__(
         cls, source_type: type[Any], handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
-        return core_schema.no_info_plain_validator_function(cls._validate)
+        return core_schema.with_info_plain_validator_function(cls._validate)
 
     @classmethod
     def __get_pydantic_json_schema__(

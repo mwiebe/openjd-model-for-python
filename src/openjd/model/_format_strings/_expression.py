@@ -1,19 +1,20 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import numbers
-from typing import Union
+from typing import Optional, Union
 
 from .._errors import ExpressionError
 from .._symbol_table import SymbolTable
 from ._nodes import Node
-from ._parser import Parser
+from ._parser import format_string_expr_parse
+from .._types import ModelParsingContextInterface
 
 
 class InterpolationExpression:
     expr: str
     _expression_tree: Node
 
-    def __init__(self, expr: str) -> None:
+    def __init__(self, expr: str, *, context: ModelParsingContextInterface) -> None:
         """Constructor.
 
         Raises:
@@ -24,10 +25,9 @@ class InterpolationExpression:
             expr (str): The expression
         """
         self.expr = expr
-        parser = Parser()
 
         # Raises: ExpressionError, TokenError
-        self._expresion_tree = parser.parse(expr)
+        self._expresion_tree = format_string_expr_parse(expr, context=context)
 
     def validate_symbol_refs(self, *, symbols: set[str]) -> None:
         """Check whether this expression can be evaluated correctly given a set of symbol names.
