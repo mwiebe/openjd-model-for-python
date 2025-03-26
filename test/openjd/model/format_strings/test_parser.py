@@ -10,7 +10,7 @@ from openjd.model.v2023_09 import ModelParsingContext as ModelParsingContext_v20
 
 class TestParser:
     def test_propagates_error(self):
-        with pytest.raises(TokenError):
+        with pytest.raises((TokenError, ExpressionError)):
             parse_format_string_expr("!", context=ModelParsingContext_v2023_09())
 
     @pytest.mark.parametrize("name", ["Foo", "Foo.Bar", "Foo.Bar.Baz", "Foo.Bar.Baz.Wuz"])

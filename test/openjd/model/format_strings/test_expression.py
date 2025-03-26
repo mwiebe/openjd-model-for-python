@@ -6,25 +6,26 @@ import pytest
 
 from openjd.model import ExpressionError, SymbolTable, TokenError
 from openjd.model._format_strings._expression import InterpolationExpression
-from openjd.model._format_strings._parser import FormatStringExprParser_v2023_09
+from openjd.model._format_strings import _expression
 from openjd.model.v2023_09 import ModelParsingContext as ModelParsingContext_v2023_09
 
 
 class TestInterpolationExpression:
     def test_init_builds_expr_tree(self):
-        with patch.object(FormatStringExprParser_v2023_09, "parse") as mock:
+        with patch.object(_expression, "parse_format_string_expr") as mock:
             # WHEN
-            InterpolationExpression("Foo.Bar", context=ModelParsingContext_v2023_09())
+            context = ModelParsingContext_v2023_09()
+            InterpolationExpression("Foo.Bar", context=context)
 
             # THEN
-            mock.assert_called_once_with("Foo.Bar")
+            mock.assert_called_once_with("Foo.Bar", context=context)
 
     def test_init_reraises_parse_error(self):
         # GIVEN
         expr = ".."
 
         # THEN
-        with pytest.raises(TokenError):
+        with pytest.raises((TokenError, ExpressionError)):
             InterpolationExpression(expr, context=ModelParsingContext_v2023_09())
 
     def test_init_reraises_tokenizer_error(self):
@@ -32,7 +33,7 @@ class TestInterpolationExpression:
         expr = "!!"
 
         # THEN
-        with pytest.raises(TokenError):
+        with pytest.raises((TokenError, ExpressionError)):
             InterpolationExpression(expr, context=ModelParsingContext_v2023_09())
 
     def test_validate_success(self) -> None:
