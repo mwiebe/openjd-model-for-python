@@ -72,7 +72,9 @@ class TestStepTemplate:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=StepTemplate, obj=data)
+        _parse_model(
+            model=StepTemplate, obj=data, context=StepTemplate.model_parsing_context_type()
+        )
 
         # THEN
         # no exception was raised.
@@ -144,7 +146,9 @@ class TestStepTemplate:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=StepTemplate, obj=data)
+            _parse_model(
+                model=StepTemplate, obj=data, context=StepTemplate.model_parsing_context_type()
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0

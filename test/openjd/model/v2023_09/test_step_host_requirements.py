@@ -84,7 +84,11 @@ class TestAttributeRequirementTemplate:
         # Success case testing for Open Job Description AttributeRequirementTemplate.
 
         # WHEN
-        _parse_model(model=AttributeRequirementTemplate, obj=data)
+        _parse_model(
+            model=AttributeRequirementTemplate,
+            obj=data,
+            context=AttributeRequirementTemplate.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -213,7 +217,11 @@ class TestAttributeRequirementTemplate:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=AttributeRequirementTemplate, obj=data)
+            _parse_model(
+                model=AttributeRequirementTemplate,
+                obj=data,
+                context=AttributeRequirementTemplate.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) == error_count, str(excinfo.value)
@@ -240,7 +248,11 @@ class TestAttributeRequirementTemplate:
         data = {"name": "attr.custom", field: [value]}
 
         # WHEN
-        _parse_model(model=AttributeRequirementTemplate, obj=data)
+        _parse_model(
+            model=AttributeRequirementTemplate,
+            obj=data,
+            context=AttributeRequirementTemplate.model_parsing_context_type(),
+        )
 
         # THEN
         # doesn't raise an exception when we parse the model
@@ -276,7 +288,11 @@ class TestAttributeRequirementTemplate:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=AmountRequirementTemplate, obj=data)
+            _parse_model(
+                model=AmountRequirementTemplate,
+                obj=data,
+                context=AmountRequirementTemplate.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) == error_count, str(excinfo.value)
@@ -331,7 +347,11 @@ class TestAmountRequirementTemplate:
         # Success case testing for Open Job Description AmountRequirementTemplate.
 
         # WHEN
-        _parse_model(model=AmountRequirementTemplate, obj=data)
+        _parse_model(
+            model=AmountRequirementTemplate,
+            obj=data,
+            context=AmountRequirementTemplate.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -403,7 +423,11 @@ class TestAmountRequirementTemplate:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=AmountRequirementTemplate, obj=data)
+            _parse_model(
+                model=AmountRequirementTemplate,
+                obj=data,
+                context=AmountRequirementTemplate.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) == error_count, str(excinfo.value)
@@ -451,7 +475,11 @@ class TestHostRequirementsTemplate:
         # Success case testing for Open Job Description HostRequirementsTemplate.
 
         # WHEN
-        _parse_model(model=HostRequirementsTemplate, obj=data)
+        _parse_model(
+            model=HostRequirementsTemplate,
+            obj=data,
+            context=HostRequirementsTemplate.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -494,7 +522,11 @@ class TestHostRequirementsTemplate:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=AmountRequirementTemplate, obj=data)
+            _parse_model(
+                model=AmountRequirementTemplate,
+                obj=data,
+                context=AmountRequirementTemplate.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) == error_count, str(excinfo.value)

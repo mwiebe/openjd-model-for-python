@@ -14,7 +14,13 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic_core import ErrorDetails, InitErrorDetails
 
 from ._errors import DecodeValidationError
-from ._types import EnvironmentTemplate, JobTemplate, OpenJDModel, TemplateSpecificationVersion
+from ._types import (
+    EnvironmentTemplate,
+    JobTemplate,
+    OpenJDModel,
+    ModelParsingContextInterface,
+    TemplateSpecificationVersion,
+)
 from ._convert_pydantic_error import pydantic_validationerrors_to_str
 from .v2023_09 import JobTemplate as JobTemplate_2023_09
 from .v2023_09 import EnvironmentTemplate as EnvironmentTemplate_2023_09
@@ -58,9 +64,7 @@ class PydanticDataclass:
 T = TypeVar("T", bound=OpenJDModel)
 
 
-def _parse_model(*, model: Type[T], obj: Any, context: Any = None) -> T:
-    if context is None:
-        context = model.model_parsing_context_type()
+def _parse_model(*, model: Type[T], obj: Any, context: ModelParsingContextInterface) -> T:
     if is_dataclass(model):
         return cast(
             T,

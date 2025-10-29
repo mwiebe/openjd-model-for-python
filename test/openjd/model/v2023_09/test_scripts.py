@@ -45,7 +45,7 @@ class TestStepScript:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=StepScript, obj=data)
+        _parse_model(model=StepScript, obj=data, context=StepScript.model_parsing_context_type())
 
         # THEN
         # no exception was raised.
@@ -87,7 +87,9 @@ class TestStepScript:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=StepScript, obj=data)
+            _parse_model(
+                model=StepScript, obj=data, context=StepScript.model_parsing_context_type()
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -129,7 +131,11 @@ class TestEnvironmentScript:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=EnvironmentScript, obj=data)
+        _parse_model(
+            model=EnvironmentScript,
+            obj=data,
+            context=EnvironmentScript.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -171,7 +177,11 @@ class TestEnvironmentScript:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=EnvironmentScript, obj=data)
+            _parse_model(
+                model=EnvironmentScript,
+                obj=data,
+                context=EnvironmentScript.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0

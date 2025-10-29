@@ -32,7 +32,7 @@ class TestEnvironment:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=Environment, obj=data)
+        _parse_model(model=Environment, obj=data, context=Environment.model_parsing_context_type())
 
         # THEN
         # no exception was raised.
@@ -59,7 +59,9 @@ class TestEnvironment:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=Environment, obj=data)
+            _parse_model(
+                model=Environment, obj=data, context=Environment.model_parsing_context_type()
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -83,4 +85,5 @@ class TestEnvironment:
             _parse_model(
                 model=Environment,
                 obj=data,
+                context=Environment.model_parsing_context_type(),
             )

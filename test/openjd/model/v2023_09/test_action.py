@@ -52,7 +52,7 @@ class TestAction:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=Action, obj=data)
+        _parse_model(model=Action, obj=data, context=Action.model_parsing_context_type())
 
         # THEN
         # no exception was raised.
@@ -118,7 +118,9 @@ class TestAction:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=StepActions, obj=data)
+            _parse_model(
+                model=StepActions, obj=data, context=StepActions.model_parsing_context_type()
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -136,7 +138,7 @@ class TestStepActions:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=StepActions, obj=data)
+        _parse_model(model=StepActions, obj=data, context=StepActions.model_parsing_context_type())
 
         # THEN
         # no exception was raised.
@@ -153,7 +155,7 @@ class TestStepActions:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=Action, obj=data)
+            _parse_model(model=Action, obj=data, context=Action.model_parsing_context_type())
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -183,7 +185,11 @@ class TestEnvironmentActions:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=EnvironmentActions, obj=data)
+        _parse_model(
+            model=EnvironmentActions,
+            obj=data,
+            context=EnvironmentActions.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -200,7 +206,11 @@ class TestEnvironmentActions:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=EnvironmentActions, obj=data)
+            _parse_model(
+                model=EnvironmentActions,
+                obj=data,
+                context=EnvironmentActions.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0

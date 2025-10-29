@@ -680,6 +680,7 @@ class TestCreateJob_2023_09:
                     {"name": "Step", "script": {"actions": {"onRun": {"command": "do something"}}}}
                 ],
             },
+            context=Job_2023_09.model_parsing_context_type(),
         )
 
         # WHEN

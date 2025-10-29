@@ -169,7 +169,11 @@ class TestJobStringParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=JobStringParameterDefinition, obj=data)
+        _parse_model(
+            model=JobStringParameterDefinition,
+            obj=data,
+            context=JobStringParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -326,7 +330,11 @@ class TestJobStringParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobStringParameterDefinition, obj=data)
+            _parse_model(
+                model=JobStringParameterDefinition,
+                obj=data,
+                context=JobStringParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -342,7 +350,11 @@ class TestJobStringParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobStringParameterDefinition, obj=data)
+            _parse_model(
+                model=JobStringParameterDefinition,
+                obj=data,
+                context=JobStringParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         errors = excinfo.value.errors()
@@ -366,7 +378,11 @@ class TestJobStringParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobStringParameterDefinition, obj=data)
+            _parse_model(
+                model=JobStringParameterDefinition,
+                obj=data,
+                context=JobStringParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         errors = excinfo.value.errors()
@@ -671,7 +687,11 @@ class TestJobPathParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=JobPathParameterDefinition, obj=data)
+        _parse_model(
+            model=JobPathParameterDefinition,
+            obj=data,
+            context=JobPathParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -981,7 +1001,11 @@ class TestJobPathParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobPathParameterDefinition, obj=data)
+            _parse_model(
+                model=JobPathParameterDefinition,
+                obj=data,
+                context=JobPathParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -997,7 +1021,11 @@ class TestJobPathParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobPathParameterDefinition, obj=data)
+            _parse_model(
+                model=JobPathParameterDefinition,
+                obj=data,
+                context=JobPathParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         errors = excinfo.value.errors()
@@ -1021,7 +1049,11 @@ class TestJobPathParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobPathParameterDefinition, obj=data)
+            _parse_model(
+                model=JobPathParameterDefinition,
+                obj=data,
+                context=JobPathParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         errors = excinfo.value.errors()
@@ -1248,7 +1280,11 @@ class TestJobIntParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=JobIntParameterDefinition, obj=data)
+        _parse_model(
+            model=JobIntParameterDefinition,
+            obj=data,
+            context=JobIntParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -1411,7 +1447,11 @@ class TestJobIntParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobIntParameterDefinition, obj=data)
+            _parse_model(
+                model=JobIntParameterDefinition,
+                obj=data,
+                context=JobIntParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -1427,7 +1467,11 @@ class TestJobIntParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobIntParameterDefinition, obj=data)
+            _parse_model(
+                model=JobIntParameterDefinition,
+                obj=data,
+                context=JobIntParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         errors = excinfo.value.errors()
@@ -1451,7 +1495,11 @@ class TestJobIntParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobIntParameterDefinition, obj=data)
+            _parse_model(
+                model=JobIntParameterDefinition,
+                obj=data,
+                context=JobIntParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         errors = excinfo.value.errors()
@@ -1706,7 +1754,11 @@ class TestJobFloatParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=JobFloatParameterDefinition, obj=data)
+        _parse_model(
+            model=JobFloatParameterDefinition,
+            obj=data,
+            context=JobFloatParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception was raised.
@@ -1838,7 +1890,11 @@ class TestJobFloatParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobFloatParameterDefinition, obj=data)
+            _parse_model(
+                model=JobFloatParameterDefinition,
+                obj=data,
+                context=JobFloatParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -1854,7 +1910,11 @@ class TestJobFloatParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobFloatParameterDefinition, obj=data)
+            _parse_model(
+                model=JobFloatParameterDefinition,
+                obj=data,
+                context=JobFloatParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         errors = excinfo.value.errors()
@@ -1878,7 +1938,11 @@ class TestJobFloatParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=JobFloatParameterDefinition, obj=data)
+            _parse_model(
+                model=JobFloatParameterDefinition,
+                obj=data,
+                context=JobFloatParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         errors = excinfo.value.errors()

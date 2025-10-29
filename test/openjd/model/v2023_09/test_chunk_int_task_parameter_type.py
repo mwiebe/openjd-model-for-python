@@ -172,7 +172,11 @@ def test_chunk_int_task_parameter_parse_success(data: dict[str, Any]) -> None:
 
     # It fails to parse without the TASK_CHUNKING extension
     with pytest.raises(ValidationError) as excinfo:
-        _parse_model(model=ChunkIntTaskParameterDefinition, obj=data)
+        _parse_model(
+            model=ChunkIntTaskParameterDefinition,
+            obj=data,
+            context=ChunkIntTaskParameterDefinition.model_parsing_context_type(),
+        )
     assert "The CHUNK[INT] task parameter requires the TASK_CHUNKING extension." in str(
         excinfo.value
     )
@@ -645,7 +649,11 @@ def test_chunk_int_task_parameter_parse_fails(
 
     # It fails to parse without the TASK_CHUNKING extension
     with pytest.raises(ValidationError) as excinfo:
-        _parse_model(model=ChunkIntTaskParameterDefinition, obj=data)
+        _parse_model(
+            model=ChunkIntTaskParameterDefinition,
+            obj=data,
+            context=ChunkIntTaskParameterDefinition.model_parsing_context_type(),
+        )
     assert "The CHUNK[INT] task parameter requires the TASK_CHUNKING extension." in str(
         excinfo.value
     )
@@ -683,7 +691,11 @@ def test_param_space_with_chunk_int_parse_success(data: dict[str, Any]) -> None:
 
     # It fails to parse without the TASK_CHUNKING extension
     with pytest.raises(ValidationError) as excinfo:
-        _parse_model(model=StepParameterSpaceDefinition, obj=data)
+        _parse_model(
+            model=StepParameterSpaceDefinition,
+            obj=data,
+            context=StepParameterSpaceDefinition.model_parsing_context_type(),
+        )
     assert "The CHUNK[INT] task parameter requires the TASK_CHUNKING extension." in str(
         excinfo.value
     )
@@ -747,7 +759,11 @@ def test_param_space_with_chunk_int_parse_fails(
 
     # It fails to parse without the TASK_CHUNKING extension
     with pytest.raises(ValidationError) as excinfo:
-        _parse_model(model=StepParameterSpaceDefinition, obj=data)
+        _parse_model(
+            model=StepParameterSpaceDefinition,
+            obj=data,
+            context=StepParameterSpaceDefinition.model_parsing_context_type(),
+        )
     assert "The CHUNK[INT] task parameter requires the TASK_CHUNKING extension." in str(
         excinfo.value
     )

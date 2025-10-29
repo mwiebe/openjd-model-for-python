@@ -43,7 +43,11 @@ class TestIntTaskParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=IntTaskParameterDefinition, obj=data)
+        _parse_model(
+            model=IntTaskParameterDefinition,
+            obj=data,
+            context=IntTaskParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # does not raise an exception
@@ -83,7 +87,11 @@ class TestIntTaskParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=IntTaskParameterDefinition, obj=data)
+            _parse_model(
+                model=IntTaskParameterDefinition,
+                obj=data,
+                context=IntTaskParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -124,7 +132,11 @@ class TestFloatTaskParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=FloatTaskParameterDefinition, obj=data)
+        _parse_model(
+            model=FloatTaskParameterDefinition,
+            obj=data,
+            context=FloatTaskParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # does not raise an exception
@@ -162,7 +174,11 @@ class TestFloatTaskParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=FloatTaskParameterDefinition, obj=data)
+            _parse_model(
+                model=FloatTaskParameterDefinition,
+                obj=data,
+                context=FloatTaskParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -190,7 +206,11 @@ class TestStringTaskParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=StringTaskParameterDefinition, obj=data)
+        _parse_model(
+            model=StringTaskParameterDefinition,
+            obj=data,
+            context=StringTaskParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # does not raise an exception
@@ -224,7 +244,11 @@ class TestStringTaskParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=StringTaskParameterDefinition, obj=data)
+            _parse_model(
+                model=StringTaskParameterDefinition,
+                obj=data,
+                context=StringTaskParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -250,7 +274,11 @@ class TestPathTaskParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=PathTaskParameterDefinition, obj=data)
+        _parse_model(
+            model=PathTaskParameterDefinition,
+            obj=data,
+            context=PathTaskParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # does not raise an exception
@@ -284,7 +312,11 @@ class TestPathTaskParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=PathTaskParameterDefinition, obj=data)
+            _parse_model(
+                model=PathTaskParameterDefinition,
+                obj=data,
+                context=PathTaskParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -339,7 +371,11 @@ class TestRangeExpressionTaskParameterDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=IntTaskParameterDefinition, obj=data)
+        _parse_model(
+            model=IntTaskParameterDefinition,
+            obj=data,
+            context=IntTaskParameterDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # does not raise an exception
@@ -369,7 +405,11 @@ class TestRangeExpressionTaskParameterDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=IntTaskParameterDefinition, obj=data)
+            _parse_model(
+                model=IntTaskParameterDefinition,
+                obj=data,
+                context=IntTaskParameterDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
@@ -423,7 +463,11 @@ class TestStepParameterSpaceDefinition:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=StepParameterSpaceDefinition, obj=data)
+        _parse_model(
+            model=StepParameterSpaceDefinition,
+            obj=data,
+            context=StepParameterSpaceDefinition.model_parsing_context_type(),
+        )
 
         # THEN
         # no exception is raised
@@ -541,7 +585,11 @@ class TestStepParameterSpaceDefinition:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=StepParameterSpaceDefinition, obj=data)
+            _parse_model(
+                model=StepParameterSpaceDefinition,
+                obj=data,
+                context=StepParameterSpaceDefinition.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) == expected_num_errors, str(excinfo.value)

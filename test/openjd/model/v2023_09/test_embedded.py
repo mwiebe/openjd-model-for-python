@@ -40,7 +40,9 @@ class TestEmbeddedFileText:
         # constructed for valid input.
 
         # WHEN
-        _parse_model(model=EmbeddedFileText, obj=data)
+        _parse_model(
+            model=EmbeddedFileText, obj=data, context=EmbeddedFileText.model_parsing_context_type()
+        )
 
         # THEN
         # no exception was raised.
@@ -73,7 +75,11 @@ class TestEmbeddedFileText:
 
         # WHEN
         with pytest.raises(ValidationError) as excinfo:
-            _parse_model(model=EmbeddedFileText, obj=data)
+            _parse_model(
+                model=EmbeddedFileText,
+                obj=data,
+                context=EmbeddedFileText.model_parsing_context_type(),
+            )
 
         # THEN
         assert len(excinfo.value.errors()) > 0
