@@ -7,6 +7,7 @@ from pydantic import Field
 
 import pytest
 
+from openjd.expr import ExprType
 from openjd.model._format_strings import FormatString
 from openjd.model._internal import prevalidate_model_template_variable_references
 from openjd.model._types import (
@@ -60,7 +61,11 @@ class TestVariableScope:
             _template_variable_scope = ref_scope
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
 
@@ -87,7 +92,11 @@ class TestVariableScope:
             _template_variable_scope = ref_scope
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
 
@@ -117,7 +126,11 @@ class TestVariableScope:
             sub: SubModel
 
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {
@@ -147,7 +160,11 @@ class TestVariableScope:
         class SubModel(OpenJDModel):
             name: str
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {"__export__": {"__self__"}}
@@ -182,7 +199,13 @@ class TestVariableScope:
         class Def(OpenJDModel):
             name: str
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -212,7 +235,13 @@ class TestVariableScope:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -236,7 +265,13 @@ class TestVariableScope:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -260,7 +295,13 @@ class TestVariableScope:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -285,7 +326,13 @@ class TestVariableScope:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -310,7 +357,13 @@ class TestVariableScope:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -337,7 +390,13 @@ class TestVariableScope:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -361,7 +420,13 @@ class TestVariableScope:
         class SubModel(OpenJDModel):
             name: str
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {"__export__": {"__self__"}}
@@ -395,7 +460,13 @@ class TestVariableScope:
         class SubModel(OpenJDModel):
             name: str
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {"__export__": {"__self__"}}
@@ -429,7 +500,13 @@ class TestVariableScope:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -453,7 +530,13 @@ class TestVariableScope:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -479,7 +562,13 @@ class TestSymbolPrefixNesting:
             name: str
             ref: FormatString
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {"ref": {"__self__"}}
@@ -507,7 +596,11 @@ class TestSymbolPrefixNesting:
             name: str
             ref: FormatString
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Sub.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Sub.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {"ref": {"__self__"}}
@@ -536,7 +629,13 @@ class TestSymbolPrefixNesting:
             ref: FormatString
             _template_variable_definitions = DefinesTemplateVariables(
                 symbol_prefix="|Sub.",
-                defines={TemplateVariableDef(prefix="Inner.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="Inner.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {"ref": {"__self__"}}
@@ -574,7 +673,9 @@ class TestInjectSymbol:
             sub: Submodel
             _template_variable_scope = def_scope
             _template_variable_definitions = DefinesTemplateVariables(
-                symbol_prefix="Root.", inject={"Foo", "|New.Bar"}
+                symbol_prefix="Root.",
+                inject={"Foo", "|New.Bar"},
+                inject_types={"Foo": ExprType.STRING, "|New.Bar": ExprType.STRING},
             )
             _template_variable_sources = {"sub": {"__self__"}}
 
@@ -609,7 +710,11 @@ class TestListField:
             sub: list[SubModel]
 
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {
@@ -647,7 +752,11 @@ class TestListField:
             _template_variable_scope = ref_scope
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
 
@@ -672,7 +781,13 @@ class TestListField:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -697,9 +812,16 @@ class TestListField:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
                 inject={"|Param.Bar"},
+                inject_types={"|Param.Bar": ExprType.STRING},
             )
 
         data = {"name": "Foo", "ref": ["{{ Param.Foo }}", 12, {"item": "{{Param.Bar}}"}]}
@@ -726,7 +848,13 @@ class TestListField:
             sub: list[SubModel]
 
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {
@@ -799,7 +927,11 @@ class TestDiscriminatedUnion:
             sub: Annotated[Union[SubModel1, SubModel2], Field(..., discriminator="kind")]
 
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {
@@ -845,7 +977,11 @@ class TestDiscriminatedUnion:
             kind: Literal[Kind.ONE]
             name1: str
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name1",
             )
             _template_variable_sources = {
@@ -856,7 +992,11 @@ class TestDiscriminatedUnion:
             kind: Literal[Kind.TWO]
             name2: str
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name2",
             )
             _template_variable_sources = {
@@ -923,7 +1063,13 @@ class TestDiscriminatedUnion:
             name: str
             sub: Annotated[Union[SubModel1, SubModel2], Field(..., discriminator="kind")]
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {
@@ -993,7 +1139,11 @@ class TestDiscriminatedUnion:
             name: str
             sub: list[Annotated[Union[SubModel1, SubModel2], Field(..., discriminator="kind")]]
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {
@@ -1047,7 +1197,11 @@ class TestDiscriminatedUnion:
             kind: Literal[Kind.ONE]
             name1: str
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name1",
             )
             _template_variable_sources = {
@@ -1058,7 +1212,11 @@ class TestDiscriminatedUnion:
             kind: Literal[Kind.TWO]
             name2: str
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name2",
             )
             _template_variable_sources = {
@@ -1130,7 +1288,13 @@ class TestDiscriminatedUnion:
             name: str
             sub: list[Annotated[Union[SubModel1, SubModel2], Field(..., discriminator="kind")]]
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {
@@ -1178,7 +1342,13 @@ class TestDiscriminatedUnion:
                 Annotated[Union[SubModel1, SubModel2], Field(..., discriminator="kind")]
             ] = None
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
             _template_variable_sources = {
@@ -1217,7 +1387,11 @@ class TestNonDiscriminatedUnion:
             _template_variable_scope = ref_scope
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
 
@@ -1249,7 +1423,13 @@ class TestNonDiscriminatedUnion:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 
@@ -1290,7 +1470,11 @@ class TestNonDiscriminatedUnion:
             _template_variable_scope = ref_scope
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
 
@@ -1332,7 +1516,11 @@ class TestNonDiscriminatedUnion:
             _template_variable_scope = ref_scope
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=def_scope)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.", resolves=def_scope, expr_type=ExprType.STRING
+                    )
+                },
                 field="name",
             )
 
@@ -1365,7 +1553,13 @@ class TestNonDiscriminatedUnion:
             _template_variable_scope = ResolutionScope.TEMPLATE
             _template_variable_sources = {"ref": {"__self__"}}
             _template_variable_definitions = DefinesTemplateVariables(
-                defines={TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE)},
+                defines={
+                    TemplateVariableDef(
+                        prefix="|Param.",
+                        resolves=ResolutionScope.TEMPLATE,
+                        expr_type=ExprType.STRING,
+                    )
+                },
                 field="name",
             )
 

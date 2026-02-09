@@ -55,7 +55,7 @@ class TestStepScript:
         (
             pytest.param({}, id="empty object"),
             pytest.param(
-                {"actions": {"onRun": {"command": "foo"}}, "unknown": "name"}, id="unknown key"
+                {"actions": {"onRun": {"command": "foo"}}, "unresolved": "name"}, id="unknown key"
             ),
             pytest.param(
                 {
@@ -139,7 +139,7 @@ class TestEnvironmentScript:
         (
             pytest.param({}, id="empty object"),
             pytest.param(
-                {"actions": {"onEnter": {"command": "foo"}}, "unknown": "name"}, id="unknown key"
+                {"actions": {"onEnter": {"command": "foo"}}, "unresolved": "name"}, id="unknown key"
             ),
             pytest.param(
                 {

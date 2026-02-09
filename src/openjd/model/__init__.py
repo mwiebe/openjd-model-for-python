@@ -2,6 +2,7 @@
 
 from ._capabilities import validate_attribute_capability_name, validate_amount_capability_name
 from ._create_job import create_job, preprocess_job_parameters
+from ._internal._create_job import evaluate_let_bindings
 from ._errors import (
     CompatibilityError,
     DecodeValidationError,
@@ -27,8 +28,7 @@ from ._step_dependency_graph import (
     StepDependencyGraphStepToStepEdge,
 )
 from ._step_param_space_iter import StepParameterSpaceIterator
-from ._format_strings import FormatStringError
-from ._symbol_table import SymbolTable
+from ._format_strings import FormatStringError, escape_format_string
 from ._types import (
     EnvironmentTemplate,
     Job,
@@ -54,6 +54,8 @@ __all__ = (
     "decode_environment_template",
     "decode_job_template",
     "document_string_to_object",
+    "escape_format_string",
+    "evaluate_let_bindings",
     "merge_job_parameter_definitions",
     "model_to_object",
     "parse_model",
@@ -84,7 +86,6 @@ __all__ = (
     "StepDependencyGraphStepToStepEdge",
     "StepParameterSpace",
     "StepParameterSpaceIterator",
-    "SymbolTable",
     "TaskParameterSet",
     "TemplateSpecificationVersion",
     "TokenError",

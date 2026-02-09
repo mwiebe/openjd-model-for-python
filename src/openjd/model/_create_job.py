@@ -2,14 +2,15 @@
 
 from os.path import normpath
 from pathlib import Path
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from pydantic import ValidationError
 
 from ._errors import CompatibilityError, DecodeValidationError
-from ._symbol_table import SymbolTable
 from ._internal import instantiate_model
 from ._merge_job_parameter import merge_job_parameter_definitions
+from openjd.expr._uri_path import is_uri
+from openjd.expr._path_mapping import PathFormat
 from ._types import (
     EnvironmentTemplate,
     Job,
@@ -23,8 +24,38 @@ from ._types import (
     TemplateSpecificationVersion,
 )
 from ._convert_pydantic_error import pydantic_validationerrors_to_str
+from ..expr._types import (
+    ExprType,
+)
+from ..expr import ExprValue, SymbolTable
+from .v2023_09 import ValueReferenceConstants as ValueReferenceConstants_2023_09
 
 __all__ = ("preprocess_job_parameters",)
+
+
+def _get_param_types_from_definitions(
+    param_definitions: Optional[list[JobParameterDefinition]],
+) -> dict[str, ExprType]:
+    """Extract parameter types from model metadata (_template_variable_definitions).
+
+    This uses the same source of truth as template validation, avoiding duplicate
+    type definitions.
+    """
+    types: dict[str, ExprType] = {}
+    if not param_definitions:
+        return types
+    for param_def in param_definitions:
+        var_defs = param_def._template_variable_definitions
+        if var_defs.defines:
+            for vardef in var_defs.defines:
+                # Get the parameter name from the field specified in metadata
+                name = getattr(param_def, var_defs.field, None) if var_defs.field else None
+                if name:
+                    # Build full symbol name (strip leading | from prefix)
+                    prefix = vardef.prefix[1:] if vardef.prefix.startswith("|") else vardef.prefix
+                    symbol_name = f"{prefix}{name}"
+                    types[symbol_name] = vardef.expr_type
+    return types
 
 
 # =======================================================================
@@ -61,6 +92,7 @@ def _collect_defaults_2023_09(
     job_template_dir: Path,
     current_working_dir: Path,
     allow_job_template_dir_walk_up: bool,
+    uri_aware: bool = False,
 ) -> JobParameterValues:
     if not allow_job_template_dir_walk_up and not job_template_dir.is_absolute():
         raise ValueError(
@@ -72,10 +104,17 @@ def _collect_defaults_2023_09(
     for param in job_parameter_definitions:
         if param.name not in job_parameter_values:
             if param.default is not None:
-                default = str(param.default)
+                default: Any = param.default
+                # For non-list types, convert to string
+                if not param.type.name.startswith("LIST"):
+                    default = str(default)
                 # Make PATH defaults relative to job_template_dir, and
                 # enforce the `allow_job_template_dir_walk_up` parameter request.
-                if param.type.name == "PATH" and default != "":
+                if (
+                    param.type.name == "PATH"
+                    and default != ""
+                    and not (uri_aware and is_uri(default))
+                ):
                     default_path = Path(default)
                     if default_path.is_absolute():
                         # While we could permit absolute paths within the job template dir,
@@ -103,12 +142,20 @@ def _collect_defaults_2023_09(
                 )
         else:
             # Check the parameter against the constraints
-            value = job_parameter_values[param.name]
+            value: Any = job_parameter_values[param.name]
             # Join any provided relative PATH parameter value with the current_working_directory (except the empty value "")
-            if param.type.name == "PATH" and value != "" and not Path(value).is_absolute():
+            if (
+                param.type.name == "PATH"
+                and value != ""
+                and not (uri_aware and is_uri(value))
+                and not Path(value).is_absolute()
+            ):
                 value = str(current_working_dir / value)
+            # For non-list types, convert to string; for list types, keep as-is
+            if not param.type.name.startswith("LIST"):
+                value = str(value)
             return_value[param.name] = ParameterValue(
-                type=ParameterValueType(param.type), value=str(value)
+                type=ParameterValueType(param.type), value=value
             )
 
     return return_value
@@ -229,12 +276,18 @@ def preprocess_job_parameters(
         # Set of all required, but undefined, job parameter values
         try:
             if job_template.revision == SpecificationRevision.v2023_09:
+                has_expr = (
+                    hasattr(job_template, "extensions")
+                    and job_template.extensions is not None
+                    and "EXPR" in job_template.extensions
+                )
                 return_value = _collect_defaults_2023_09(
                     parameterDefinitions,
                     job_parameter_values,
                     job_template_dir,
                     current_working_dir,
                     allow_job_template_dir_walk_up,
+                    uri_aware=has_expr,
                 )
                 _check_2023_09(parameterDefinitions, return_value)
             else:
@@ -307,22 +360,41 @@ def create_job(
         raise DecodeValidationError(str(exc))
 
     # Build out the symbol table for instantiating the Job.
-    # We just prefix all job parameter names with the appropriate prefix.
+    # Extract types from model metadata (same source as template validation)
+    param_types = _get_param_types_from_definitions(job_template.parameterDefinitions)
+    # Also include environment parameter types
+    if environment_templates:
+        for env in environment_templates:
+            param_types.update(_get_param_types_from_definitions(env.parameterDefinitions))
+
     symtab = SymbolTable()
     if job_template.specificationVersion == TemplateSpecificationVersion.JOBTEMPLATE_v2023_09:
-        from .v2023_09 import ValueReferenceConstants as ValueReferenceConstants_2023_09
-
         for name, param in all_job_parameter_values.items():
-            if param.type != "PATH":
-                symtab[f"{ValueReferenceConstants_2023_09.JOB_PARAMETER_PREFIX.value}.{name}"] = (
-                    all_job_parameter_values[name].value
-                )
-            symtab[f"{ValueReferenceConstants_2023_09.JOB_PARAMETER_RAWPREFIX.value}.{name}"] = (
-                all_job_parameter_values[name].value
+            param_key = f"{ValueReferenceConstants_2023_09.JOB_PARAMETER_PREFIX.value}.{name}"
+            symtab[param_key] = ExprValue(
+                param.value, type=param_types[param_key], path_format=PathFormat.POSIX
             )
+
+            raw_key = f"{ValueReferenceConstants_2023_09.JOB_PARAMETER_RAWPREFIX.value}.{name}"
+            raw_type = param_types.get(raw_key, ExprType.STRING)
+            # For PATH params, RawParam is always string (raw path for possibly different OS)
+            # For other types, RawParam has the same type as Param
+            if raw_type == ExprType.PATH:
+                symtab[raw_key] = ExprValue(param.value, type=ExprType.STRING)
+            elif raw_type == ExprType.LIST_PATH:
+                symtab[raw_key] = ExprValue(param.value, type=ExprType.LIST_STRING)
+            else:
+                symtab[raw_key] = ExprValue(param.value, type=raw_type)
     else:
         raise NotImplementedError(
             f"Spec version {job_template.specificationVersion} not implemented."
+        )
+
+    # Resolve Job.Name when EXPR extension is enabled
+    if job_template.extensions and "EXPR" in job_template.extensions:
+        job_name = job_template.name.resolve(symtab=symtab)
+        symtab[ValueReferenceConstants_2023_09.JOB_NAME.value] = ExprValue(
+            job_name, type=ExprType.STRING
         )
 
     # Create the job

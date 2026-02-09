@@ -16,6 +16,9 @@ else:
     # Workaround for Python 3.9 where issubclass raises an error "TypeError: issubclass() arg 1 must be a class"
     from pydantic.v1.utils import lenient_issubclass as _issubclass_for_pydantic
 
+from ...expr import ExprType, ExpressionError, evaluate_expression, get_default_library
+from ...expr._symbol_table import SymbolTable
+from ...expr._types import TypeCode
 from .._types import OpenJDModel, ResolutionScope, ModelParsingContextInterface
 from .._format_strings import FormatString, FormatStringError
 
@@ -124,13 +127,22 @@ __all__ = ["prevalidate_model_template_variable_references"]
 
 
 class ScopedSymtabs(defaultdict):
+    """Tracks symbol names per scope, with type information.
+
+    The structure is: {ResolutionScope: set[str]} for symbol names.
+    Type information is stored separately in types: {str: ExprType} mapping
+    symbol names to their expression types. Used for EXPR extension type checking.
+    """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(set, **kwargs)
+        self.types: dict[str, ExprType] = {}
 
     def update_self(self, other: "ScopedSymtabs") -> "ScopedSymtabs":
         """Union the other's contents into self."""
         for k, v in other.items():
             self[k] |= v
+        self.types.update(other.types)
         return self
 
 
@@ -179,7 +191,11 @@ def _internal_deepcopy(value: Any) -> Any:
     # In this case our input will have instances of StepTemplate within it that we need
     # to convert to dicts.
     if isinstance(value, dict):
-        return {k: _internal_deepcopy(v) for k, v in value.items()}
+        result = {k: _internal_deepcopy(v) for k, v in value.items()}
+        # Normalize job parameter type field to uppercase for case-insensitive matching (RFC 7)
+        if "type" in result and isinstance(result["type"], str):
+            result["type"] = result["type"].upper()
+        return result
     elif isinstance(value, list):
         return [_internal_deepcopy(v) for v in value]
     elif isinstance(value, OpenJDModel):
@@ -285,9 +301,41 @@ def _validate_model_template_variable_references(
                 )
         return errors
 
-    # Validate all the variables from a non-discriminated union
+    # Validate the variables from a non-discriminated union
+    # Select the matching branch based on input type to avoid duplicate errors
     if model_origin is Union and discriminator is None:
-        for sub_type in typing.get_args(model):
+        union_args = typing.get_args(model)
+        matching_type = None
+
+        for sub_type in union_args:
+            sub_origin = typing.get_origin(sub_type)
+            # Handle Annotated types by unwrapping to get the actual type
+            if sub_origin is typing.Annotated:
+                inner_type = typing.get_args(sub_type)[0]
+                inner_origin = typing.get_origin(inner_type)
+            else:
+                inner_type = sub_type
+                inner_origin = sub_origin
+
+            if isinstance(value, list) and inner_origin is list:
+                matching_type = sub_type
+                break
+            elif (
+                isinstance(value, str)
+                and isclass(inner_type)
+                and issubclass(inner_type, FormatString)
+            ):
+                # String value matches FormatString subclass
+                matching_type = sub_type
+                break
+
+        if matching_type is not None:
+            return _validate_model_template_variable_references(
+                matching_type, value, current_scope, symbol_prefix, symbols, loc, context=context
+            )
+
+        # Fallback: validate against all branches (original behavior)
+        for sub_type in union_args:
             errors.extend(
                 _validate_model_template_variable_references(
                     sub_type, value, current_scope, symbol_prefix, symbols, loc, context=context
@@ -348,8 +396,30 @@ def _validate_model_template_variable_references(
 
     # Recursively collect all of the variable definitions at this node and its child nodes.
     value_symbols = _collect_variable_definitions(
-        model, value, current_scope, symbol_prefix, recursive_pruning=False
+        model,
+        value,
+        current_scope,
+        symbol_prefix,
+        recursive_pruning=False,
+        context=context,
     )
+
+    # Validate let binding expressions if present and collect inferred types.
+    # If let can reference symbols from sibling fields (e.g., embeddedFiles), merge those in.
+    let_symbols = ScopedSymtabs()
+    let_symbols.update_self(symbols)
+    for source in model._template_variable_sources.get("let", set()):
+        let_symbols.update_self(value_symbols.get(source, ScopedSymtabs()))
+    let_errors, let_types = _check_let_bindings(
+        value, current_scope, let_symbols, loc, context=context
+    )
+    errors.extend(let_errors)
+
+    # Add let binding types to value_symbols for propagation to child fields
+    if let_types:
+        let_symtab = value_symbols.get("let", ScopedSymtabs())
+        let_symtab.types.update(let_types)
+        value_symbols["let"] = let_symtab
 
     # Recursively validate the contents of FormatStrings within the model.
     for field_name, field_info in model.model_fields.items():
@@ -399,6 +469,8 @@ def _check_format_string(
 
     errors = list[InitErrorDetails]()
     scoped_symbols = symbols[current_scope]
+    # Filter types to only include symbols available in the current scope
+    scoped_types = {k: v for k, v in symbols.types.items() if k in scoped_symbols}
     try:
         if isinstance(value, FormatString):
             f_value = value
@@ -411,12 +483,93 @@ def _check_format_string(
     for expr in f_value.expressions:
         if expr.expression:
             try:
-                expr.expression.validate_symbol_refs(symbols=scoped_symbols)
+                expr.expression.validate_symbol_refs(
+                    symbols=scoped_symbols, types=scoped_types, scope=current_scope
+                )
             except ValueError as exc:
                 errors.append(
                     InitErrorDetails(type="value_error", loc=loc, ctx={"error": exc}, input=value)
                 )
     return errors
+
+
+def _check_let_bindings(
+    value: dict[str, Any],
+    current_scope: ResolutionScope,
+    symbols: ScopedSymtabs,
+    loc: tuple,
+    context: Optional[ModelParsingContextInterface],
+) -> tuple[list[InitErrorDetails], dict[str, ExprType]]:
+    """Validate let binding expressions with full type checking.
+
+    Each let binding expression is type-checked against:
+    - Typed symbols from parent scopes (passed in via symbols.types)
+    - Previously defined let bindings in the same block (with inferred types)
+
+    The result type of each binding is propagated to subsequent bindings,
+    enabling detection of type errors like `x + "hello"` where x is INT.
+
+    Returns:
+        Tuple of (errors, inferred_types) where inferred_types maps binding
+        names to their inferred ExprType for use in downstream validation.
+    """
+    errors: list[InitErrorDetails] = []
+    inferred_types: dict[str, ExprType] = {}
+    let_value = value.get("let")
+    if let_value is None or not isinstance(let_value, list):
+        return errors, inferred_types
+    if context is None or "EXPR" not in context.extensions:
+        return errors, inferred_types
+
+    # Build SymbolTable of unresolved values from parent scope types for type checking
+    unresolved_symtab = SymbolTable(symbols.types.copy())
+
+    # Use host context library for SESSION/TASK scope (runtime), default for TEMPLATE (submission)
+    if current_scope in (ResolutionScope.SESSION, ResolutionScope.TASK):
+        library = get_default_library().with_host_context()
+    else:
+        library = get_default_library()
+
+    for i, binding in enumerate(let_value):
+        # Extract binding name and expression
+        if isinstance(binding, str) and "=" in binding:
+            eq_idx = binding.index("=")
+            binding_name = binding[:eq_idx].strip()
+            binding_expr = binding[eq_idx + 1 :].strip()
+            binding_str = binding
+            if not binding_name or not binding_expr:
+                continue
+        else:
+            continue
+
+        # Type check by evaluating with unresolved values
+        try:
+            result = evaluate_expression(binding_expr, values=unresolved_symtab, library=library)
+        except ExpressionError as e:
+            # Include the assignment prefix in the error message (e.g., "x = ")
+            prefix = binding_str[: binding_str.index(binding_expr, eq_idx + 1)]
+            error_msg = e.message_with_expr_prefix(prefix)
+            errors.append(
+                InitErrorDetails(
+                    type="value_error",
+                    loc=(*loc, "let", i),
+                    ctx={"error": ValueError(error_msg)},
+                    input=binding_str,
+                )
+            )
+            continue
+
+        # Extract result type and add for subsequent bindings
+        if result.type.type_code == TypeCode.UNRESOLVED:
+            result_type = result.type.type_params[0]
+        else:
+            result_type = result.type
+        # Put the result directly in the symbol table — concrete values stay concrete,
+        # unresolved values stay unresolved. This way subsequent bindings get maximum precision.
+        unresolved_symtab[binding_name] = result
+        inferred_types[binding_name] = result_type
+
+    return errors, inferred_types
 
 
 def _get_model_for_singleton_value(
@@ -490,6 +643,7 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
     symbol_prefix: str,
     recursive_pruning: bool = True,
     discriminator: Union[str, Discriminator, None] = None,
+    context: Optional[ModelParsingContextInterface] = None,
 ) -> dict[str, ScopedSymtabs]:
     """Collects the names of variables that each field of this model object provides.
 
@@ -513,6 +667,7 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
             current_scope,
             symbol_prefix,
             discriminator=discriminator,
+            context=context,
         )
 
     # Unwrap the Annotated type, and get the discriminator while doing so
@@ -522,7 +677,12 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
             if isinstance(annotation, FieldInfo):
                 discriminator = annotation.discriminator
         return _collect_variable_definitions(
-            model_args[0], value, current_scope, symbol_prefix, discriminator=discriminator
+            model_args[0],
+            value,
+            current_scope,
+            symbol_prefix,
+            discriminator=discriminator,
+            context=context,
         )
 
     # Aggregate all the collected variable definitions from a list
@@ -534,9 +694,13 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
             item_model = typing.get_args(model)[0]
             for item in value:
                 symtab.update_self(
-                    _collect_variable_definitions(item_model, item, current_scope, symbol_prefix)[
-                        "__export__"
-                    ]
+                    _collect_variable_definitions(
+                        item_model,
+                        item,
+                        current_scope,
+                        symbol_prefix,
+                        context=context,
+                    )["__export__"]
                 )
         return {"__export__": symtab}
 
@@ -545,9 +709,13 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
         symtab = ScopedSymtabs()
         for sub_type in typing.get_args(model):
             symtab.update_self(
-                _collect_variable_definitions(sub_type, value, current_scope, symbol_prefix)[
-                    "__export__"
-                ]
+                _collect_variable_definitions(
+                    sub_type,
+                    value,
+                    current_scope,
+                    symbol_prefix,
+                    context=context,
+                )["__export__"]
             )
         return {"__export__": symtab}
 
@@ -560,6 +728,7 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
                 value,
                 current_scope,
                 symbol_prefix,
+                context=context,
             )
         else:
             return {"__export__": ScopedSymtabs()}
@@ -602,16 +771,18 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
                         symbol_name = f"{vardef.prefix[1:]}{name}"
                     else:
                         symbol_name = f"{symbol_prefix}{vardef.prefix}{name}"
-                    _add_symbol(symbols["__self__"], vardef.resolves, symbol_name)
+                    _add_symbol(symbols["__self__"], vardef.resolves, symbol_name, vardef.expr_type)
 
         # If this object injects any template variables then those are injected at the
-        # current model's scope.
-        for symbol in defs.inject:
-            if symbol.startswith("|"):
-                symbol_name = symbol[1:]
-            else:
-                symbol_name = f"{symbol_prefix}{symbol}"
-            _add_symbol(symbols["__self__"], current_scope, symbol_name)
+        # current model's scope. Skip if the injection requires an extension that is not active.
+        if defs.inject_requires is None or (context and context.has_feature(*defs.inject_requires)):
+            for symbol in defs.inject:
+                if symbol.startswith("|"):
+                    symbol_name = symbol[1:]
+                else:
+                    symbol_name = f"{symbol_prefix}{symbol}"
+                inject_type = defs.inject_types[symbol]
+                _add_symbol(symbols["__self__"], current_scope, symbol_name, inject_type)
 
     # Collect the variable definitions exported by the fields of the model
     for field_name, field_info in model.model_fields.items():
@@ -623,8 +794,32 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
         discriminator = field_info.discriminator
 
         symbols[field_name] = _collect_variable_definitions(
-            field_model, field_value, current_scope, symbol_prefix, discriminator=discriminator
+            field_model,
+            field_value,
+            current_scope,
+            symbol_prefix,
+            discriminator=discriminator,
+            context=context,
         )["__export__"]
+
+    # Handle let bindings specially - they define symbols with just their name (no prefix)
+    let_value = value.get("let")
+    if let_value is not None and isinstance(let_value, list):
+        # Import here to avoid circular import
+        from ..v2023_09._model import LetBinding
+
+        let_symtab = ScopedSymtabs()
+        for binding in let_value:
+            if isinstance(binding, LetBinding):
+                # Let bindings use just their name, no namespace prefix
+                # Type is STRING as placeholder - actual type determined at evaluation
+                _add_symbol(let_symtab, current_scope, binding.name, ExprType.STRING)
+            elif isinstance(binding, str) and "=" in binding:
+                # Handle raw strings that haven't been converted yet
+                name = binding.split("=", 1)[0].strip()
+                if name:
+                    _add_symbol(let_symtab, current_scope, name, ExprType.STRING)
+        symbols["let"] = let_symtab
 
     # Collect the exported symbols as specified by the metadata
     for source in model._template_variable_sources.get("__export__", set()):
@@ -633,9 +828,21 @@ def _collect_variable_definitions(  # noqa: C901  (suppress: too complex)
     return symbols
 
 
-def _add_symbol(into: ScopedSymtabs, scope: ResolutionScope, symbol_name: str) -> None:
+def _add_symbol(
+    into: ScopedSymtabs,
+    scope: ResolutionScope,
+    symbol_name: str,
+    expr_type: ExprType,
+) -> None:
     """A helper function for adding a symbol into the correct ScopedSymtabs based on the scope of
-    the symbol definition"""
+    the symbol definition.
+
+    Args:
+        into: The ScopedSymtabs to add the symbol to.
+        scope: The resolution scope of the symbol.
+        symbol_name: The name of the symbol.
+        expr_type: Expression type for EXPR extension type checking.
+    """
     if scope == ResolutionScope.TEMPLATE:
         into[ResolutionScope.TEMPLATE].add(symbol_name)
         into[ResolutionScope.SESSION].add(symbol_name)
@@ -645,3 +852,4 @@ def _add_symbol(into: ScopedSymtabs, scope: ResolutionScope, symbol_name: str) -
         into[ResolutionScope.TASK].add(symbol_name)
     else:
         into[ResolutionScope.TASK].add(symbol_name)
+    into.types[symbol_name] = expr_type

@@ -8,10 +8,14 @@ import string
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from graphlib import CycleError, TopologicalSorter
-from typing import Any, ClassVar, Literal, Optional, Type, Union, cast, Iterable
+from typing import Any, ClassVar, Literal, Optional, Type, Union, cast, Iterable, TYPE_CHECKING
 from typing_extensions import Annotated, Self
 
+if TYPE_CHECKING:
+    from ...expr import ParsedExpression
+
 from pydantic import (
+    BeforeValidator,
     field_validator,
     model_validator,
     StringConstraints,
@@ -57,6 +61,10 @@ from .._types import (
     TemplateSpecificationVersion,
     TemplateVariableDef,
 )
+
+# Expression types for variable type metadata (EXPR extension type checking)
+from ...expr import ExpressionError as ExprExpressionError, ExprType, parse_expression
+from ...expr import SymbolTable, TypeCode, ExprValue
 
 # Error message constants
 _ALLOWED_VALUES_NONE_ERROR = "allowedValues cannot be None. The field must contain at least one value or be omitted entirely."
@@ -110,6 +118,8 @@ class ExtensionName(str, Enum):
     # Extension for increased limits, format strings in timeout/min/max/notifyPeriodInSeconds,
     # endOfLine control, and script interpreter syntax sugar
     FEATURE_BUNDLE_1 = "FEATURE_BUNDLE_1"
+    # Extension that enables the full expression language (RFC 0005)
+    EXPR = "EXPR"
 
 
 ExtensionNameList = Annotated[list[str], Field(min_length=1)]
@@ -164,19 +174,21 @@ class ValueReferenceConstants(Enum):
     only: {}
     """
 
+    JOB_NAME = "Job.Name"
+    """The resolved name of the Job."""
+
+    STEP_NAME = "Step.Name"
+    """The name of the current Step."""
+
 
 # ==================================================================
 # ============================= String types =======================
 # ==================================================================
 
 # All unicode characters except for those in the Cc unicode character
-# category.
-#  Cc category =
-#    C0 = 0x00-0x1F
-#         https://www.unicode.org/charts/PDF/U0000.pdf
-#    DEL character (0x7F)
-#    C1 = 0x80-0x9F
-#         https://www.unicode.org/charts/PDF/U0080.pdf
+# Cc category excluding CR (0x0D), LF (0x0A), and TAB (0x09)
+_Cc_except_whitespace = r"\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F"
+# Full Cc category (all control characters)
 _Cc_characters = r"\u0000-\u001F\u007F-\u009F"
 _standard_string_regex = rf"(?-m:^[^{_Cc_characters}]+\z)"
 
@@ -256,9 +268,9 @@ class CommandString(FormatString):
 
 
 class ArgString(FormatString):
-    # All unicode except the [Cc] (control characters) category
-    # Allow CR, LF, and TAB.
-    _regex = f"(?-m:^[^{_Cc_characters}]*\\Z)"
+    # All unicode except the [Cc] (control characters) category,
+    # but allowing CR, LF, and TAB for multi-line expressions.
+    _regex = f"(?-m:^[^{_Cc_except_whitespace}]*\\Z)"
 
     def __new__(cls, value: str, *, context: ModelParsingContextInterface = ModelParsingContext()):
         return super().__new__(cls, value, context=context)
@@ -489,7 +501,11 @@ class EmbeddedFileText(OpenJDModel_v2023_09):
     endOfLine: Optional[EndOfLine] = None  # noqa: N815
 
     _template_variable_definitions = DefinesTemplateVariables(
-        defines={TemplateVariableDef(prefix="File.", resolves=ResolutionScope.SESSION)},
+        defines={
+            TemplateVariableDef(
+                prefix="File.", resolves=ResolutionScope.SESSION, expr_type=ExprType.PATH
+            )
+        },
         field="name",
     )
     _template_variable_sources = {
@@ -540,6 +556,156 @@ class EmbeddedFileText(OpenJDModel_v2023_09):
 EmbeddedFiles = Annotated[list[EmbeddedFileText], Field(min_length=1)]
 
 
+# ==================================================================
+# ========================= Let Bindings (EXPR) ====================
+# ==================================================================
+
+# UserIdentifier: must start with lowercase letter or underscore
+_user_identifier_regex = r"^[a-z_][A-Za-z0-9_]*$"
+_USER_IDENTIFIER_PATTERN = re.compile(_user_identifier_regex)
+
+
+class LetBinding(str):
+    """A let binding string: '<UserIdentifier> = <Expression>'.
+
+    Parses and validates the binding syntax. The identifier must start with
+    a lowercase letter or underscore to avoid conflicts with spec-defined
+    symbols (Param, Task, Session, Env, RawParam).
+    """
+
+    __slots__ = ("_name", "_expression", "_parsed")
+    _name: str
+    _expression: str
+    _parsed: "ParsedExpression"
+
+    def __new__(
+        cls, value: str, *, context: Optional[ModelParsingContextInterface] = None
+    ) -> "LetBinding":
+        instance = super().__new__(cls, value)
+        # Parse the binding
+        if "=" not in value:
+            raise ValueError(f"Let binding must contain '=': {value!r}")
+        eq_idx = value.index("=")
+        name = value[:eq_idx].strip()
+        expr = value[eq_idx + 1 :].strip()
+
+        if not name:
+            raise ValueError(f"Let binding must have a name before '=': {value!r}")
+        if not expr:
+            raise ValueError(f"Let binding must have an expression after '=': {value!r}")
+
+        # Validate UserIdentifier pattern
+        if not _USER_IDENTIFIER_PATTERN.match(name):
+            raise ValueError(
+                f"Let binding name '{name}' must start with a lowercase letter or underscore "
+                f"and contain only letters, digits, and underscores"
+            )
+
+        # Validate UserIdentifier length (same as Identifier: 1-512)
+        if len(name) > 512:
+            raise ValueError(f"Let binding name must be at most 512 characters, got {len(name)}")
+
+        # Parse and validate expression syntax using public API
+        try:
+            parsed = parse_expression(expr)
+        except ExprExpressionError as e:
+            prefix = value[: value.index(expr, eq_idx + 1)]
+            raise ValueError(
+                f"Invalid expression in let binding '{name}': {e.message_with_expr_prefix(prefix)}"
+            )
+
+        instance._name = name
+        instance._expression = expr
+        instance._parsed = parsed
+        return instance
+
+    @property
+    def name(self) -> str:
+        """The bound identifier name."""
+        return self._name
+
+    @property
+    def expression(self) -> str:
+        """The expression string to evaluate."""
+        return self._expression
+
+    @property
+    def parsed(self) -> "ParsedExpression":
+        """The parsed expression, ready for evaluation."""
+        return self._parsed
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type: Any, handler: Any) -> Any:
+        from pydantic_core import core_schema
+
+        def validate(value: Any) -> "LetBinding":
+            if isinstance(value, LetBinding):
+                return value
+            if isinstance(value, str):
+                return cls(value)
+            raise ValueError(f"Expected string, got {type(value).__name__}")
+
+        return core_schema.no_info_plain_validator_function(
+            validate,
+            serialization=core_schema.to_string_ser_schema(),
+        )
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema: Any, handler: Any) -> dict[str, Any]:
+        return {"type": "string", "pattern": r"^[a-z_][a-zA-Z0-9_]*\s*=\s*.+"}
+
+
+def _validate_let_bindings(
+    bindings: Optional[list[str]], info: ValidationInfo, enclosing_names: Optional[set[str]] = None
+) -> Optional[list[LetBinding]]:
+    """Validate let bindings list: EXPR extension required, no shadowing, no self-reference."""
+    if bindings is None:
+        return None
+
+    context = cast(Optional[ModelParsingContext], info.context)
+
+    # EXPR extension required
+    if context and "EXPR" not in context.extensions:
+        raise ValueError("Let bindings require the EXPR extension.")
+
+    if len(bindings) == 0:
+        raise ValueError("Let bindings list must contain at least one binding if defined.")
+    if len(bindings) > 50:
+        raise ValueError("Let bindings list cannot exceed 50 bindings.")
+
+    result: list[LetBinding] = []
+    seen_names: set[str] = set()
+    enclosing = enclosing_names or set()
+
+    for binding_str in bindings:
+        binding = LetBinding(binding_str, context=context)
+
+        # Check for self-reference using stored parsed expression
+        if binding.name in binding.parsed.accessed_symbols:
+            raise ValueError(f"Let binding '{binding.name}' cannot reference itself.")
+
+        # Check for shadowing within same block
+        if binding.name in seen_names:
+            raise ValueError(
+                f"Let binding '{binding.name}' shadows a previous binding in the same block."
+            )
+
+        # Check for shadowing of enclosing scope
+        if binding.name in enclosing:
+            raise ValueError(
+                f"Let binding '{binding.name}' shadows a binding from an enclosing scope."
+            )
+
+        seen_names.add(binding.name)
+        result.append(binding)
+
+    return result
+
+
+# Type alias for let bindings field
+LetBindings = Optional[list[LetBinding]]
+
+
 class ScriptInterpreter(str, Enum):
     """Script interpreter types for SimpleAction syntax sugar."""
 
@@ -556,6 +722,9 @@ class SimpleAction(OpenJDModel_v2023_09):
     This is only available with the FEATURE_BUNDLE_1 extension.
 
     Attributes:
+        let (Optional[list[LetBinding]]): Let bindings evaluated once per task.
+            Bound names are available in script and args. Requires both FEATURE_BUNDLE_1
+            and EXPR extensions.
         script (DataString): The script content to execute.
         args (Optional[list[ArgString]]): Additional arguments to pass to the interpreter.
         timeout (Optional[Union[int, FormatString]]): Maximum allowed runtime in seconds.
@@ -563,12 +732,40 @@ class SimpleAction(OpenJDModel_v2023_09):
         cancelation (Optional[CancelationMethod]): How to cancel the action.
     """
 
+    let: Optional[list[LetBinding]] = None
     script: DataString
     args: Optional[ArgListType] = None
     timeout: Optional[Union[PositiveInt, FormatString]] = None
     cancelation: Optional[
         Union[CancelationMethodNotifyThenTerminate, CancelationMethodTerminate]
     ] = Field(None, discriminator="mode")
+
+    _template_variable_scope = ResolutionScope.TASK
+    _template_variable_definitions = DefinesTemplateVariables(
+        symbol_prefix="|Task.",
+        inject={
+            f"|{ValueReferenceConstants.WORKING_DIRECTORY.value}",
+            f"|{ValueReferenceConstants.HAS_PATH_MAPPING_RULES.value}",
+            f"|{ValueReferenceConstants.PATH_MAPPING_RULES_FILE.value}",
+        },
+        inject_types={
+            f"|{ValueReferenceConstants.WORKING_DIRECTORY.value}": ExprType.PATH,
+            f"|{ValueReferenceConstants.HAS_PATH_MAPPING_RULES.value}": ExprType.BOOL,
+            f"|{ValueReferenceConstants.PATH_MAPPING_RULES_FILE.value}": ExprType.PATH,
+        },
+    )
+    _template_variable_sources = {
+        "script": {"__self__", "let"},
+        "args": {"__self__", "let"},
+        "let": {"__self__"},
+    }
+
+    @field_validator("let", mode="before")
+    @classmethod
+    def _validate_let(
+        cls, v: Optional[list[str]], info: ValidationInfo
+    ) -> Optional[list["LetBinding"]]:
+        return _validate_let_bindings(v, info)
 
     @field_validator("timeout", mode="before")
     @classmethod
@@ -591,12 +788,15 @@ class StepScript(OpenJDModel_v2023_09):
     a Task for a Step.
 
     Attributes:
+        let (Optional[list[LetBinding]]): Let bindings evaluated once per task.
+            Bound names are available in actions and embeddedFiles. Requires EXPR extension.
         embeddedFiles (Optional[list[EmbeddedFileText]]): List of text files embedded
            into the script. These will be written to disk prior to running each of the
            Actions in the script.
         actions (StepActions): The actions to run when running a Task for the Step.
     """
 
+    let: LetBindings = None
     actions: StepActions
     embeddedFiles: Optional[EmbeddedFiles] = None  # noqa: N815
 
@@ -608,11 +808,22 @@ class StepScript(OpenJDModel_v2023_09):
             f"|{ValueReferenceConstants.HAS_PATH_MAPPING_RULES.value}",
             f"|{ValueReferenceConstants.PATH_MAPPING_RULES_FILE.value}",
         },
+        inject_types={
+            f"|{ValueReferenceConstants.WORKING_DIRECTORY.value}": ExprType.PATH,
+            f"|{ValueReferenceConstants.HAS_PATH_MAPPING_RULES.value}": ExprType.BOOL,
+            f"|{ValueReferenceConstants.PATH_MAPPING_RULES_FILE.value}": ExprType.PATH,
+        },
     )
     _template_variable_sources = {
-        "actions": {"embeddedFiles", "__self__"},
-        "embeddedFiles": {"embeddedFiles", "__self__"},
+        "actions": {"embeddedFiles", "__self__", "let"},
+        "embeddedFiles": {"embeddedFiles", "__self__", "let"},
+        "let": {"embeddedFiles", "__self__"},
     }
+
+    @field_validator("let", mode="before")
+    @classmethod
+    def _validate_let(cls, v: Optional[list[str]], info: ValidationInfo) -> LetBindings:
+        return _validate_let_bindings(v, info)
 
     @field_validator("embeddedFiles")
     @classmethod
@@ -627,6 +838,8 @@ class EnvironmentScript(OpenJDModel_v2023_09):
     an Environment within a Session.
 
     Attributes:
+        let (Optional[list[LetBinding]]): Let bindings evaluated once when the environment
+            is entered. Bound names are available in actions and embeddedFiles. Requires EXPR extension.
         embeddedFiles (Optional[list[EmbeddedFileText]]): List of text files embedded
            into the script. These will be written to disk prior to running each of the
            Actions in the script.
@@ -634,9 +847,11 @@ class EnvironmentScript(OpenJDModel_v2023_09):
            lifecycle.
     """
 
+    let: LetBindings = None
     actions: EnvironmentActions
     embeddedFiles: Optional[EmbeddedFiles] = None  # noqa: N815
 
+    _template_variable_scope = ResolutionScope.SESSION
     _template_variable_definitions = DefinesTemplateVariables(
         symbol_prefix="|Env.",
         inject={
@@ -644,11 +859,22 @@ class EnvironmentScript(OpenJDModel_v2023_09):
             f"|{ValueReferenceConstants.HAS_PATH_MAPPING_RULES.value}",
             f"|{ValueReferenceConstants.PATH_MAPPING_RULES_FILE.value}",
         },
+        inject_types={
+            f"|{ValueReferenceConstants.WORKING_DIRECTORY.value}": ExprType.PATH,
+            f"|{ValueReferenceConstants.HAS_PATH_MAPPING_RULES.value}": ExprType.BOOL,
+            f"|{ValueReferenceConstants.PATH_MAPPING_RULES_FILE.value}": ExprType.PATH,
+        },
     )
     _template_variable_sources = {
-        "actions": {"embeddedFiles", "__self__"},
-        "embeddedFiles": {"embeddedFiles", "__self__"},
+        "actions": {"embeddedFiles", "__self__", "let"},
+        "embeddedFiles": {"embeddedFiles", "__self__", "let"},
+        "let": {"embeddedFiles", "__self__"},
     }
+
+    @field_validator("let", mode="before")
+    @classmethod
+    def _validate_let(cls, v: Optional[list[str]], info: ValidationInfo) -> LetBindings:
+        return _validate_let_bindings(v, info)
 
     @field_validator("embeddedFiles")
     @classmethod
@@ -686,6 +912,19 @@ class RangeString(FormatString):
     _min_length = 1
 
     def __new__(cls, value: str, *, context: ModelParsingContextInterface = ModelParsingContext()):
+        return super().__new__(cls, value, context=context)
+
+
+class ListExpressionString(FormatString):
+    """A FormatString that evaluates to a list (for FLOAT/STRING/PATH range fields)."""
+
+    _min_length = 1
+
+    def __new__(cls, value: str, *, context: ModelParsingContextInterface = ModelParsingContext()):
+        # Reject non-string inputs and string representations of lists
+        # to prevent pydantic from trying this branch when the input is a list
+        if not isinstance(value, str) or value.startswith("["):
+            raise TypeError("ListExpressionString requires an expression string")
         return super().__new__(cls, value, context=context)
 
 
@@ -767,8 +1006,12 @@ class IntTaskParameterDefinition(OpenJDModel_v2023_09):
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Task.Param.", resolves=ResolutionScope.TASK),
-            TemplateVariableDef(prefix="|Task.RawParam.", resolves=ResolutionScope.TASK),
+            TemplateVariableDef(
+                prefix="|Task.Param.", resolves=ResolutionScope.TASK, expr_type=ExprType.INT
+            ),
+            TemplateVariableDef(
+                prefix="|Task.RawParam.", resolves=ResolutionScope.TASK, expr_type=ExprType.INT
+            ),
         },
         field="name",
     )
@@ -791,15 +1034,9 @@ class IntTaskParameterDefinition(OpenJDModel_v2023_09):
         # pydantic will automatically type coerce values into integers. We explicitly
         # want to reject non-integer values, so this *pre* validator validates the
         # value *before* pydantic tries to type coerce it.
-        # We do allow coersion from a string since we want to allow "1", and
-        # "1.2" or "a" will fail the type coersion
         if isinstance(value, list):
             context = cast(Optional[ModelParsingContextInterface], info.context)
             return validate_list_field(value, validate_int_fmtstring_field, context=context)
-        elif isinstance(value, RangeString):
-            # Nothing to do - it's guaranteed to be a format string at this point
-            pass
-
         return value
 
     @field_validator("range")
@@ -828,16 +1065,23 @@ class FloatTaskParameterDefinition(OpenJDModel_v2023_09):
 
     name: Identifier
     type: Literal[TaskParameterType.FLOAT]
-    range: FloatRangeList
+    # Note: Ordering here is important. Pydantic will try to match in
+    # the order given.
+    range: Union[FloatRangeList, ListExpressionString]
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Task.Param.", resolves=ResolutionScope.TASK),
-            TemplateVariableDef(prefix="|Task.RawParam.", resolves=ResolutionScope.TASK),
+            TemplateVariableDef(
+                prefix="|Task.Param.", resolves=ResolutionScope.TASK, expr_type=ExprType.FLOAT
+            ),
+            TemplateVariableDef(
+                prefix="|Task.RawParam.", resolves=ResolutionScope.TASK, expr_type=ExprType.FLOAT
+            ),
         },
         field="name",
     )
     _template_variable_sources = {"__export__": {"__self__"}}
+
     _job_creation_metadata = JobCreationMetadata(
         create_as=JobCreateAsMetadata(model=RangeListTaskParameterDefinition),
         resolve_fields={"range"},
@@ -848,7 +1092,7 @@ class FloatTaskParameterDefinition(OpenJDModel_v2023_09):
     @classmethod
     def _validate_range_element_type(cls, value: Any, info: ValidationInfo) -> Any:
         # pydantic will automatically type coerce values into floats. We explicitly
-        # want to reject non-integer values, so this *pre* validator validates the
+        # want to reject non-float values, so this *pre* validator validates the
         # value *before* pydantic tries to type coerce it.
         if isinstance(value, list):
             context = cast(Optional[ModelParsingContextInterface], info.context)
@@ -867,16 +1111,23 @@ class StringTaskParameterDefinition(OpenJDModel_v2023_09):
 
     name: Identifier
     type: Literal[TaskParameterType.STRING]
-    range: StringRangeList
+    # Note: Ordering here is important. Pydantic will try to match in
+    # the order given.
+    range: Union[StringRangeList, ListExpressionString]
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Task.Param.", resolves=ResolutionScope.TASK),
-            TemplateVariableDef(prefix="|Task.RawParam.", resolves=ResolutionScope.TASK),
+            TemplateVariableDef(
+                prefix="|Task.Param.", resolves=ResolutionScope.TASK, expr_type=ExprType.STRING
+            ),
+            TemplateVariableDef(
+                prefix="|Task.RawParam.", resolves=ResolutionScope.TASK, expr_type=ExprType.STRING
+            ),
         },
         field="name",
     )
     _template_variable_sources = {"__export__": {"__self__"}}
+
     _job_creation_metadata = JobCreationMetadata(
         create_as=JobCreateAsMetadata(model=RangeListTaskParameterDefinition),
         resolve_fields={"range"},
@@ -895,16 +1146,23 @@ class PathTaskParameterDefinition(OpenJDModel_v2023_09):
 
     name: Identifier
     type: Literal[TaskParameterType.PATH]
-    range: StringRangeList
+    # Note: Ordering here is important. Pydantic will try to match in
+    # the order given.
+    range: Union[StringRangeList, ListExpressionString]
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Task.Param.", resolves=ResolutionScope.TASK),
-            TemplateVariableDef(prefix="|Task.RawParam.", resolves=ResolutionScope.TASK),
+            TemplateVariableDef(
+                prefix="|Task.Param.", resolves=ResolutionScope.TASK, expr_type=ExprType.PATH
+            ),
+            TemplateVariableDef(
+                prefix="|Task.RawParam.", resolves=ResolutionScope.TASK, expr_type=ExprType.STRING
+            ),
         },
         field="name",
     )
     _template_variable_sources = {"__export__": {"__self__"}}
+
     _job_creation_metadata = JobCreationMetadata(
         create_as=JobCreateAsMetadata(model=RangeListTaskParameterDefinition),
         resolve_fields={"range"},
@@ -932,8 +1190,14 @@ class ChunkIntTaskParameterDefinition(OpenJDModel_v2023_09):
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Task.Param.", resolves=ResolutionScope.TASK),
-            TemplateVariableDef(prefix="|Task.RawParam.", resolves=ResolutionScope.TASK),
+            TemplateVariableDef(
+                prefix="|Task.Param.", resolves=ResolutionScope.TASK, expr_type=ExprType.RANGE_EXPR
+            ),
+            TemplateVariableDef(
+                prefix="|Task.RawParam.",
+                resolves=ResolutionScope.TASK,
+                expr_type=ExprType.RANGE_EXPR,
+            ),
         },
         field="name",
     )
@@ -969,15 +1233,9 @@ class ChunkIntTaskParameterDefinition(OpenJDModel_v2023_09):
         # pydantic will automatically type coerce values into integers. We explicitly
         # want to reject non-integer values, so this *pre* validator validates the
         # value *before* pydantic tries to type coerce it.
-        # We do allow coersion from a string since we want to allow "1", and
-        # "1.2" or "a" will fail the type coersion
         if isinstance(value, list):
             context = cast(Optional[ModelParsingContextInterface], info.context)
             return validate_list_field(value, validate_int_fmtstring_field, context=context)
-        elif isinstance(value, RangeString):
-            # Nothing to do - it's guaranteed to be a format string at this point
-            pass
-
         return value
 
     @field_validator("range")
@@ -1257,6 +1515,14 @@ class JobParameterType(str, Enum):
     PATH = "PATH"
     INT = "INT"
     FLOAT = "FLOAT"
+    BOOL = "BOOL"
+    RANGE_EXPR = "RANGE_EXPR"
+    LIST_STRING = "LIST[STRING]"
+    LIST_INT = "LIST[INT]"
+    LIST_FLOAT = "LIST[FLOAT]"
+    LIST_PATH = "LIST[PATH]"
+    LIST_BOOL = "LIST[BOOL]"
+    LIST_LIST_INT = "LIST[LIST[INT]]"
 
 
 AllowedParameterStringValueList = Annotated[list[ParameterStringValue], Field(min_length=1)]
@@ -1280,7 +1546,7 @@ FileDialogFilterPatternStringValueList = Annotated[
 # Target model for a job parameter when instantiating a job.
 class JobParameter(OpenJDModel_v2023_09):
     type: JobParameterType
-    value: str
+    value: Union[str, list]  # str for scalar types, list for LIST[*] types
     description: Optional[Description] = None
 
 
@@ -1295,6 +1561,45 @@ class StringUserInterfaceControl(str, Enum):
 # These are the permitted sets of values that can be in a string job parameter 'allowedValues'
 # when the user interface control is CHECK_BOX.
 ALLOWED_VALUES_FOR_CHECK_BOX = ({"TRUE", "FALSE"}, {"YES", "NO"}, {"ON", "OFF"}, {"1", "0"})
+
+
+def _validate_list_default_against_constraints(instance: Any) -> Any:
+    """Validate a list parameter's default value against its constraints at parse time.
+    Called as a model_validator(mode='after') on list parameter definition classes."""
+    if instance.default is not None:
+        try:
+            instance._check_constraints(instance.default)
+        except ValueError as e:
+            raise ValueError(f"default: {e}")
+    return instance
+
+
+# These are the permitted string values for BOOL parameters (case-insensitive)
+BOOL_TRUE_STRINGS = frozenset(["true", "yes", "on", "1"])
+BOOL_FALSE_STRINGS = frozenset(["false", "no", "off", "0"])
+
+
+def _coerce_bool_value(value: Any) -> bool:
+    """Coerce a value to bool using the BOOL parameter accepted values.
+
+    Accepts: True/False, int/float 0/1, and case-insensitive strings
+    "true"/"false"/"yes"/"no"/"on"/"off"/"1"/"0".
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+    if isinstance(value, str):
+        if value.lower() in BOOL_TRUE_STRINGS:
+            return True
+        if value.lower() in BOOL_FALSE_STRINGS:
+            return False
+    raise ValueError(
+        f"Value ({value!r}) is not a valid boolean. Accepted: true/false, 1/0, yes/no, on/off."
+    )
 
 
 class JobStringParameterDefinitionUserInterface(OpenJDModel_v2023_09):
@@ -1343,8 +1648,12 @@ class JobStringParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE),
-            TemplateVariableDef(prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE),
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.STRING
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.STRING
+            ),
         },
         field="name",
     )
@@ -1585,8 +1894,12 @@ class JobPathParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.SESSION),
-            TemplateVariableDef(prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE),
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.SESSION, expr_type=ExprType.PATH
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.STRING
+            ),
         },
         field="name",
     )
@@ -1810,8 +2123,12 @@ class JobIntParameterDefinition(OpenJDModel_v2023_09):
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE),
-            TemplateVariableDef(prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE),
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.INT
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.INT
+            ),
         },
         field="name",
     )
@@ -2065,8 +2382,12 @@ class JobFloatParameterDefinition(OpenJDModel_v2023_09):
 
     _template_variable_definitions = DefinesTemplateVariables(
         defines={
-            TemplateVariableDef(prefix="|Param.", resolves=ResolutionScope.TEMPLATE),
-            TemplateVariableDef(prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE),
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.FLOAT
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.FLOAT
+            ),
         },
         field="name",
     )
@@ -2202,6 +2523,924 @@ class JobFloatParameterDefinition(OpenJDModel_v2023_09):
             raise ValueError(
                 f"Value ({value}) for parameter {self.name} must be at most {self.maxValue}."
             )
+
+
+class BoolUserInterfaceControl(str, Enum):
+    CHECK_BOX = "CHECK_BOX"
+    HIDDEN = "HIDDEN"
+
+
+class JobBoolParameterDefinitionUserInterface(OpenJDModel_v2023_09):
+    """User interface attributes for a job bool parameter."""
+
+    control: BoolUserInterfaceControl
+    label: Optional[UserInterfaceLabelStringValue] = None
+    groupLabel: Optional[UserInterfaceLabelStringValue] = None
+
+
+class JobBoolParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
+    """A Job Parameter of type bool.
+
+    Attributes:
+        name (Identifier): A name by which the parameter is referenced.
+        type (JobParameterType.BOOL): discriminator to identify the type of the parameter
+        userInterface (Optional[JobBoolParameterDefinitionUserInterface]): User interface properties
+            for this parameter
+        description (Optional[Description]): A free form string that can be used to describe
+            the parameter. It has no functional purpose, but may appear in UI elements.
+        default (Optional[bool]): Default value for the parameter if a value
+            is not provided.
+    """
+
+    name: Identifier
+    type: Literal[JobParameterType.BOOL]
+    userInterface: Optional[JobBoolParameterDefinitionUserInterface] = None
+    description: Optional[Description] = None
+    default: Optional[bool] = None
+
+    @field_validator("default", mode="before")
+    @classmethod
+    def _validate_default(cls, v: Any) -> Optional[bool]:
+        if v is None:
+            return None
+        return _coerce_bool_value(v)
+
+    _template_variable_definitions = DefinesTemplateVariables(
+        defines={
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.BOOL
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.BOOL
+            ),
+        },
+        field="name",
+    )
+    _template_variable_sources = {"__export__": {"__self__"}}
+    _job_creation_metadata = JobCreationMetadata(
+        create_as=JobCreateAsMetadata(model=JobParameter),
+        exclude_fields={"name", "userInterface", "default"},
+        adds_fields=lambda this, symtab: {
+            "value": symtab[f"RawParam.{cast(JobBoolParameterDefinition,this).name}"]
+        },
+    )
+
+    # override
+    def _check_constraints(self, value: Any) -> None:
+        if value is None:
+            raise ValueError(f"No value given for {self.name}.")
+        if isinstance(value, bool):
+            return
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if value == 0 or value == 1:
+                return
+        if isinstance(value, str):
+            if value.lower() in BOOL_TRUE_STRINGS or value.lower() in BOOL_FALSE_STRINGS:
+                return
+        raise ValueError(f"Value ({value}) for parameter {self.name} must be a boolean.")
+
+
+class RangeExprUserInterfaceControl(str, Enum):
+    LINE_EDIT = "LINE_EDIT"
+    HIDDEN = "HIDDEN"
+
+
+class JobRangeExprParameterDefinitionUserInterface(OpenJDModel_v2023_09):
+    """User interface attributes for a job range expression parameter."""
+
+    control: RangeExprUserInterfaceControl
+    label: Optional[UserInterfaceLabelStringValue] = None
+    groupLabel: Optional[UserInterfaceLabelStringValue] = None
+
+
+class JobRangeExprParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
+    """A Job Parameter of type range expression.
+
+    Attributes:
+        name (Identifier): A name by which the parameter is referenced.
+        type (JobParameterType.RANGE_EXPR): discriminator to identify the type of the parameter
+        userInterface (Optional[JobRangeExprParameterDefinitionUserInterface]): User interface properties
+            for this parameter
+        description (Optional[Description]): A free form string that can be used to describe
+            the parameter. It has no functional purpose, but may appear in UI elements.
+        default (Optional[str]): Default value for the parameter if a value
+            is not provided. Must be a valid IntRangeExpr.
+        minLength (Optional[int]): Minimum string length of the range expression.
+        maxLength (Optional[int]): Maximum string length of the range expression. Default is 1024.
+    """
+
+    name: Identifier
+    type: Literal[JobParameterType.RANGE_EXPR]
+    userInterface: Optional[JobRangeExprParameterDefinitionUserInterface] = None
+    description: Optional[Description] = None
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = Field(default=1024)  # noqa: N815
+    default: Optional[IntRangeExpr] = None
+
+    _template_variable_definitions = DefinesTemplateVariables(
+        defines={
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.RANGE_EXPR
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.",
+                resolves=ResolutionScope.TEMPLATE,
+                expr_type=ExprType.RANGE_EXPR,
+            ),
+        },
+        field="name",
+    )
+    _template_variable_sources = {"__export__": {"__self__"}}
+    _job_creation_metadata = JobCreationMetadata(
+        create_as=JobCreateAsMetadata(model=JobParameter),
+        exclude_fields={"name", "userInterface", "default", "minLength", "maxLength"},
+        adds_fields=lambda this, symtab: {
+            "value": symtab[f"RawParam.{cast(JobRangeExprParameterDefinition,this).name}"]
+        },
+    )
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("minLength must be at least 1")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+    @field_validator("default")
+    @classmethod
+    def _validate_default(
+        cls, value: Optional[IntRangeExpr], info: ValidationInfo
+    ) -> Optional[IntRangeExpr]:
+        if value is None:
+            return value
+        value_str = str(value)
+        min_length = info.data.get("minLength")
+        max_length = info.data.get("maxLength")
+        if min_length is not None and len(value_str) < min_length:
+            raise ValueError("Default value is shorter than minLength.")
+        if max_length is not None and len(value_str) > max_length:
+            raise ValueError("Default value is longer than maxLength.")
+        return value
+
+    # override
+    def _check_constraints(self, value: Any) -> None:
+        if value is None:
+            raise ValueError(f"No value given for {self.name}.")
+        if not isinstance(value, str):
+            raise ValueError(f"Value ({value}) for parameter {self.name} must be a string.")
+        if self.minLength is not None and len(value) < self.minLength:
+            raise ValueError(
+                f"Value for parameter {self.name} must be at least {self.minLength} characters."
+            )
+        if self.maxLength is not None and len(value) > self.maxLength:
+            raise ValueError(
+                f"Value for parameter {self.name} must be at most {self.maxLength} characters."
+            )
+        try:
+            IntRangeExpr.from_str(value)
+        except (ValueError, ExpressionError, TokenError) as e:
+            raise ValueError(
+                f"Value ({value}) for parameter {self.name} must be a valid range expression: {e}"
+            )
+
+
+# ==================================================================
+# =================== List Job Parameter Types =====================
+# ==================================================================
+
+
+class ListStringUserInterfaceControl(str, Enum):
+    LINE_EDIT_LIST = "LINE_EDIT_LIST"
+    HIDDEN = "HIDDEN"
+
+
+class JobListStringParameterDefinitionUserInterface(OpenJDModel_v2023_09):
+    control: ListStringUserInterfaceControl
+    label: Optional[UserInterfaceLabelStringValue] = None
+    groupLabel: Optional[UserInterfaceLabelStringValue] = None
+
+
+class JobListStringItemConstraints(OpenJDModel_v2023_09):
+    allowedValues: Optional[AllowedParameterStringValueList] = None  # noqa: N815
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("minLength must be at least 1")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+
+class JobListStringParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
+    name: Identifier
+    type: Literal[JobParameterType.LIST_STRING]
+    userInterface: Optional[JobListStringParameterDefinitionUserInterface] = None
+    description: Optional[Description] = None
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+    item: Optional[JobListStringItemConstraints] = None
+    default: Optional[list[str]] = None
+
+    _template_variable_definitions = DefinesTemplateVariables(
+        defines={
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.LIST_STRING
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.",
+                resolves=ResolutionScope.TEMPLATE,
+                expr_type=ExprType.LIST_STRING,
+            ),
+        },
+        field="name",
+    )
+    _template_variable_sources = {"__export__": {"__self__"}}
+    _job_creation_metadata = JobCreationMetadata(
+        create_as=JobCreateAsMetadata(model=JobParameter),
+        exclude_fields={"name", "userInterface", "default", "minLength", "maxLength", "item"},
+        adds_fields=lambda this, symtab: {
+            "value": symtab[f"RawParam.{cast(JobListStringParameterDefinition,this).name}"]
+        },
+    )
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("minLength must be at least 0")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+    def _check_constraints(self, value: Any) -> None:
+        if value is None:
+            raise ValueError(f"No value given for {self.name}.")
+        if not isinstance(value, list):
+            raise ValueError(f"Value for parameter {self.name} must be a list.")
+        if self.minLength is not None and len(value) < self.minLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at least {self.minLength} items."
+            )
+        if self.maxLength is not None and len(value) > self.maxLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at most {self.maxLength} items."
+            )
+        for i, item in enumerate(value):
+            if not isinstance(item, str):
+                raise ValueError(f"Item {i} in parameter {self.name} must be a string.")
+            if self.item:
+                if self.item.minLength is not None and len(item) < self.item.minLength:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be at least {self.item.minLength} characters."
+                    )
+                if self.item.maxLength is not None and len(item) > self.item.maxLength:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be at most {self.item.maxLength} characters."
+                    )
+                if self.item.allowedValues is not None and item not in self.item.allowedValues:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be one of the allowed values."
+                    )
+
+    @model_validator(mode="after")
+    def _validate_default_constraints(self) -> Self:
+        return _validate_list_default_against_constraints(self)
+
+
+class ListIntUserInterfaceControl(str, Enum):
+    SPIN_BOX_LIST = "SPIN_BOX_LIST"
+    HIDDEN = "HIDDEN"
+
+
+class JobListIntParameterDefinitionUserInterface(OpenJDModel_v2023_09):
+    control: ListIntUserInterfaceControl
+    label: Optional[UserInterfaceLabelStringValue] = None
+    groupLabel: Optional[UserInterfaceLabelStringValue] = None
+    singleStepDelta: Optional[PositiveInt] = None
+
+
+class JobListIntItemConstraints(OpenJDModel_v2023_09):
+    allowedValues: Optional[AllowedIntParameterList] = None  # noqa: N815
+    minValue: Optional[int] = None  # noqa: N815
+    maxValue: Optional[int] = None  # noqa: N815
+
+    @field_validator("maxValue")
+    @classmethod
+    def _validate_max_value(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is None:
+            return value
+        min_value = info.data.get("minValue")
+        if min_value is not None and min_value > value:
+            raise ValueError("Required: minValue <= maxValue.")
+        return value
+
+
+class JobListIntParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
+    name: Identifier
+    type: Literal[JobParameterType.LIST_INT]
+    userInterface: Optional[JobListIntParameterDefinitionUserInterface] = None
+    description: Optional[Description] = None
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+    item: Optional[JobListIntItemConstraints] = None
+    default: Optional[list[int]] = None
+
+    _template_variable_definitions = DefinesTemplateVariables(
+        defines={
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.LIST_INT
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.LIST_INT
+            ),
+        },
+        field="name",
+    )
+    _template_variable_sources = {"__export__": {"__self__"}}
+    _job_creation_metadata = JobCreationMetadata(
+        create_as=JobCreateAsMetadata(model=JobParameter),
+        exclude_fields={"name", "userInterface", "default", "minLength", "maxLength", "item"},
+        adds_fields=lambda this, symtab: {
+            "value": symtab[f"RawParam.{cast(JobListIntParameterDefinition,this).name}"]
+        },
+    )
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("minLength must be at least 0")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+    def _check_constraints(self, value: Any) -> None:
+        if value is None:
+            raise ValueError(f"No value given for {self.name}.")
+        if not isinstance(value, list):
+            raise ValueError(f"Value for parameter {self.name} must be a list.")
+        if self.minLength is not None and len(value) < self.minLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at least {self.minLength} items."
+            )
+        if self.maxLength is not None and len(value) > self.maxLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at most {self.maxLength} items."
+            )
+        for i, item in enumerate(value):
+            if not isinstance(item, int) or isinstance(item, bool):
+                raise ValueError(f"Item {i} in parameter {self.name} must be an integer.")
+            if self.item:
+                if self.item.minValue is not None and item < self.item.minValue:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be at least {self.item.minValue}."
+                    )
+                if self.item.maxValue is not None and item > self.item.maxValue:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be at most {self.item.maxValue}."
+                    )
+                if self.item.allowedValues is not None and item not in self.item.allowedValues:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be one of the allowed values."
+                    )
+
+    @model_validator(mode="after")
+    def _validate_default_constraints(self) -> Self:
+        return _validate_list_default_against_constraints(self)
+
+
+class ListFloatUserInterfaceControl(str, Enum):
+    SPIN_BOX_LIST = "SPIN_BOX_LIST"
+    HIDDEN = "HIDDEN"
+
+
+class JobListFloatParameterDefinitionUserInterface(OpenJDModel_v2023_09):
+    control: ListFloatUserInterfaceControl
+    label: Optional[UserInterfaceLabelStringValue] = None
+    groupLabel: Optional[UserInterfaceLabelStringValue] = None
+    decimals: Optional[PositiveInt] = None
+    singleStepDelta: Optional[PositiveFloat] = None
+
+
+class JobListFloatItemConstraints(OpenJDModel_v2023_09):
+    allowedValues: Optional[AllowedFloatParameterList] = None  # noqa: N815
+    minValue: Optional[Decimal] = None  # noqa: N815
+    maxValue: Optional[Decimal] = None  # noqa: N815
+
+    @field_validator("maxValue")
+    @classmethod
+    def _validate_max_value(
+        cls, value: Optional[Decimal], info: ValidationInfo
+    ) -> Optional[Decimal]:
+        if value is None:
+            return value
+        min_value = info.data.get("minValue")
+        if min_value is not None and min_value > value:
+            raise ValueError("Required: minValue <= maxValue.")
+        return value
+
+
+class JobListFloatParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
+    name: Identifier
+    type: Literal[JobParameterType.LIST_FLOAT]
+    userInterface: Optional[JobListFloatParameterDefinitionUserInterface] = None
+    description: Optional[Description] = None
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+    item: Optional[JobListFloatItemConstraints] = None
+    default: Optional[list[Decimal]] = None
+
+    _template_variable_definitions = DefinesTemplateVariables(
+        defines={
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.LIST_FLOAT
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.",
+                resolves=ResolutionScope.TEMPLATE,
+                expr_type=ExprType.LIST_FLOAT,
+            ),
+        },
+        field="name",
+    )
+    _template_variable_sources = {"__export__": {"__self__"}}
+    _job_creation_metadata = JobCreationMetadata(
+        create_as=JobCreateAsMetadata(model=JobParameter),
+        exclude_fields={"name", "userInterface", "default", "minLength", "maxLength", "item"},
+        adds_fields=lambda this, symtab: {
+            "value": symtab[f"RawParam.{cast(JobListFloatParameterDefinition,this).name}"]
+        },
+    )
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("minLength must be at least 0")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+    def _check_constraints(self, value: Any) -> None:
+        if value is None:
+            raise ValueError(f"No value given for {self.name}.")
+        if not isinstance(value, list):
+            raise ValueError(f"Value for parameter {self.name} must be a list.")
+        if self.minLength is not None and len(value) < self.minLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at least {self.minLength} items."
+            )
+        if self.maxLength is not None and len(value) > self.maxLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at most {self.maxLength} items."
+            )
+        for i, item in enumerate(value):
+            if isinstance(item, bool) or not isinstance(item, (int, float, Decimal)):
+                raise ValueError(f"Item {i} in parameter {self.name} must be a number.")
+            item_dec = Decimal(str(item))
+            if self.item:
+                if self.item.minValue is not None and item_dec < self.item.minValue:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be at least {self.item.minValue}."
+                    )
+                if self.item.maxValue is not None and item_dec > self.item.maxValue:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be at most {self.item.maxValue}."
+                    )
+                if self.item.allowedValues is not None and item_dec not in self.item.allowedValues:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be one of the allowed values."
+                    )
+
+    @model_validator(mode="after")
+    def _validate_default_constraints(self) -> Self:
+        return _validate_list_default_against_constraints(self)
+
+
+class ListPathUserInterfaceControl(str, Enum):
+    CHOOSE_INPUT_FILE_LIST = "CHOOSE_INPUT_FILE_LIST"
+    CHOOSE_OUTPUT_FILE_LIST = "CHOOSE_OUTPUT_FILE_LIST"
+    CHOOSE_DIRECTORY_LIST = "CHOOSE_DIRECTORY_LIST"
+    HIDDEN = "HIDDEN"
+
+
+class JobListPathParameterDefinitionUserInterface(OpenJDModel_v2023_09):
+    control: ListPathUserInterfaceControl
+    label: Optional[UserInterfaceLabelStringValue] = None
+    groupLabel: Optional[UserInterfaceLabelStringValue] = None
+    fileFilters: Optional[JobPathParameterDefinitionFileFilterList] = None
+    fileFilterDefault: Optional[JobPathParameterDefinitionFileFilter] = None
+
+
+class JobListPathItemConstraints(OpenJDModel_v2023_09):
+    allowedValues: Optional[AllowedParameterStringValueList] = None  # noqa: N815
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("minLength must be at least 1")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+
+class JobListPathParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
+    name: Identifier
+    type: Literal[JobParameterType.LIST_PATH]
+    userInterface: Optional[JobListPathParameterDefinitionUserInterface] = None
+    description: Optional[Description] = None
+    objectType: Optional[JobPathParameterDefinitionObjectType] = None
+    dataFlow: Optional[JobPathParameterDefinitionDataFlow] = None
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+    item: Optional[JobListPathItemConstraints] = None
+    default: Optional[list[str]] = None
+
+    _template_variable_definitions = DefinesTemplateVariables(
+        defines={
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.SESSION, expr_type=ExprType.LIST_PATH
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.",
+                resolves=ResolutionScope.TEMPLATE,
+                expr_type=ExprType.LIST_STRING,
+            ),
+        },
+        field="name",
+    )
+    _template_variable_sources = {"__export__": {"__self__"}}
+    _job_creation_metadata = JobCreationMetadata(
+        create_as=JobCreateAsMetadata(model=JobParameter),
+        exclude_fields={
+            "name",
+            "userInterface",
+            "default",
+            "minLength",
+            "maxLength",
+            "item",
+            "objectType",
+            "dataFlow",
+        },
+        adds_fields=lambda this, symtab: {
+            "value": symtab[f"RawParam.{cast(JobListPathParameterDefinition,this).name}"]
+        },
+    )
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("minLength must be at least 0")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+    def _check_constraints(self, value: Any) -> None:
+        if value is None:
+            raise ValueError(f"No value given for {self.name}.")
+        if not isinstance(value, list):
+            raise ValueError(f"Value for parameter {self.name} must be a list.")
+        if self.minLength is not None and len(value) < self.minLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at least {self.minLength} items."
+            )
+        if self.maxLength is not None and len(value) > self.maxLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at most {self.maxLength} items."
+            )
+        for i, item in enumerate(value):
+            if not isinstance(item, str):
+                raise ValueError(f"Item {i} in parameter {self.name} must be a string.")
+            if self.item:
+                if self.item.minLength is not None and len(item) < self.item.minLength:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be at least {self.item.minLength} characters."
+                    )
+                if self.item.maxLength is not None and len(item) > self.item.maxLength:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be at most {self.item.maxLength} characters."
+                    )
+                if self.item.allowedValues is not None and item not in self.item.allowedValues:
+                    raise ValueError(
+                        f"Item {i} in parameter {self.name} must be one of the allowed values."
+                    )
+
+    @model_validator(mode="after")
+    def _validate_default_constraints(self) -> Self:
+        return _validate_list_default_against_constraints(self)
+
+
+class ListBoolUserInterfaceControl(str, Enum):
+    CHECK_BOX_LIST = "CHECK_BOX_LIST"
+    HIDDEN = "HIDDEN"
+
+
+class JobListBoolParameterDefinitionUserInterface(OpenJDModel_v2023_09):
+    control: ListBoolUserInterfaceControl
+    label: Optional[UserInterfaceLabelStringValue] = None
+    groupLabel: Optional[UserInterfaceLabelStringValue] = None
+
+
+class JobListBoolParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
+    name: Identifier
+    type: Literal[JobParameterType.LIST_BOOL]
+    userInterface: Optional[JobListBoolParameterDefinitionUserInterface] = None
+    description: Optional[Description] = None
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+    default: Optional[list[bool]] = None
+
+    @field_validator("default", mode="before")
+    @classmethod
+    def _validate_default(cls, v: Any) -> Optional[list[bool]]:
+        if v is None:
+            return None
+        if not isinstance(v, list):
+            raise ValueError("default must be a list")
+        return [_coerce_bool_value(item) for item in v]
+
+    _template_variable_definitions = DefinesTemplateVariables(
+        defines={
+            TemplateVariableDef(
+                prefix="|Param.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.LIST_BOOL
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.", resolves=ResolutionScope.TEMPLATE, expr_type=ExprType.LIST_BOOL
+            ),
+        },
+        field="name",
+    )
+    _template_variable_sources = {"__export__": {"__self__"}}
+    _job_creation_metadata = JobCreationMetadata(
+        create_as=JobCreateAsMetadata(model=JobParameter),
+        exclude_fields={"name", "userInterface", "default", "minLength", "maxLength"},
+        adds_fields=lambda this, symtab: {
+            "value": symtab[f"RawParam.{cast(JobListBoolParameterDefinition,this).name}"]
+        },
+    )
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("minLength must be at least 0")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+    def _check_constraints(self, value: Any) -> None:
+        if value is None:
+            raise ValueError(f"No value given for {self.name}.")
+        if not isinstance(value, list):
+            raise ValueError(f"Value for parameter {self.name} must be a list.")
+        if self.minLength is not None and len(value) < self.minLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at least {self.minLength} items."
+            )
+        if self.maxLength is not None and len(value) > self.maxLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at most {self.maxLength} items."
+            )
+        for i, item in enumerate(value):
+            if isinstance(item, bool):
+                continue
+            if isinstance(item, (int, float)) and not isinstance(item, bool):
+                if item == 0 or item == 1:
+                    continue
+            if isinstance(item, str):
+                if item.lower() in BOOL_TRUE_STRINGS or item.lower() in BOOL_FALSE_STRINGS:
+                    continue
+            raise ValueError(f"Item {i} in parameter {self.name} must be a boolean.")
+
+    @model_validator(mode="after")
+    def _validate_default_constraints(self) -> Self:
+        return _validate_list_default_against_constraints(self)
+
+
+class ListListIntUserInterfaceControl(str, Enum):
+    HIDDEN = "HIDDEN"
+
+
+class JobListListIntParameterDefinitionUserInterface(OpenJDModel_v2023_09):
+    control: ListListIntUserInterfaceControl
+    label: Optional[UserInterfaceLabelStringValue] = None
+    groupLabel: Optional[UserInterfaceLabelStringValue] = None
+
+
+class JobListListIntInnerItemConstraints(OpenJDModel_v2023_09):
+    allowedValues: Optional[AllowedIntParameterList] = None  # noqa: N815
+    minValue: Optional[int] = None  # noqa: N815
+    maxValue: Optional[int] = None  # noqa: N815
+
+    @field_validator("maxValue")
+    @classmethod
+    def _validate_max_value(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is None:
+            return value
+        min_value = info.data.get("minValue")
+        if min_value is not None and min_value > value:
+            raise ValueError("Required: minValue <= maxValue.")
+        return value
+
+
+class JobListListIntItemConstraints(OpenJDModel_v2023_09):
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+    item: Optional[JobListListIntInnerItemConstraints] = None
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("minLength must be at least 0")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+
+class JobListListIntParameterDefinition(OpenJDModel_v2023_09, JobParameterInterface):
+    name: Identifier
+    type: Literal[JobParameterType.LIST_LIST_INT]
+    userInterface: Optional[JobListListIntParameterDefinitionUserInterface] = None
+    description: Optional[Description] = None
+    minLength: Optional[StrictInt] = None  # noqa: N815
+    maxLength: Optional[StrictInt] = None  # noqa: N815
+    item: Optional[JobListListIntItemConstraints] = None
+    default: Optional[list[list[int]]] = None
+
+    _template_variable_definitions = DefinesTemplateVariables(
+        defines={
+            TemplateVariableDef(
+                prefix="|Param.",
+                resolves=ResolutionScope.TEMPLATE,
+                expr_type=ExprType.LIST_LIST_INT,
+            ),
+            TemplateVariableDef(
+                prefix="|RawParam.",
+                resolves=ResolutionScope.TEMPLATE,
+                expr_type=ExprType.LIST_LIST_INT,
+            ),
+        },
+        field="name",
+    )
+    _template_variable_sources = {"__export__": {"__self__"}}
+    _job_creation_metadata = JobCreationMetadata(
+        create_as=JobCreateAsMetadata(model=JobParameter),
+        exclude_fields={"name", "userInterface", "default", "minLength", "maxLength", "item"},
+        adds_fields=lambda this, symtab: {
+            "value": symtab[f"RawParam.{cast(JobListListIntParameterDefinition,this).name}"]
+        },
+    )
+
+    @field_validator("minLength")
+    @classmethod
+    def _validate_min_length(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("minLength must be at least 0")
+        return value
+
+    @field_validator("maxLength")
+    @classmethod
+    def _validate_max_length(cls, value: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if value is not None and value < 1:
+            raise ValueError("maxLength must be at least 1")
+        min_length = info.data.get("minLength")
+        if min_length is not None and value is not None and min_length > value:
+            raise ValueError("Required: minLength <= maxLength.")
+        return value
+
+    def _check_constraints(self, value: Any) -> None:
+        if value is None:
+            raise ValueError(f"No value given for {self.name}.")
+        if not isinstance(value, list):
+            raise ValueError(f"Value for parameter {self.name} must be a list.")
+        if self.minLength is not None and len(value) < self.minLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at least {self.minLength} items."
+            )
+        if self.maxLength is not None and len(value) > self.maxLength:
+            raise ValueError(
+                f"List for parameter {self.name} must have at most {self.maxLength} items."
+            )
+        for i, inner_list in enumerate(value):
+            if not isinstance(inner_list, list):
+                raise ValueError(f"Item {i} in parameter {self.name} must be a list.")
+            if self.item:
+                if self.item.minLength is not None and len(inner_list) < self.item.minLength:
+                    raise ValueError(
+                        f"Inner list {i} in parameter {self.name} must have at least {self.item.minLength} items."
+                    )
+                if self.item.maxLength is not None and len(inner_list) > self.item.maxLength:
+                    raise ValueError(
+                        f"Inner list {i} in parameter {self.name} must have at most {self.item.maxLength} items."
+                    )
+            for j, item in enumerate(inner_list):
+                if not isinstance(item, int) or isinstance(item, bool):
+                    raise ValueError(
+                        f"Item [{i}][{j}] in parameter {self.name} must be an integer."
+                    )
+                if self.item and self.item.item:
+                    if self.item.item.minValue is not None and item < self.item.item.minValue:
+                        raise ValueError(
+                            f"Item [{i}][{j}] in parameter {self.name} must be at least {self.item.item.minValue}."
+                        )
+                    if self.item.item.maxValue is not None and item > self.item.item.maxValue:
+                        raise ValueError(
+                            f"Item [{i}][{j}] in parameter {self.name} must be at most {self.item.item.maxValue}."
+                        )
+                    if (
+                        self.item.item.allowedValues is not None
+                        and item not in self.item.item.allowedValues
+                    ):
+                        raise ValueError(
+                            f"Item [{i}][{j}] in parameter {self.name} must be one of the allowed values."
+                        )
+
+    @model_validator(mode="after")
+    def _validate_default_constraints(self) -> Self:
+        return _validate_list_default_against_constraints(self)
 
 
 # ==================================================================
@@ -2629,6 +3868,54 @@ StepEnvironmentList = Annotated[list[Environment], Field(min_length=1)]
 StepDependenciesList = Annotated[list[StepDependency], Field(min_length=1)]
 
 
+def _serialize_let_value(value: "ExprValue") -> list:
+    """Serialize a list ExprValue for let binding round-trip, preserving float precision."""
+    return [
+        _serialize_let_value(v) if v.type.type_code == TypeCode.LIST else v.to_string()
+        for v in value.to_expr_value_list()
+    ]
+
+
+def _step_template_additional_fields(
+    step_template: "OpenJDModel", symtab: "SymbolTable"
+) -> dict[str, Any]:
+    """Extract evaluated let binding values and types from symbol table for Step model.
+    Also includes Job.Name and Step.Name if present in the symbol table."""
+    step = cast("StepTemplate", step_template)
+    let_values = []
+
+    # Include Job.Name and Step.Name from the symbol table
+    for symbol_name in ("Job.Name", "Step.Name"):
+        if symbol_name in symtab:
+            value = symtab[symbol_name]
+            if isinstance(value, ExprValue):
+                let_values.append(
+                    {"name": symbol_name, "value": value.to_string(), "type": str(value.type)}
+                )
+
+    if step.let:
+        for binding in step.let:
+            if binding.name in symtab:
+                value = symtab[binding.name]
+                if not isinstance(value, ExprValue):
+                    continue
+                let_values.append(
+                    {
+                        "name": binding.name,
+                        "value": cast(
+                            Any,
+                            (
+                                _serialize_let_value(value)
+                                if value.type.type_code == TypeCode.LIST
+                                else value.to_string()
+                            ),
+                        ),
+                        "type": str(value.type),
+                    }
+                )
+    return {"resolvedBindings": let_values} if let_values else {}
+
+
 # Target model for a StepTemplate when instantiating a job.
 class Step(OpenJDModel_v2023_09):
     name: StepName
@@ -2638,6 +3925,7 @@ class Step(OpenJDModel_v2023_09):
     parameterSpace: Optional[StepParameterSpace] = None  # noqa: N815
     hostRequirements: Optional[HostRequirements] = None
     dependencies: Optional[StepDependenciesList] = None
+    resolvedBindings: Optional[list[dict[str, Any]]] = None  # Evaluated step-level let bindings
 
 
 class StepTemplate(OpenJDModel_v2023_09):
@@ -2647,6 +3935,9 @@ class StepTemplate(OpenJDModel_v2023_09):
         name (StepName): The name by which the Step is referenced
         description (Optional[str]): A free form string that can be used to describe the Step.
             It has no functional purpose, but may appear in UI elements.
+        let (Optional[list[LetBinding]]): Let bindings evaluated once per step. Bound names
+            are available in stepEnvironments, hostRequirements, parameterSpace, and script.
+            Requires EXPR extension.
         script (StepScript): The information on what Actions to perform when running Tasks
             of the Step.
         stepEnvironments (Optional[StepEnvironmentList]): A list of the environments required to
@@ -2665,6 +3956,7 @@ class StepTemplate(OpenJDModel_v2023_09):
 
     name: StepName
     description: Optional[Description] = None
+    let: LetBindings = None
     script: Optional[StepScript] = None
     stepEnvironments: Optional[StepEnvironmentList] = None
     parameterSpace: Optional[StepParameterSpaceDefinition] = None  # noqa: N815
@@ -2676,20 +3968,37 @@ class StepTemplate(OpenJDModel_v2023_09):
     powershell: Optional[SimpleAction] = None
     node: Optional[SimpleAction] = None
 
+    _template_variable_definitions = DefinesTemplateVariables(
+        inject={
+            f"|{ValueReferenceConstants.STEP_NAME.value}",
+        },
+        inject_types={
+            f"|{ValueReferenceConstants.STEP_NAME.value}": ExprType.STRING,
+        },
+        inject_requires=(SpecificationRevision.v2023_09, "EXPR"),
+    )
     _template_variable_sources = {
-        "script": {"__self__", "parameterSpace"},
-        "stepEnvironments": {"__self__"},
-        "python": {"__self__", "parameterSpace"},
-        "bash": {"__self__", "parameterSpace"},
-        "cmd": {"__self__", "parameterSpace"},
-        "powershell": {"__self__", "parameterSpace"},
-        "node": {"__self__", "parameterSpace"},
+        "script": {"__self__", "parameterSpace", "let"},
+        "stepEnvironments": {"__self__", "let"},
+        "hostRequirements": {"__self__", "let"},
+        "parameterSpace": {"__self__", "let"},
+        "python": {"__self__", "parameterSpace", "let"},
+        "bash": {"__self__", "parameterSpace", "let"},
+        "cmd": {"__self__", "parameterSpace", "let"},
+        "powershell": {"__self__", "parameterSpace", "let"},
+        "node": {"__self__", "parameterSpace", "let"},
     }
     _job_creation_metadata = JobCreationMetadata(
         create_as=JobCreateAsMetadata(model=Step),
-        exclude_fields={"python", "bash", "cmd", "powershell", "node"},
+        exclude_fields={"python", "bash", "cmd", "powershell", "node", "let"},
         transform=lambda t: cast("StepTemplate", t).resolve_syntax_sugar(),
+        adds_fields=_step_template_additional_fields,
     )
+
+    @field_validator("let", mode="before")
+    @classmethod
+    def _validate_let(cls, v: Optional[list[str]], info: ValidationInfo) -> LetBindings:
+        return _validate_let_bindings(v, info)
 
     @field_validator("name")
     @classmethod
@@ -2763,14 +4072,39 @@ class StepTemplate(OpenJDModel_v2023_09):
         return v
 
     @model_validator(mode="after")
-    def _validate_no_self_dependency(self) -> Self:
+    def _validate_no_self_dependency(self, info: ValidationInfo) -> Self:
+        # Store parsing context for use in resolve_syntax_sugar
+        self._parsing_context = cast(Optional[ModelParsingContext], info.context)
         # Dependency of the step upon itself is not allowed.
         deps: StepDependenciesList = self.dependencies or []
-        if not deps:
-            return self
-        stepname = self.name
-        if any(dep.dependsOn == stepname for dep in deps):
-            raise ValueError("A step cannot depend upon itself.")
+        if deps:
+            stepname = self.name
+            if any(dep.dependsOn == stepname for dep in deps):
+                raise ValueError("A step cannot depend upon itself.")
+
+        # Check for let binding shadowing between step-level and nested scopes
+        if self.let:
+            step_names = {b.name for b in self.let}
+
+            # Check script-level let bindings
+            if self.script and self.script.let:
+                for binding in self.script.let:
+                    if binding.name in step_names:
+                        raise ValueError(
+                            f"Script let binding '{binding.name}' shadows a binding from the enclosing step."
+                        )
+
+            # Check stepEnvironments let bindings
+            if self.stepEnvironments:
+                for env in self.stepEnvironments:
+                    if env.script and env.script.let:
+                        for binding in env.script.let:
+                            if binding.name in step_names:
+                                raise ValueError(
+                                    f"Environment '{env.name}' let binding '{binding.name}' "
+                                    f"shadows a binding from the enclosing step."
+                                )
+
         return self
 
     def resolve_syntax_sugar(self) -> "StepTemplate":
@@ -2804,7 +4138,12 @@ class StepTemplate(OpenJDModel_v2023_09):
         file_ref = f"{{{{Task.File.{embedded_name}}}}}"
 
         # Build args: prefix + file reference + user args
-        args: list[ArgString] = [*(ArgString(arg) for arg in arg_prefix), ArgString(file_ref)]
+        # Use stored parsing context to preserve extensions like EXPR
+        context = self._parsing_context or ModelParsingContext()
+        args: list[ArgString] = [
+            *(ArgString(arg, context=context) for arg in arg_prefix),
+            ArgString(file_ref, context=context),
+        ]
         if simple_action.args:
             args.extend(simple_action.args)
 
@@ -2812,10 +4151,12 @@ class StepTemplate(OpenJDModel_v2023_09):
         return StepTemplate.model_construct(
             name=self.name,
             description=self.description,
+            let=self.let,
             script=StepScript.model_construct(
+                let=simple_action.let,
                 actions=StepActions.model_construct(
                     onRun=Action.model_construct(
-                        command=CommandString(command),
+                        command=CommandString(command, context=context),
                         args=args,
                         timeout=simple_action.timeout,
                         cancelation=simple_action.cancelation,
@@ -2839,6 +4180,18 @@ class StepTemplate(OpenJDModel_v2023_09):
 
 
 StepTemplateList = Annotated[list[StepTemplate], Field(min_length=1)]
+
+
+def _normalize_job_parameter_definition(value: Any) -> Any:
+    """Normalize job parameter type to uppercase for case-insensitive matching."""
+    if isinstance(value, dict) and "type" in value:
+        original_type = value["type"]
+        if isinstance(original_type, str) and original_type != original_type.upper():
+            value = value.copy()
+            value["type"] = original_type.upper()
+    return value
+
+
 JobParameterDefinitionList = Annotated[
     list[
         Annotated[
@@ -2847,8 +4200,17 @@ JobParameterDefinitionList = Annotated[
                 JobFloatParameterDefinition,
                 JobStringParameterDefinition,
                 JobPathParameterDefinition,
+                JobBoolParameterDefinition,
+                JobRangeExprParameterDefinition,
+                JobListStringParameterDefinition,
+                JobListIntParameterDefinition,
+                JobListFloatParameterDefinition,
+                JobListPathParameterDefinition,
+                JobListBoolParameterDefinition,
+                JobListListIntParameterDefinition,
             ],
             Field(..., discriminator="type"),
+            BeforeValidator(_normalize_job_parameter_definition),
         ]
     ],
     Field(
@@ -2909,10 +4271,19 @@ class JobTemplate(OpenJDModel_v2023_09):
     schemaStr: Optional[str] = Field(None, alias="$schema")  # noqa: N815
 
     _template_variable_scope = ResolutionScope.TEMPLATE
+    _template_variable_definitions = DefinesTemplateVariables(
+        inject={
+            f"|{ValueReferenceConstants.JOB_NAME.value}",
+        },
+        inject_types={
+            f"|{ValueReferenceConstants.JOB_NAME.value}": ExprType.STRING,
+        },
+        inject_requires=(SpecificationRevision.v2023_09, "EXPR"),
+    )
     _template_variable_sources = {
         "name": {"parameterDefinitions"},
-        "steps": {"parameterDefinitions"},
-        "jobEnvironments": {"parameterDefinitions"},
+        "steps": {"__self__", "parameterDefinitions"},
+        "jobEnvironments": {"__self__", "parameterDefinitions"},
     }
     _job_creation_metadata = JobCreationMetadata(
         create_as=JobCreateAsMetadata(model=Job),
@@ -2950,28 +4321,8 @@ class JobTemplate(OpenJDModel_v2023_09):
     def _permitted_extension_names(
         cls, value: Optional[ExtensionNameList], info: ValidationInfo
     ) -> Optional[ExtensionNameList]:
-        if info.context:
-            context = cast(ModelParsingContext, info.context)
-            if value is not None:
-                # Before processing the extensions field, context.extensions is the list of supported extensions
-                # that were requested in the call of the parse_job_template function.
-                # Take the intersection of the input supported extensions with what is implemented
-                # in this list, as the implementation needs to support an extension for it to be supported.
-                supported_extensions = context.extensions.intersection(
-                    cls.supported_extension_names()
-                )
-
-                unsupported_extensions = set(value).difference(supported_extensions)
-                if unsupported_extensions:
-                    raise ValueError(
-                        f"Unsupported extension names: {', '.join(sorted(unsupported_extensions))}"
-                    )
-
-                # After processing the extensions field, context.extensions is the list of
-                # extension names used by the template.
-                context.extensions = set(value)
-            else:
-                context.extensions = set()
+        # Extension validation and context.extensions narrowing is handled by the
+        # prevalidator (_root_template_prevalidator).
         return value
 
     @field_validator("steps")
@@ -3012,9 +4363,90 @@ class JobTemplate(OpenJDModel_v2023_09):
         # The name of this validator is very important. It is specifically looked for
         # in the _parse_model function to run this validation as a pre-root-validator
         # without the usual short-circuit of pre-root-validators that pydantic does.
+
+        # RFC 7 types and case-insensitive type names require EXPR extension
+        RFC7_TYPES = {
+            "BOOL",
+            "RANGE_EXPR",
+            "LIST[STRING]",
+            "LIST[INT]",
+            "LIST[FLOAT]",
+            "LIST[PATH]",
+            "LIST[BOOL]",
+            "LIST[LIST[INT]]",
+        }
+        extensions = set(values.get("extensions") or [])
+
+        # Narrow context.extensions from the supported set to the template's declared
+        # extensions. This must happen here in the prevalidator (before field validators)
+        # so that extension-gated symbols like Job.Name and Step.Name are only available
+        # when the template declares the required extension.
+        if context:
+            supported_extensions = context.extensions.intersection(cls.supported_extension_names())
+            unsupported = extensions - supported_extensions
+            if unsupported:
+                raise ValidationError.from_exception_data(
+                    cls.__name__,
+                    line_errors=[
+                        InitErrorDetails(
+                            type="value_error",
+                            loc=("extensions",),
+                            input=values.get("extensions"),
+                            ctx={
+                                "error": ValueError(
+                                    f"Unsupported extension names: {', '.join(sorted(unsupported))}"
+                                )
+                            },
+                        )
+                    ],
+                )
+            context.extensions = extensions
+
+        if "EXPR" not in extensions:
+            param_defs = values.get("parameterDefinitions") or []
+            for i, param in enumerate(param_defs):
+                if isinstance(param, dict) and "type" in param:
+                    type_val = param["type"]
+                    if isinstance(type_val, str):
+                        type_upper = type_val.upper()
+                        if type_upper in RFC7_TYPES:
+                            raise ValidationError.from_exception_data(
+                                cls.__name__,
+                                line_errors=[
+                                    InitErrorDetails(
+                                        type="value_error",
+                                        loc=("parameterDefinitions", i, "type"),
+                                        input=type_val,
+                                        ctx={
+                                            "error": ValueError(
+                                                f"Parameter type '{type_upper}' requires the EXPR extension."
+                                            )
+                                        },
+                                    )
+                                ],
+                            )
+                        if type_val != type_upper:
+                            raise ValidationError.from_exception_data(
+                                cls.__name__,
+                                line_errors=[
+                                    InitErrorDetails(
+                                        type="value_error",
+                                        loc=("parameterDefinitions", i, "type"),
+                                        input=type_val,
+                                        ctx={
+                                            "error": ValueError(
+                                                f"Case-insensitive parameter type '{type_val}' requires the EXPR extension. "
+                                                f"Use '{type_upper}' or add 'EXPR' to extensions."
+                                            )
+                                        },
+                                    )
+                                ],
+                            )
+
         errors = prevalidate_model_template_variable_references(
             cast(Type[OpenJDModel], cls), values, context=context
         )
+
         if errors:
             raise ValidationError.from_exception_data(cls.__name__, line_errors=errors)
         return values
@@ -3186,6 +4618,60 @@ class EnvironmentTemplate(OpenJDModel_v2023_09):
         # The name of this validator is very important. It is specifically looked for
         # in the _parse_model function to run this validation as a pre-root-validator
         # without the usual short-circuit of pre-root-validators that pydantic does.
+
+        # RFC 7 types and case-insensitive type names require EXPR extension
+        RFC7_TYPES = {
+            "BOOL",
+            "RANGE_EXPR",
+            "LIST[STRING]",
+            "LIST[INT]",
+            "LIST[FLOAT]",
+            "LIST[PATH]",
+            "LIST[BOOL]",
+            "LIST[LIST[INT]]",
+        }
+        extensions = set(values.get("extensions") or [])
+        if "EXPR" not in extensions:
+            param_defs = values.get("parameterDefinitions") or []
+            for i, param in enumerate(param_defs):
+                if isinstance(param, dict) and "type" in param:
+                    type_val = param["type"]
+                    if isinstance(type_val, str):
+                        type_upper = type_val.upper()
+                        if type_upper in RFC7_TYPES:
+                            raise ValidationError.from_exception_data(
+                                cls.__name__,
+                                line_errors=[
+                                    InitErrorDetails(
+                                        type="value_error",
+                                        loc=("parameterDefinitions", i, "type"),
+                                        input=type_val,
+                                        ctx={
+                                            "error": ValueError(
+                                                f"Parameter type '{type_upper}' requires the EXPR extension."
+                                            )
+                                        },
+                                    )
+                                ],
+                            )
+                        if type_val != type_upper:
+                            raise ValidationError.from_exception_data(
+                                cls.__name__,
+                                line_errors=[
+                                    InitErrorDetails(
+                                        type="value_error",
+                                        loc=("parameterDefinitions", i, "type"),
+                                        input=type_val,
+                                        ctx={
+                                            "error": ValueError(
+                                                f"Case-insensitive parameter type '{type_val}' requires the EXPR extension. "
+                                                f"Use '{type_upper}' or add 'EXPR' to extensions."
+                                            )
+                                        },
+                                    )
+                                ],
+                            )
+
         errors = prevalidate_model_template_variable_references(
             cast(Type[OpenJDModel], cls), values, context=context
         )

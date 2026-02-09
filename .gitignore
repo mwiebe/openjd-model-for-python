@@ -17,6 +17,7 @@ __pycache__/
 /.ruff_cache
 /.attach_pid*
 /.venv
+/.hypothesis
 
 /doc/_apidoc/
 /build

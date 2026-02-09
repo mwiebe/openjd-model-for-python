@@ -1,0 +1,128 @@
+specificationVersion: jobtemplate-2023-09
+name: All Parameter Types Test
+extensions:
+  - EXPR
+parameterDefinitions:
+  # Base types (work without EXPR)
+  - name: StringParam
+    type: STRING
+    default: "hello"
+  - name: IntParam
+    type: INT
+    default: 42
+  - name: FloatParam
+    type: FLOAT
+    default: 3.14
+  - name: PathParam
+    type: PATH
+    default: "output"
+  # RFC 7 types (require EXPR)
+  - name: BoolParam
+    type: BOOL
+    default: true
+  - name: RangeExprParam
+    type: RANGE_EXPR
+    default: "1-10"
+  - name: ListStringParam
+    type: LIST[STRING]
+    default:
+      - "a"
+      - "b"
+      - "c"
+  - name: ListIntParam
+    type: LIST[INT]
+    default:
+      - 1
+      - 2
+      - 3
+  - name: ListFloatParam
+    type: LIST[FLOAT]
+    default:
+      - 1.1
+      - 2.2
+      - 3.3
+  - name: ListPathParam
+    type: LIST[PATH]
+    default:
+      - "path/one"
+      - "path/two"
+  - name: ListBoolParam
+    type: LIST[BOOL]
+    default:
+      - true
+      - false
+      - true
+  - name: ListListIntParam
+    type: LIST[LIST[INT]]
+    default:
+      - [1, 2, 3]
+      - [4, 5]
+      - [6]
+steps:
+  - name: TestStep
+    script:
+      actions:
+        onRun:
+          command: bash
+          args:
+            - "-c"
+            - |
+              echo "Param.StringParam:             {{ Param.StringParam }}"
+              echo "RawParam.StringParam:          {{ RawParam.StringParam }}"
+              echo
+              echo "Param.IntParam:                {{ Param.IntParam }}"
+              echo "Param.IntParam + 3:            {{ Param.IntParam + 3 }}"
+              echo "RawParam.IntParam:             {{ RawParam.IntParam }}"
+              echo "RawParam.IntParam * 2:         {{ RawParam.IntParam * 2 }}"
+              echo
+              echo "Param.FloatParam:              {{ Param.FloatParam }}"
+              echo "RawParam.FloatParam:           {{ RawParam.FloatParam }}"
+              echo
+              echo "Param.PathParam:               {{ Param.PathParam }}"
+              echo "Param.PathParam.name:          {{ Param.PathParam.name }}"
+              echo "RawParam.PathParam:            {{ RawParam.PathParam }}"
+              echo "RawParam.PathParam.upper():    {{ RawParam.PathParam.upper() }}"
+              echo
+              echo "Param.BoolParam:               {{ Param.BoolParam }}"
+              echo "RawParam.BoolParam:            {{ RawParam.BoolParam }}"
+              echo
+              echo "Param.RangeExprParam:          {{ Param.RangeExprParam }}"
+              echo 'list(Param.RangeExprParam):    {{ list(Param.RangeExprParam) }}'
+              echo "RawParam.RangeExprParam:       {{ RawParam.RangeExprParam }}"
+              echo "RawParam.RangeExprParam[3]:    {{ RawParam.RangeExprParam[3] }}"
+              echo
+              echo 'Param.ListStringParam:         {{ Param.ListStringParam }}'
+              echo "len(Param.ListStringParam):    {{ len(Param.ListStringParam )}}"
+              echo 'RawParam.ListStringParam:      {{ RawParam.ListStringParam }}'
+              echo "RawParam.ListStringParam[-1]:  {{ RawParam.ListStringParam[-1] }}"
+              echo
+              echo 'Param.ListIntParam:            {{ Param.ListIntParam }}'
+              echo "len(Param.ListIntParam):       {{ len(Param.ListIntParam) }}"
+              echo 'RawParam.ListIntParam:         {{ Param.ListIntParam }}'
+              echo "RawParam.ListIntParam[1]:      {{ Param.ListIntParam[1] }}"
+              echo
+              echo 'Param.ListFloatParam:          {{ Param.ListFloatParam }}'
+              echo 'Param.ListFloatParam[1:]:      {{ Param.ListFloatParam[1:] }}'
+              echo 'Param.ListFloatParam:          {{ Param.ListFloatParam }}'
+              echo 'RawParam.ListFloatParam[::-1]: {{ RawParam.ListFloatParam[::-1] }}'
+              echo
+              echo 'Param.ListPathParam:           {{ Param.ListPathParam }}'
+              echo "[p.name for p in Param.ListPathParam]:"
+              echo '                               {{ [p.name for p in Param.ListPathParam] }}'
+              echo 'RawParam.ListPathParam:        {{ RawParam.ListPathParam }}'
+              echo "[p.capitalize() for p in RawParam.ListPathParam]:"
+              echo '                               {{ [p.capitalize() for p in RawParam.ListPathParam] }}'
+              echo
+              echo 'Param.ListBoolParam:           {{ Param.ListBoolParam }}'
+              echo "['yes' if item else 'no' for item in Param.ListBoolParam]:"
+              echo '                               {{ ["yes" if item else "no" for item in Param.ListBoolParam] }}'
+              echo 'RawParam.ListBoolParam:        {{ RawParam.ListBoolParam }}'
+              echo "repr_json(RawParam.ListBoolParam):"
+              echo '                               {{ repr_json(RawParam.ListBoolParam) }}'
+              echo
+              echo 'Param.ListListIntParam:        {{ Param.ListListIntParam }}'
+              echo "[len(v) for v in Param.ListListIntParam]:"
+              echo '                               {{ [len(v) for v in Param.ListListIntParam] }}'
+              echo 'RawParam.ListListIntParam:     {{ RawParam.ListListIntParam }}'
+              echo "[[x * 2 for x in lst] for lst in RawParam.ListListIntParam]:"
+              echo '                               {{ [[x * 2 for x in lst] for lst in RawParam.ListListIntParam] }}'

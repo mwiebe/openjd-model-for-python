@@ -3,7 +3,7 @@
 import pytest
 from typing import Union
 
-from openjd.model import SymbolTable
+from openjd.expr import SymbolTable
 from openjd.model.v2023_09 import ModelParsingContext as ModelParsingContext_v2023_09
 from openjd.model._format_strings import FormatString, FormatStringError
 
@@ -53,6 +53,14 @@ def test_nonvalid_strings(input):
         FormatString(input, context=ModelParsingContext_v2023_09())
 
 
+def test_expr_syntax_error_raises_format_string_error():
+    """Regression test: expression syntax errors with EXPR extension must raise
+    FormatStringError, not the internal openjd.expr ExpressionError."""
+    ctx = ModelParsingContext_v2023_09(supported_extensions=["EXPR"])
+    with pytest.raises(FormatStringError, match="Failed to parse interpolation expression"):
+        FormatString("{{ 007 }}", context=ctx)
+
+
 class TestFormatStringResolve:
     @pytest.mark.parametrize("input", ["", "input"])
     def test_with_empty_table(self, input: str) -> None:
@@ -63,7 +71,7 @@ class TestFormatStringResolve:
         format_string = FormatString(input, context=ModelParsingContext_v2023_09())
 
         # THEN
-        assert format_string.resolve(symtab=symtab) == input
+        assert format_string.resolve(symtab=symtab).to_string() == input
 
     @pytest.mark.parametrize(
         "input, expected",
@@ -82,7 +90,7 @@ class TestFormatStringResolve:
         symtab["Test.val"] = 4
 
         # THEN
-        assert format_string.resolve(symtab=symtab) == expected
+        assert format_string.resolve(symtab=symtab).to_string() == expected
 
     @pytest.mark.parametrize(
         "input,expected,val,end",
@@ -106,7 +114,7 @@ class TestFormatStringResolve:
         symtab["Test.end"] = end
 
         # THEN
-        assert format_string.resolve(symtab=symtab) == expected
+        assert format_string.resolve(symtab=symtab).to_string() == expected
 
     def test_without_entry_in_table(self):
         # GIVEN

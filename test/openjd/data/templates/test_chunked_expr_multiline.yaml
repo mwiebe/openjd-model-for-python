@@ -1,0 +1,36 @@
+specificationVersion: jobtemplate-2023-09
+name: Chunked Frame Processing (Multi-line)
+extensions:
+  - FEATURE_BUNDLE_1
+  - TASK_CHUNKING
+  - EXPR
+parameterDefinitions:
+  - name: Frames
+    type: STRING
+    default: "1-10,12,17-19,40-42,50-70,78,90,100"
+  - name: OutputDir
+    type: PATH
+    default: "renders"
+  - name: FilePattern
+    type: STRING
+    default: "frame_####.exr"
+steps:
+  - name: Render
+    parameterSpace:
+      taskParameterDefinitions:
+        - name: Frame
+          type: CHUNK[INT]
+          range: "{{Param.Frames}}"
+          chunks:
+            defaultTaskCount: 10
+            rangeConstraint: NONCONTIGUOUS
+    bash:
+      script: |
+        echo "Chunk: {{Task.Param.Frame}} ({{len(Task.Param.Frame)}} frames)"
+        echo "Files:"
+        for FILE in {{ repr_sh([
+            Param.OutputDir / Param.FilePattern.with_number(frame)
+            for frame in Task.Param.Frame
+        ]) }}; do
+          echo "  $FILE"
+        done

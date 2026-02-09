@@ -58,7 +58,7 @@ class TestIntTaskParameterDefinition:
             pytest.param({"name": "foo", "type": "INT"}, id="missing range"),
             pytest.param({"name": "foo", "type": "INT", "range": []}, id="range too short"),
             pytest.param(
-                {"name": "foo", "type": "INT", "range": [1], "unknown": "key"}, id="unknown key"
+                {"name": "foo", "type": "INT", "range": [1], "unresolved": "key"}, id="unknown key"
             ),
             pytest.param({"name": "foo", "type": "INT", "range": [1] * 1025}, id="range too long"),
             pytest.param({"name": "foo", "type": "INT", "range": [1.1]}, id="disallow floats"),
@@ -139,7 +139,8 @@ class TestFloatTaskParameterDefinition:
             pytest.param({"name": "foo", "type": "FLOAT"}, id="missing range"),
             pytest.param({"name": "foo", "type": "FLOAT", "range": []}, id="range too short"),
             pytest.param(
-                {"name": "foo", "type": "FLOAT", "range": [1], "unknown": "key"}, id="unknown key"
+                {"name": "foo", "type": "FLOAT", "range": [1], "unresolved": "key"},
+                id="unknown key",
             ),
             pytest.param(
                 {"name": "foo", "type": "FLOAT", "range": [1] * 1025}, id="range too long"
@@ -205,7 +206,7 @@ class TestStringTaskParameterDefinition:
             pytest.param({"name": "foo", "type": "STRING"}, id="missing range"),
             pytest.param({"name": "foo", "type": "STRING", "range": []}, id="range too short"),
             pytest.param(
-                {"name": "foo", "type": "STRING", "range": ["a"], "unknown": "key"},
+                {"name": "foo", "type": "STRING", "range": ["a"], "unresolved": "key"},
                 id="unknown key",
             ),
             pytest.param(
@@ -265,7 +266,7 @@ class TestPathTaskParameterDefinition:
             pytest.param({"name": "foo", "type": "PATH"}, id="missing range"),
             pytest.param({"name": "foo", "type": "PATH", "range": []}, id="range too short"),
             pytest.param(
-                {"name": "foo", "type": "PATH", "range": ["a"], "unknown": "key"},
+                {"name": "foo", "type": "PATH", "range": ["a"], "unresolved": "key"},
                 id="unknown key",
             ),
             pytest.param(
@@ -353,7 +354,7 @@ class TestRangeExpressionTaskParameterDefinition:
             pytest.param({"name": "foo", "type": "INT"}, id="missing range"),
             pytest.param({"name": "foo", "type": "INT", "range": ""}, id="range too short"),
             pytest.param(
-                {"name": "foo", "type": "INT", "range": "1", "unknown": "key"},
+                {"name": "foo", "type": "INT", "range": "1", "unresolved": "key"},
                 id="unknown key",
             ),
             pytest.param(

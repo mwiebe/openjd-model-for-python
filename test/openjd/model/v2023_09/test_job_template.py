@@ -190,7 +190,7 @@ class TestJobTemplate:
                     "specificationVersion": "jobtemplate-2023-09",
                     "name": "Foo",
                     "steps": [STEP_TEMPLATE],
-                    "unknown": "key",
+                    "unresolved": "key",
                 },
                 1,
                 id="unknown key",

@@ -7,7 +7,7 @@ from typing import Optional, Union, cast
 import pytest
 from pydantic import PositiveInt, ValidationError
 
-from openjd.model import SymbolTable
+from openjd.expr import SymbolTable
 from openjd.model._format_strings import FormatString
 from openjd.model import SpecificationRevision
 from openjd.model._internal._create_job import (
@@ -420,7 +420,7 @@ class TestInternalCreateJobAddsFields:
             )
 
         model = Model(name="Foo", type="INT")
-        symtab = SymbolTable(source={"Param.Foo": "FooValue"})
+        symtab = SymbolTable({"Param.Foo": "FooValue"})
         expected = TargetModel(name="Foo", type="INT", n1="FooValue")
 
         # WHEN

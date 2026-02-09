@@ -1,0 +1,159 @@
+specificationVersion: jobtemplate-2023-09
+name: "{{ Param.StringParam }}"
+description: job description
+jobEnvironments:
+  - name: JobEnv
+    description: desc
+    script:
+      embeddedFiles:
+        - name: File
+          type: TEXT
+          data: "some data {{ Param.IntParam }}"
+          filename: filename.txt
+          runnable: false
+      actions:
+        onEnter:
+          command: "{{ Param.IntParam }}"
+          args:
+            - "{{ Param.FloatParam }}"
+          timeout: 10
+          cancelation:
+            mode: TERMINATE
+        onExit:
+          command: "{{ Param.IntParam }}"
+          args:
+            - "{{ Param.FloatParam }}"
+          timeout: 10
+          cancelation:
+            mode: NOTIFY_THEN_TERMINATE
+            notifyPeriodInSeconds: 30
+parameterDefinitions:
+  - name: StringParam
+    type: STRING
+    description: desc
+    minLength: 1
+    maxLength: 20
+    allowedValues:
+      - TheJobName
+      - TheOtherJobName
+    default: TheOtherJobName
+  - name: AttrCapabilityName
+    type: STRING
+    description: desc
+    minLength: 1
+    maxLength: 20
+    default: attr.mycapability
+  - name: AmountCapabilityName
+    type: STRING
+    description: desc
+    minLength: 1
+    maxLength: 20
+    default: amount.mycapability
+  - name: RangeExpressionParam
+    type: INT
+    description: desc
+    minValue: 0
+    maxValue: 100
+    allowedValues:
+      - 3
+      - 75
+    default: 75
+  - name: IntParam
+    type: INT
+    description: desc
+    minValue: 0
+    maxValue: 100
+    allowedValues:
+      - 5
+      - 10
+      - 20
+    default: 20
+  - name: FloatParam
+    type: FLOAT
+    description: desc
+    minValue: 0.0
+    maxValue: 100.5
+    allowedValues:
+      - 5
+      - 10
+      - "20.0"
+    default: 20
+steps:
+  - name: StepName
+    description: desc
+    stepEnvironments:
+      - name: StepEnv
+        description: desc
+        script:
+          embeddedFiles:
+            - name: File
+              type: TEXT
+              data: "some data {{ Param.IntParam }}"
+              filename: filename.txt
+              runnable: false
+          actions:
+            onEnter:
+              command: "{{ Param.IntParam }}"
+              args:
+                - "{{ Param.FloatParam }}"
+              timeout: 10
+              cancelation:
+                mode: TERMINATE
+            onExit:
+              command: "{{ Param.IntParam }}"
+              args:
+                - "{{ Param.FloatParam }}"
+              timeout: 10
+              cancelation:
+                mode: NOTIFY_THEN_TERMINATE
+                notifyPeriodInSeconds: 30
+    parameterSpace:
+      taskParameterDefinitions:
+        - name: ParamE
+          type: INT
+          range: "2 - {{ Param.RangeExpressionParam }}"
+        - name: ParamI
+          type: INT
+          range:
+            - 0
+            - "{{ Param.IntParam }}"
+        - name: ParamF
+          type: FLOAT
+          range:
+            - 1.1
+            - "{{ Param.FloatParam }}"
+        - name: ParamS
+          type: STRING
+          range:
+            - foo
+            - "{{ Param.StringParam }}"
+      combination: "ParamS * ParamF * ParamI * ParamE"
+    script:
+      embeddedFiles:
+        - name: File
+          type: TEXT
+          data: "some data {{ Param.IntParam }}"
+          filename: filename.txt
+          runnable: false
+      actions:
+        onRun:
+          command: "{{ Param.IntParam }}"
+          args:
+            - "{{ Param.FloatParam }}"
+          timeout: 10
+          cancelation:
+            mode: TERMINATE
+    hostRequirements:
+      amounts:
+        - name: amount.worker.vcpu
+          min: 3
+          max: 8
+        - name: "{{Param.AmountCapabilityName}}"
+          min: 2
+      attributes:
+        - name: attr.worker.os.family
+          anyOf:
+            - linux
+        - name: "{{Param.AttrCapabilityName}}"
+          allOf:
+            - "{{Param.StringParam}}"

@@ -21,6 +21,14 @@ lint = [
   "typing",
 ]
 
+[envs.fuzz]
+pre-install-commands = [
+  "pip install -r requirements-testing.txt"
+]
+
+[envs.fuzz.scripts]
+expr = "pytest test/openjd/expr/test_fuzz.py -m fuzz --no-cov -v {args}"
+
 [[envs.all.matrix]]
 python = ["3.9", "3.10", "3.11", "3.12"]
 

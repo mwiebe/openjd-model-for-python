@@ -1,0 +1,332 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+"""Tests for operation-bounded evaluation."""
+
+import pytest
+from openjd.expr import (
+    evaluate_expression,
+    parse_expression,
+    ExpressionError,
+    DEFAULT_OPERATION_LIMIT,
+)
+
+
+class TestDefaultOperationLimit:
+    """Tests for the default operation limit constant."""
+
+    def test_default_is_10_million(self) -> None:
+        assert DEFAULT_OPERATION_LIMIT == 10_000_000
+
+
+class TestOperationLimitExceeded:
+    """Tests that operation limit is enforced with correct error messages."""
+
+    def test_function_calls_count(self) -> None:
+        """Each function call counts as 1 operation."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("1 + 1", operation_limit=0)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1) exceeded limit (0)\n",
+                "  1 + 1\n",
+                "  ~~^~~",
+            ]
+        )
+
+    def test_range_iterations_count(self) -> None:
+        """range(N) counts N iterations plus the function call."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("range(100)", operation_limit=50)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (101) exceeded limit (50)\n",
+                "  range(100)\n",
+                "  ^~~~~~~~~~",
+            ]
+        )
+
+    def test_list_comprehension_iterations_count(self) -> None:
+        """List comprehension iterations are counted."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("[x for x in range(1000)]", operation_limit=50)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (50)\n",
+                "  [x for x in range(1000)]\n",
+                "              ^~~~~~~~~~~",
+            ]
+        )
+
+    def test_sum_iterations_count(self) -> None:
+        """sum() iterating a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("sum(range(1000))", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  sum(range(1000))\n",
+                "      ^~~~~~~~~~~",
+            ]
+        )
+
+    def test_min_iterations_count(self) -> None:
+        """min() iterating a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("min(range(1000))", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  min(range(1000))\n",
+                "      ^~~~~~~~~~~",
+            ]
+        )
+
+    def test_max_iterations_count(self) -> None:
+        """max() iterating a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("max(range(1000))", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  max(range(1000))\n",
+                "      ^~~~~~~~~~~",
+            ]
+        )
+
+    def test_sorted_iterations_count(self) -> None:
+        """sorted() iterating a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("sorted(range(1000))", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  sorted(range(1000))\n",
+                "         ^~~~~~~~~~~",
+            ]
+        )
+
+    def test_reversed_iterations_count(self) -> None:
+        """reversed() iterating a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("reversed(range(1000))", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  reversed(range(1000))\n",
+                "           ^~~~~~~~~~~",
+            ]
+        )
+
+    def test_join_iterations_count(self) -> None:
+        """join() iterating a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("['a','b','c','d','e'].join(',')", operation_limit=2)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (6) exceeded limit (2)\n",
+                "  ['a','b','c','d','e'].join(',')\n",
+                "  ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~",
+            ]
+        )
+
+    def test_contains_iterations_count(self) -> None:
+        """'in' operator on a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("99 in range(1000)", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  99 in range(1000)\n",
+                "        ^~~~~~~~~~~",
+            ]
+        )
+
+    def test_list_concat_iterations_count(self) -> None:
+        """List concatenation counts elements of both lists."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("range(500) + range(500)", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (501) exceeded limit (100)\n",
+                "  range(500) + range(500)\n",
+                "  ^~~~~~~~~~",
+            ]
+        )
+
+    def test_list_multiply_iterations_count(self) -> None:
+        """List repetition counts the result elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("[1, 2, 3] * 1000", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (3001) exceeded limit (100)\n",
+                "  [1, 2, 3] * 1000\n",
+                "  ~~~~~~~~~~^~~~~~",
+            ]
+        )
+
+    def test_flatten_iterations_count(self) -> None:
+        """flatten() counts outer and inner list elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("flatten([[1,2],[3,4]] * 500)", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  flatten([[1,2],[3,4]] * 500)\n",
+                "          ~~~~~~~~~~~~~~^~~~~",
+            ]
+        )
+
+    def test_repr_sh_list_iterations_count(self) -> None:
+        """repr_sh() on a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("repr_sh(range(1000))", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  repr_sh(range(1000))\n",
+                "          ^~~~~~~~~~~",
+            ]
+        )
+
+    def test_any_iterations_count(self) -> None:
+        """any() iterating a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("any([False] * 1000)", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  any([False] * 1000)\n",
+                "      ~~~~~~~~^~~~~~",
+            ]
+        )
+
+    def test_all_iterations_count(self) -> None:
+        """all() iterating a list counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("all([True] * 1000)", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  all([True] * 1000)\n",
+                "      ~~~~~~~^~~~~~",
+            ]
+        )
+
+    def test_list_equality_iterations_count(self) -> None:
+        """List equality comparison counts the elements."""
+        with pytest.raises(ExpressionError) as exc_info:
+            evaluate_expression("range(1000) == range(1000)", operation_limit=100)
+        assert str(exc_info.value) == "".join(
+            [
+                "Expression operation count (1001) exceeded limit (100)\n",
+                "  range(1000) == range(1000)\n",
+                "  ^~~~~~~~~~~",
+            ]
+        )
+
+
+class TestOperationLimitWithinBounds:
+    """Tests that normal expressions work within the operation limit."""
+
+    def test_simple_arithmetic(self) -> None:
+        """Simple arithmetic works within a small limit."""
+        result = evaluate_expression("1 + 2", operation_limit=10)
+        assert result.item() == 3
+
+    def test_small_range(self) -> None:
+        """Small range works within a reasonable limit."""
+        result = evaluate_expression("range(5)", operation_limit=1000)
+        assert result.item() == [0, 1, 2, 3, 4]
+
+    def test_small_list_comprehension(self) -> None:
+        """Small list comprehension works within a reasonable limit."""
+        result = evaluate_expression("[x * 2 for x in range(5)]", operation_limit=1000)
+        assert result.item() == [0, 2, 4, 6, 8]
+
+    def test_default_limit_handles_normal_expressions(self) -> None:
+        """Normal expressions work with the default limit."""
+        result = evaluate_expression("sum(range(100))")
+        assert result.item() == 4950
+
+    def test_string_operations_within_limit(self) -> None:
+        """String operations work within limit."""
+        result = evaluate_expression("'hello'.upper()", operation_limit=100)
+        assert result.item() == "HELLO"
+
+    def test_chained_operations_within_limit(self) -> None:
+        """Chained operations work within limit."""
+        result = evaluate_expression("'a,b,c'.split(',').join(';')", operation_limit=100)
+        assert result.item() == "a;b;c"
+
+
+class TestOperationCount:
+    """Tests for operation_count tracking via ParsedExpression."""
+
+    def test_operation_count_returned(self) -> None:
+        """ParsedExpression.operation_count is set after evaluate()."""
+        parsed = parse_expression("1 + 2")
+        parsed.evaluate()
+        assert parsed.operation_count > 0
+
+    def test_constant_has_zero_operations(self) -> None:
+        """A bare constant requires no operations."""
+        parsed = parse_expression("42")
+        parsed.evaluate()
+        assert parsed.operation_count == 0
+
+    def test_single_function_call_is_one_operation(self) -> None:
+        """A single operator is 1 operation."""
+        parsed = parse_expression("1 + 2")
+        parsed.evaluate()
+        assert parsed.operation_count == 1
+
+    def test_range_counts_call_plus_iterations(self) -> None:
+        """range(N) counts 1 call + N iterations."""
+        parsed = parse_expression("range(10)")
+        parsed.evaluate()
+        # 1 call + 10 iterations = 11
+        assert parsed.operation_count == 11
+
+    def test_sum_range_counts_both(self) -> None:
+        """sum(range(N)) counts operations for both range and sum."""
+        parsed = parse_expression("sum(range(10))")
+        parsed.evaluate()
+        # range: 1 call + 10 iterations = 11
+        # sum: 1 call + 10 iterations = 11
+        # total = 22
+        assert parsed.operation_count == 22
+
+    def test_list_comprehension_counts_iterations(self) -> None:
+        """List comprehension counts iterations and per-element operations."""
+        parsed = parse_expression("[x * 2 for x in [1, 2, 3]]")
+        parsed.evaluate()
+        # 3 iterations from comprehension + 3 __mul__ calls = 6
+        assert parsed.operation_count == 6
+
+    def test_operation_count_increases_with_list_size(self) -> None:
+        """Larger lists produce higher operation counts."""
+        small = parse_expression("sum(range(10))")
+        small.evaluate()
+        large = parse_expression("sum(range(100))")
+        large.evaluate()
+        assert large.operation_count > small.operation_count
+
+    def test_operation_count_resets_each_call(self) -> None:
+        """operation_count is reset on each evaluate() call."""
+        parsed = parse_expression("sum(range(Param.N))")
+        parsed.evaluate(values={"Param.N": 100})
+        large_count = parsed.operation_count
+        parsed.evaluate(values={"Param.N": 5})
+        small_count = parsed.operation_count
+        assert small_count < large_count
+
+    def test_nested_comprehension_accumulates(self) -> None:
+        """Nested operations accumulate operation counts."""
+        parsed = parse_expression("[x + 1 for x in range(10)]")
+        parsed.evaluate()
+        # range: 1 call + 10 iterations = 11
+        # comprehension: 10 iterations
+        # 10 __add__ calls
+        # total = 31
+        assert parsed.operation_count == 31

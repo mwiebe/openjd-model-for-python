@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
-from .._symbol_table import SymbolTable
+from .._types import ResolutionScope
 from ._edit_distance import closest
+
+from ...expr import ExprType, ExprValue, FunctionLibrary
+from ...expr._symbol_table import SymbolTable
+from ...expr._path_mapping import PathFormat
 
 
 class Node(ABC):
@@ -16,7 +20,13 @@ class Node(ABC):
     """
 
     @abstractmethod
-    def validate_symbol_refs(self, *, symbols: set[str]) -> None:  # pragma: no cover
+    def validate_symbol_refs(
+        self,
+        *,
+        symbols: set[str],
+        types: dict[str, ExprType] | None = None,
+        scope: ResolutionScope | None = None,
+    ) -> None:  # pragma: no cover
         """Verifies that the expression rooted at this node is valid
         given the definitions of symbols in a symbol table.
 
@@ -33,7 +43,13 @@ class Node(ABC):
         pass
 
     @abstractmethod
-    def evaluate(self, *, symtab: SymbolTable) -> Any:  # pragma: no cover
+    def evaluate(
+        self,
+        *,
+        symtab: SymbolTable,
+        library: Optional[FunctionLibrary] = None,
+        path_format: Optional[PathFormat] = None,
+    ) -> Any:  # pragma: no cover
         """Evaluate the expression rooted at this node given definitions
         of symbols in a symbol table.
 
@@ -43,6 +59,7 @@ class Node(ABC):
 
         Args:
             symtab (SymbolTable): Symbol definitions.
+            library: Optional function library for expression evaluation.
 
         Returns:
             Any: Value of the expression.
@@ -68,7 +85,13 @@ class FullNameNode(Node):
 
     name: str
 
-    def validate_symbol_refs(self, *, symbols: set[str]) -> None:
+    def validate_symbol_refs(
+        self,
+        *,
+        symbols: set[str],
+        types: dict[str, ExprType] | None = None,
+        scope: ResolutionScope | None = None,
+    ) -> None:
         if self.name not in symbols:
             msg = f"Variable {self.name} does not exist at this location."
             distance, closest_matches = closest(symbols, self.name)
@@ -79,10 +102,19 @@ class FullNameNode(Node):
                     msg += f" Did you mean one of: {', '.join(sorted(closest_matches))}"
             raise ValueError(msg)
 
-    def evaluate(self, *, symtab: SymbolTable) -> Any:
+    def evaluate(
+        self,
+        *,
+        symtab: SymbolTable,
+        library: Optional[FunctionLibrary] = None,
+        path_format: Optional[PathFormat] = None,
+    ) -> Any:
         if self.name not in symtab:
             raise ValueError(f"{self.name} has no value")
-        return symtab[self.name]
+        value = symtab[self.name]
+        if isinstance(value, ExprValue):
+            return value.to_string()
+        return value
 
     def __repr__(self):
         return f"FullName({self.name})"

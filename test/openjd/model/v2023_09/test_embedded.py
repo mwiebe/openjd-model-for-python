@@ -49,7 +49,9 @@ class TestEmbeddedFileText:
         "data",
         (
             pytest.param({}, id="empty object"),
-            pytest.param({"name": "foo", "type": "text", "data": "some text"}, id="unknown type"),
+            pytest.param(
+                {"name": "foo", "type": "text", "data": "some text"}, id="unresolved type"
+            ),
             pytest.param({"name": "foo", "type": "TEXT", "data": ""}, id="data too short"),
             pytest.param(
                 {"name": "foo", "type": "TEXT", "data": "some text", "filename": ""},

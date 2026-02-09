@@ -111,7 +111,7 @@ class TestAttributeRequirementTemplate:
             pytest.param(
                 {"name": "attr.worker.os.family", "anyOf": ["personalos"]},
                 1,
-                id="os family anyOf unknown value",
+                id="os family anyOf unresolved value",
             ),
             pytest.param(
                 {"name": "attr.worker.os.family", "anyOf": []},
@@ -126,7 +126,7 @@ class TestAttributeRequirementTemplate:
             pytest.param(
                 {"name": "attr.worker.cpu.arch", "allOf": ["x86_128"]},
                 1,
-                id="cpu arch allOf unknown value",
+                id="cpu arch allOf unresolved value",
             ),
             pytest.param(
                 {"name": "attr.worker.cpu.arch", "allOf": []},

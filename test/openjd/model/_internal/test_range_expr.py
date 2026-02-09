@@ -5,9 +5,9 @@ from typing import Union
 
 import pytest
 
-from openjd.model import ExpressionError, TokenError
 from openjd.model import IntRangeExpr
 from openjd.model._range_expr import IntRange, Parser as RangeExpressionParser
+from openjd.expr._range_expr import RangeExprError
 
 
 class TestRangeExpressionParser:
@@ -16,7 +16,7 @@ class TestRangeExpressionParser:
         parser = RangeExpressionParser()
 
         # THEN
-        with pytest.raises(TokenError):
+        with pytest.raises(RangeExprError):
             parser.parse("!")
 
     @pytest.mark.parametrize(
@@ -53,8 +53,8 @@ class TestRangeExpressionParser:
         # GIVEN
         parser = RangeExpressionParser()
 
-        # THEN
-        with pytest.raises(ExpressionError):
+        # THEN - raises RangeExprError for parse errors, ValueError for validation errors
+        with pytest.raises((RangeExprError, ValueError)):
             parser.parse(range_expr)
 
     @pytest.mark.parametrize(
@@ -160,7 +160,7 @@ class TestRangeExpressionParser:
         parser = RangeExpressionParser()
 
         # WHEN / THEN
-        with pytest.raises(ExpressionError):
+        with pytest.raises(ValueError):
             parser.parse(range_expr)
 
 
@@ -230,7 +230,7 @@ class TestIntRangeExpr:
         assert str(full_range) == range_str
 
     def test_range_expr_from_empty_list(self):
-        with pytest.raises(ExpressionError):
+        with pytest.raises(ValueError):
             IntRangeExpr.from_list([])
 
     def test_sorting_merging_with_descending_ranges(self):
@@ -315,8 +315,8 @@ class TestIntRangeExpr:
     )
     def test_iterable(self, range_expr: str) -> None:
         # GIVEN / WHEN
-        parser: RangeExpressionParser = RangeExpressionParser()
-        full_range: IntRangeExpr = parser.parse(range_expr)
+        parser = RangeExpressionParser()
+        full_range = parser.parse(range_expr)
         expected_range: range = range(full_range.start, full_range.end + 1, 1)
 
         # THEN
@@ -362,6 +362,16 @@ class TestIntRangeExpr:
         assert -3 not in IntRangeExpr.from_str("-1--2:-1")
         assert 0 not in IntRangeExpr.from_str("-1--2:-1")
 
+    def test_repr(self) -> None:
+        r = IntRangeExpr.from_str("1-10")
+        assert "IntRangeExpr" in repr(r)
+        assert "1-10" in repr(r)
+
+    def test_eq_not_implemented_for_non_range_expr(self) -> None:
+        r = IntRangeExpr.from_str("1-10")
+        # Comparing with non-RangeExpr returns False (standard Python behavior)
+        assert (r == "1-10") is False
+
 
 class TestIntRange:
     def test_length(self):
@@ -398,3 +408,17 @@ class TestIntRange:
 
         with pytest.raises(AttributeError):
             range.step = 1  # type: ignore
+
+    def test_repr(self) -> None:
+        r = IntRange(start=1, end=10, step=1)
+        assert repr(r) == "IntRange(start=1, end=10, step=1)"
+
+    def test_eq_not_implemented_for_non_int_range(self) -> None:
+        r = IntRange(start=0, end=10, step=1)
+        # Comparing with non-IntRange returns False (standard Python behavior)
+        assert (r == "0-10") is False
+
+    def test_getitem_out_of_bounds(self) -> None:
+        r = IntRange(start=0, end=5, step=1)
+        with pytest.raises(IndexError, match="out of range"):
+            r[100]

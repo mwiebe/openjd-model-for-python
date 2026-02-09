@@ -2,7 +2,7 @@
 
 import pytest
 
-from openjd.model import SymbolTable
+from openjd.expr import SymbolTable
 from openjd.model._format_strings._nodes import FullNameNode
 
 

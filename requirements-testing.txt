@@ -7,3 +7,4 @@ types-PyYAML ~= 6.0
 black == 25.*
 ruff == 0.15.*
 mypy == 1.19.*
+hypothesis >= 6.0

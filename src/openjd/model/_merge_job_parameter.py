@@ -187,12 +187,13 @@ def merge_job_parameter_definitions_for_one(
             merged_properties.update(**ret)
         if err:
             errors.extend(err)
-    else:
+    elif param_type in (JobParameterType.INT, JobParameterType.FLOAT):
         ret, err = _merge_number_kind_param_constraints(params)
         if ret:
             merged_properties.update(**ret)
         if err:
             errors.extend(err)
+    # BOOL and RANGE_EXPR types have no additional constraints to merge
 
     if errors:
         raise CompatibilityError("\n".join(errors))
@@ -208,18 +209,15 @@ def _merge_allowed_values(
 
     for param in params:
         definition = param.definition
-        if not definition.allowedValues:
+        allowed_values = getattr(definition, "allowedValues", None)
+        if not allowed_values:
             # If this definition doesn't have a set of allowedValues, then it's unconstrained.
             # Thus, it's happy with any values and we can move on to the next one.
             continue
         if not return_value:
-            return_value = cast(
-                Union[set[str], set[int], set[Decimal]], set(definition.allowedValues)
-            )
+            return_value = cast(Union[set[str], set[int], set[Decimal]], set(allowed_values))
         else:
-            param_as_set = cast(
-                Union[set[str], set[int], set[Decimal]], set(definition.allowedValues)
-            )
+            param_as_set = cast(Union[set[str], set[int], set[Decimal]], set(allowed_values))
             return_value.intersection_update(param_as_set)
 
     if return_value is not None and not return_value:

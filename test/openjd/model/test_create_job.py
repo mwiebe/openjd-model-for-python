@@ -17,10 +17,7 @@ from openjd.model import (
     decode_environment_template,
 )
 from openjd.model._parse import _parse_model
-from openjd.model.v2023_09 import (
-    Job as Job_2023_09,
-    JobParameterType as JobParameterType_2023_09,
-)
+from openjd.model.v2023_09 import Job as Job_2023_09
 
 minimal_steps_v2023_09 = [
     {"name": "step", "script": {"actions": {"onRun": {"command": "do thing"}}}}
@@ -51,24 +48,54 @@ class TestPreprocessJobParameters_2023_09:  # noqa: N801
             yield None
 
     @pytest.mark.parametrize(
-        "param_type",
+        "param_type,param_value,expected_value",
         [
-            pytest.param(param_type.value, id=f"{param_type.value} type")
-            for param_type in JobParameterType_2023_09
+            pytest.param("STRING", "12", "12", id="STRING type"),
+            pytest.param("PATH", "12", None, id="PATH type"),  # PATH gets special handling
+            pytest.param("INT", "12", "12", id="INT type"),
+            pytest.param("FLOAT", "12", "12", id="FLOAT type"),
+            pytest.param("BOOL", "true", "true", id="BOOL type"),
+            pytest.param("RANGE_EXPR", "1-10", "1-10", id="RANGE_EXPR type"),
+            pytest.param("LIST[STRING]", ["a", "b"], ["a", "b"], id="LIST[STRING] type"),
+            pytest.param("LIST[INT]", [1, 2], [1, 2], id="LIST[INT] type"),
+            pytest.param("LIST[FLOAT]", [1.0, 2.0], [1.0, 2.0], id="LIST[FLOAT] type"),
+            pytest.param("LIST[PATH]", ["/a", "/b"], ["/a", "/b"], id="LIST[PATH] type"),
+            pytest.param("LIST[BOOL]", [True, False], [True, False], id="LIST[BOOL] type"),
+            pytest.param(
+                "LIST[LIST[INT]]", [[1, 2], [3]], [[1, 2], [3]], id="LIST[LIST[INT]] type"
+            ),
         ],
     )
-    def test_preprocess_job_parameters_handles_parameter_type(self, param_type: str) -> None:
+    def test_preprocess_job_parameters_handles_parameter_type(
+        self, param_type: str, param_value: Any, expected_value: Any
+    ) -> None:
         # Test that we can process all known kinds of parameters
+        # RFC 7 types require EXPR extension
+        RFC7_TYPES = {
+            "BOOL",
+            "RANGE_EXPR",
+            "LIST[STRING]",
+            "LIST[INT]",
+            "LIST[FLOAT]",
+            "LIST[PATH]",
+            "LIST[BOOL]",
+            "LIST[LIST[INT]]",
+        }
 
         # GIVEN
-        job_parameter_values: JobParameterInputValues = {"Foo": "12"}
+        job_parameter_values: JobParameterInputValues = {"Foo": param_value}
+        template_dict = dict(
+            specificationVersion="jobtemplate-2023-09",
+            name="test",
+            parameterDefinitions=[{"name": "Foo", "type": param_type}],
+            steps=minimal_steps_v2023_09,
+        )
+        supported_extensions = None
+        if param_type in RFC7_TYPES:
+            template_dict["extensions"] = ["EXPR"]
+            supported_extensions = ["EXPR"]
         job_template = decode_job_template(
-            template=dict(
-                specificationVersion="jobtemplate-2023-09",
-                name="test",
-                parameterDefinitions=[{"name": "Foo", "type": param_type}],
-                steps=minimal_steps_v2023_09,
-            )
+            template=template_dict, supported_extensions=supported_extensions
         )
 
         # WHEN
@@ -86,28 +113,58 @@ class TestPreprocessJobParameters_2023_09:  # noqa: N801
             # "12" is a relative path that gets joined with the current working directory
             assert result["Foo"].value == str(self.current_working_dir / "12")
         else:
-            assert result["Foo"].value == "12"
+            assert result["Foo"].value == expected_value
         assert result["Foo"].type == ParameterValueType(param_type)
 
     @pytest.mark.parametrize(
-        "param_type",
+        "param_type,param_value,expected_value",
         [
-            pytest.param(param_type.value, id=f"{param_type.value} type")
-            for param_type in JobParameterType_2023_09
+            pytest.param("STRING", "12", "12", id="STRING type"),
+            pytest.param("PATH", "12", "12", id="PATH type"),
+            pytest.param("INT", "12", "12", id="INT type"),
+            pytest.param("FLOAT", "12", "12", id="FLOAT type"),
+            pytest.param("BOOL", "true", "true", id="BOOL type"),
+            pytest.param("RANGE_EXPR", "1-10", "1-10", id="RANGE_EXPR type"),
+            pytest.param("LIST[STRING]", ["a", "b"], ["a", "b"], id="LIST[STRING] type"),
+            pytest.param("LIST[INT]", [1, 2], [1, 2], id="LIST[INT] type"),
+            pytest.param("LIST[FLOAT]", [1.0, 2.0], [1.0, 2.0], id="LIST[FLOAT] type"),
+            pytest.param("LIST[PATH]", ["/a", "/b"], ["/a", "/b"], id="LIST[PATH] type"),
+            pytest.param("LIST[BOOL]", [True, False], [True, False], id="LIST[BOOL] type"),
+            pytest.param(
+                "LIST[LIST[INT]]", [[1, 2], [3]], [[1, 2], [3]], id="LIST[LIST[INT]] type"
+            ),
         ],
     )
-    def test_handles_parameter_type_without_path_escape_validation(self, param_type: str) -> None:
+    def test_handles_parameter_type_without_path_escape_validation(
+        self, param_type: str, param_value: Any, expected_value: Any
+    ) -> None:
         # Test that we can process all known kinds of parameters
+        # RFC 7 types require EXPR extension
+        RFC7_TYPES = {
+            "BOOL",
+            "RANGE_EXPR",
+            "LIST[STRING]",
+            "LIST[INT]",
+            "LIST[FLOAT]",
+            "LIST[PATH]",
+            "LIST[BOOL]",
+            "LIST[LIST[INT]]",
+        }
 
         # GIVEN
-        job_parameter_values: JobParameterInputValues = {"Foo": "12"}
+        job_parameter_values: JobParameterInputValues = {"Foo": param_value}
+        template_dict = dict(
+            specificationVersion="jobtemplate-2023-09",
+            name="test",
+            parameterDefinitions=[{"name": "Foo", "type": param_type}],
+            steps=minimal_steps_v2023_09,
+        )
+        supported_extensions = None
+        if param_type in RFC7_TYPES:
+            template_dict["extensions"] = ["EXPR"]
+            supported_extensions = ["EXPR"]
         job_template = decode_job_template(
-            template=dict(
-                specificationVersion="jobtemplate-2023-09",
-                name="test",
-                parameterDefinitions=[{"name": "Foo", "type": param_type}],
-                steps=minimal_steps_v2023_09,
-            )
+            template=template_dict, supported_extensions=supported_extensions
         )
 
         # WHEN
@@ -123,7 +180,7 @@ class TestPreprocessJobParameters_2023_09:  # noqa: N801
         assert len(result) == 1
         assert "Foo" in result
         # "12" remains the same relative path when used as a PATH parameter
-        assert result["Foo"].value == "12"
+        assert result["Foo"].value == expected_value
         assert result["Foo"].type == ParameterValueType(param_type)
 
     @pytest.mark.parametrize(
@@ -485,6 +542,84 @@ class TestPreprocessJobParameters_2023_09:  # noqa: N801
         assert result["Foo"] == ParameterValue(type=ParameterValueType.PATH, value="")
         assert "Bar" in result
         assert result["Bar"] == ParameterValue(type=ParameterValueType.PATH, value="")
+
+    def test_uri_path_value_preserved_with_expr(self) -> None:
+        """With EXPR extension, URI PATH values pass through without joining to cwd."""
+        # GIVEN
+        job_parameter_values: JobParameterInputValues = {"Foo": "s3://bucket/assets/file.obj"}
+        job_template = decode_job_template(
+            template=dict(
+                specificationVersion="jobtemplate-2023-09",
+                extensions=["EXPR"],
+                name="test",
+                parameterDefinitions=[{"name": "Foo", "type": "PATH"}],
+                steps=minimal_steps_v2023_09,
+            ),
+            supported_extensions=["EXPR"],
+        )
+
+        # WHEN
+        result = preprocess_job_parameters(
+            job_template=job_template,
+            job_parameter_values=job_parameter_values,
+            job_template_dir=self.template_dir,
+            current_working_dir=self.current_working_dir,
+        )
+
+        # THEN
+        assert result["Foo"].value == "s3://bucket/assets/file.obj"
+
+    def test_uri_path_default_preserved_with_expr(self) -> None:
+        """With EXPR extension, URI PATH defaults pass through without joining to template dir."""
+        # GIVEN
+        job_template = decode_job_template(
+            template=dict(
+                specificationVersion="jobtemplate-2023-09",
+                extensions=["EXPR"],
+                name="test",
+                parameterDefinitions=[
+                    {"name": "Foo", "type": "PATH", "default": "s3://bucket/assets/file.obj"}
+                ],
+                steps=minimal_steps_v2023_09,
+            ),
+            supported_extensions=["EXPR"],
+        )
+
+        # WHEN
+        result = preprocess_job_parameters(
+            job_template=job_template,
+            job_parameter_values={},
+            job_template_dir=self.template_dir,
+            current_working_dir=self.current_working_dir,
+        )
+
+        # THEN
+        assert result["Foo"].value == "s3://bucket/assets/file.obj"
+
+    def test_uri_path_value_joined_without_expr(self) -> None:
+        """Without EXPR extension, URI-like PATH values are treated as relative paths."""
+        # GIVEN
+        job_parameter_values: JobParameterInputValues = {"Foo": "s3://bucket/key"}
+        job_template = decode_job_template(
+            template=dict(
+                specificationVersion="jobtemplate-2023-09",
+                name="test",
+                parameterDefinitions=[{"name": "Foo", "type": "PATH"}],
+                steps=minimal_steps_v2023_09,
+            )
+        )
+
+        # WHEN
+        result = preprocess_job_parameters(
+            job_template=job_template,
+            job_parameter_values=job_parameter_values,
+            job_template_dir=self.template_dir,
+            current_working_dir=self.current_working_dir,
+        )
+
+        # THEN — value is joined with cwd, not preserved as URI
+        assert result["Foo"].value != "s3://bucket/key"
+        assert str(self.current_working_dir) in result["Foo"].value
 
     def test_collects_defaults_with_environments(self) -> None:
         # Test that we add values for missing job parameters that have

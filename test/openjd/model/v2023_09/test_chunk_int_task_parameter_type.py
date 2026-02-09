@@ -270,7 +270,7 @@ PARAMETRIZE_CASES = (
                 "name": "foo",
                 "type": "CHUNK[INT]",
                 "range": [1],
-                "unknown": "key",
+                "unresolved": "key",
                 "chunks": {
                     "defaultTaskCount": 10,
                     "targetRuntimeSeconds": 1000,

@@ -90,7 +90,7 @@ class TestEnvironmentTemplate:
                 {
                     "specificationVersion": "environment-2023-09",
                     "environment": ENVIRONMENT,
-                    "unknown": "key",
+                    "unresolved": "key",
                 },
                 1,
                 id="unknown key",

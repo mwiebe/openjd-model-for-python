@@ -115,6 +115,42 @@ class TestStepDependencyGraph_2023_09:
         assert edge1.dependent.step.name == "Foo" or edge2.dependent.step.name == "Foo"
         assert edge1.dependent.step.name == "Bar" or edge2.dependent.step.name == "Bar"
 
+    def test_max_indegree(self) -> None:
+        # GIVEN - Bar depends on Foo and Buz, so max indegree is 2
+        template_data = {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": "Job",
+            "steps": [
+                self.create_step_template("Foo", ["Buz"]),
+                self.create_step_template("Bar", ["Foo", "Buz"]),
+                self.create_step_template("Buz"),
+            ],
+        }
+        job_template = parse_model(model=JobTemplate_2023_09, obj=template_data)
+        job = create_job(job_template=job_template, job_parameter_values=dict())
+        result = StepDependencyGraph(job=job)
+
+        # THEN
+        assert result.max_indegree == 2
+
+    def test_max_outdegree(self) -> None:
+        # GIVEN - Buz has 2 dependents (Foo and Bar), so max outdegree is 2
+        template_data = {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": "Job",
+            "steps": [
+                self.create_step_template("Foo", ["Buz"]),
+                self.create_step_template("Bar", ["Foo", "Buz"]),
+                self.create_step_template("Buz"),
+            ],
+        }
+        job_template = parse_model(model=JobTemplate_2023_09, obj=template_data)
+        job = create_job(job_template=job_template, job_parameter_values=dict())
+        result = StepDependencyGraph(job=job)
+
+        # THEN
+        assert result.max_outdegree == 2
+
     def test_topo_sort_no_deps_preserves_order(self) -> None:
         # If there are no edges, the topological sort should leave the ordering unchanged
         # GIVEN

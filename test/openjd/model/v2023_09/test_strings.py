@@ -861,3 +861,26 @@ class TestFileDialogFilterPatternStringValue:
 
         # THEN
         assert len(excinfo.value.errors()) > 0
+
+
+class TestMultiLineExpressions:
+    """Test multi-line expression handling with and without EXPR extension."""
+
+    def test_multiline_simple_reference_without_expr(self) -> None:
+        """Multi-line simple variable reference works without EXPR."""
+        data = {"arg": "{{ Param.X\n}}"}
+        # Should succeed - simple reference with whitespace
+        ArgStringModel.model_validate(data, context=ModelParsingContext())
+
+    def test_multiline_expression_without_expr_fails(self) -> None:
+        """Multi-line complex expression fails without EXPR (operators not supported)."""
+        data = {"arg": "{{ Param.X +\n   Param.Y }}"}
+        with pytest.raises(ValidationError):
+            ArgStringModel.model_validate(data, context=ModelParsingContext())
+
+    def test_multiline_expression_with_expr_succeeds(self) -> None:
+        """Multi-line complex expression succeeds with EXPR extension."""
+        data = {"arg": "{{ Param.X +\n   Param.Y }}"}
+        ctx = ModelParsingContext(supported_extensions={"EXPR"})
+        # Should succeed with EXPR enabled
+        ArgStringModel.model_validate(data, context=ctx)

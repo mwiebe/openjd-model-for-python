@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, Iterable, T
 
 from pydantic import ConfigDict, BaseModel
 
-from ._symbol_table import SymbolTable
+from ..expr import SymbolTable
 
 if TYPE_CHECKING:
     # Avoiding a circular import
@@ -24,6 +24,14 @@ if TYPE_CHECKING:
         JobFloatParameterDefinition,
         JobStringParameterDefinition,
         JobPathParameterDefinition,
+        JobBoolParameterDefinition,
+        JobRangeExprParameterDefinition,
+        JobListStringParameterDefinition,
+        JobListIntParameterDefinition,
+        JobListFloatParameterDefinition,
+        JobListPathParameterDefinition,
+        JobListBoolParameterDefinition,
+        JobListListIntParameterDefinition,
     )
 
     EnvironmentTemplate = EnvironmentTemplate_2023_09
@@ -34,6 +42,14 @@ if TYPE_CHECKING:
         JobFloatParameterDefinition,
         JobStringParameterDefinition,
         JobPathParameterDefinition,
+        JobBoolParameterDefinition,
+        JobRangeExprParameterDefinition,
+        JobListStringParameterDefinition,
+        JobListIntParameterDefinition,
+        JobListFloatParameterDefinition,
+        JobListPathParameterDefinition,
+        JobListBoolParameterDefinition,
+        JobListListIntParameterDefinition,
     ]
     StepParameterSpace = StepParameterSpace_2023_09
     Step = Step_2023_09
@@ -75,6 +91,14 @@ class ParameterValueType(str, Enum):
     INT = "INT"
     FLOAT = "FLOAT"
     PATH = "PATH"
+    BOOL = "BOOL"
+    RANGE_EXPR = "RANGE_EXPR"
+    LIST_STRING = "LIST[STRING]"
+    LIST_INT = "LIST[INT]"
+    LIST_FLOAT = "LIST[FLOAT]"
+    LIST_PATH = "LIST[PATH]"
+    LIST_BOOL = "LIST[BOOL]"
+    LIST_LIST_INT = "LIST[LIST[INT]]"
     # This type is only used for task parameters, not job parameters
     CHUNK_INT = "CHUNK[INT]"
 
@@ -82,14 +106,14 @@ class ParameterValueType(str, Enum):
 @dataclass(frozen=True, **dataclass_kwargs)
 class ParameterValue:
     type: ParameterValueType
-    # All values are strings regardless of types.
+    # Values are strings for scalar types, or lists for list types.
     # We typecast as needed during processing based on the type
     # of the parameter value.
-    value: str
+    value: Any
 
 
 TaskParameterSet = dict[str, ParameterValue]
-JobParameterInputValues = dict[str, str]
+JobParameterInputValues = dict[str, Any]
 JobParameterValues = dict[str, ParameterValue]
 
 
@@ -161,10 +185,19 @@ class ResolutionScope(str, Enum):
 
 @dataclass(frozen=True, eq=False, **dataclass_kwargs)
 class TemplateVariableDef:
-    """The prefix and scope for a variable definition."""
+    """The prefix, scope, and expression type for a variable definition.
+
+    Attributes:
+        prefix: The prefix for the variable name (e.g., "|Param.", "File.").
+        resolves: The scope in which this variable is available.
+        expr_type: Expression type for EXPR extension type checking. Enables early type
+            validation during expression parsing. The type should be an ExprType
+            from openjd.expr._types.
+    """
 
     prefix: str
     resolves: ResolutionScope
+    expr_type: Any  # ExprType, but avoiding circular import
 
 
 class DefinesTemplateVariables:
@@ -185,23 +218,32 @@ class DefinesTemplateVariables:
             "Session.WorkingDirectory" name, into the scope of the model.
             A "|" prefix discards the parent scope prefix.
             The given symbols are always injected into the current variable scope.
+        inject_types (dict[str, Any]): Maps injected variable names to their expression types.
+            Used for EXPR extension type checking. Keys should match entries in `inject`.
+        inject_requires (tuple[SpecificationRevision, str] | None): If provided, the injection
+            is only performed when the context satisfies this (spec_rev, extension) pair.
+            Checked via ``context.has_feature(spec_rev, extension)``.
     """
 
     def __init__(
         self,
         *,
         symbol_prefix: str = "",
-        defines: set[TemplateVariableDef] = set(),
+        defines: Optional[set[TemplateVariableDef]] = None,
         field: str = "",
-        inject: set[str] = set(),
+        inject: Optional[set[str]] = None,
+        inject_types: Optional[dict[str, Any]] = None,
+        inject_requires: Optional[tuple["SpecificationRevision", str]] = None,
     ):
         self.symbol_prefix = symbol_prefix
-        self.defines = defines
+        self.defines = defines or set()
         self.field = field
-        self.inject = inject
+        self.inject = inject or set()
+        self.inject_types = inject_types or {}
+        self.inject_requires = inject_requires
 
     def __repr__(self) -> str:
-        return f"DefinesTemplateVariables(symbol_prefix={self.symbol_prefix!r}, defines={self.defines!r}, field={self.field!r}, inject={self.inject!r})"
+        return f"DefinesTemplateVariables(symbol_prefix={self.symbol_prefix!r}, defines={self.defines!r}, field={self.field!r}, inject={self.inject!r}, inject_types={self.inject_types!r})"
 
 
 @dataclass(frozen=True, eq=False, **dataclass_kwargs)
@@ -438,4 +480,20 @@ class ModelParsingContextInterface(ABC):
         """
         self.revision_extensions = RevisionExtensions(
             spec_rev=spec_rev, supported_extensions=supported_extensions
+        )
+
+    def has_feature(self, spec_rev: SpecificationRevision, extension: Optional[str] = None) -> bool:
+        """Check if this context supports a feature introduced in a given spec revision
+        and optional extension.
+
+        Returns True if the context's spec revision is at least ``spec_rev`` (using
+        lexicographic comparison on the YYYY-MM ISO 8601 values) and, when ``extension``
+        is provided, that extension is in the active set.
+
+        Args:
+            spec_rev: The minimum specification revision required.
+            extension: If provided, the extension that must also be active.
+        """
+        return self.spec_rev.value >= spec_rev.value and (
+            extension is None or extension in self.extensions
         )

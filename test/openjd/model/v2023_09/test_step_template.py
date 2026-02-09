@@ -82,7 +82,7 @@ class TestStepTemplate:
         (
             pytest.param({}, id="empty object"),
             pytest.param(
-                {"name": "Foo", "script": STEP_SCRIPT, "unknown": "key"}, id="unknown key"
+                {"name": "Foo", "script": STEP_SCRIPT, "unresolved": "key"}, id="unknown key"
             ),
             pytest.param({"script": STEP_SCRIPT}, id="missing name"),
             pytest.param({"name": "Foo"}, id="missing script"),

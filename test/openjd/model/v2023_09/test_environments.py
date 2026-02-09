@@ -40,7 +40,9 @@ class TestEnvironment:
     @pytest.mark.parametrize(
         "data",
         (
-            pytest.param({"name": "Foo", "script": ENV_SCRIPT, "unknown": "key"}, id="unknown key"),
+            pytest.param(
+                {"name": "Foo", "script": ENV_SCRIPT, "unresolved": "key"}, id="unknown key"
+            ),
             pytest.param({"script": ENV_SCRIPT}, id="missing name"),
             pytest.param({"name": 12, "script": ENV_SCRIPT}, id="name not string"),
             pytest.param(

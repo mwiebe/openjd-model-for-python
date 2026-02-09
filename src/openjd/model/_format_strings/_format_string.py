@@ -5,10 +5,13 @@ from numbers import Real
 from typing import Optional, Union
 
 from .._errors import ExpressionError, TokenError
-from .._symbol_table import SymbolTable
 from ._dyn_constrained_str import DynamicConstrainedStr
 from ._expression import InterpolationExpression
 from .._types import ModelParsingContextInterface
+from ...expr import ExprType, ExprValue, FunctionLibrary, get_default_library
+from ...expr._symbol_table import SymbolTable
+from ...expr._errors import ExpressionError as ExprExpressionError
+from ...expr._path_mapping import PathFormat
 
 
 @dataclass
@@ -79,30 +82,70 @@ class FormatString(DynamicConstrainedStr):
         """
         return [expr for expr in self._processed_list if isinstance(expr, ExpressionInfo)]
 
-    def resolve(self, *, symtab: SymbolTable) -> str:
+    def resolve(
+        self,
+        *,
+        symtab: SymbolTable,
+        library: Optional[FunctionLibrary] = None,
+        target_type: Optional["ExprType"] = None,
+        path_format: Optional[PathFormat] = None,
+    ) -> "ExprValue":
         """
-        Uses a given symbol table to resolve an interpolated string.
-        Each interpolation expression in the original string is replaced
-        by a value from the symbol table.
+        Resolve the format string and return an ExprValue.
+
+        If the format string is purely a single expression (e.g., "{{ expr }}"),
+        returns the raw ExprValue which may be a list, null, or scalar.
+
+        If the format string contains literal text or multiple expressions,
+        returns a string ExprValue.
 
         Parameters
         ----------
         symtab: SymbolTable
-            A symbol table with values that are used to resolve interpolation
-            expressions in the interpolated string.
-            For example, to resolve '{{Some.data}}' the table should contain
-            the value for 'Some.data'.
+            A symbol table with values for resolving expressions.
+        library: Optional[FunctionLibrary]
+            Function library for expression evaluation.
+        target_type: Optional[ExprType]
+            Optional target ExprType for type coercion (can be union).
+        path_format: Optional[PathFormat]
+            Controls path type behavior during evaluation.
 
         Returns
         -------
-        resolved_string:
-            A resolved string with all interpolation expressions replaced with corresponding values.
+        ExprValue:
+            The resolved value, preserving type information.
 
         Raises
         ------
         FormatStringError: if it is impossible to resolve
         all interpolation expressions with a given symbol table.
         """
+        # Pure single EXPR expression — return typed result (may be list, null, etc.)
+        non_empty_parts = [p for p in self._processed_list if p != ""]
+        if (
+            len(non_empty_parts) == 1
+            and isinstance(non_empty_parts[0], ExpressionInfo)
+            and non_empty_parts[0].expression is not None
+            and "EXPR" in non_empty_parts[0].expression.context.extensions
+        ):
+            expr_info = non_empty_parts[0]
+            assert expr_info.expression is not None
+            lib = library or get_default_library()
+            try:
+                return expr_info.expression.evaluate_typed(
+                    symtab=symtab,
+                    library=lib,
+                    target_type=target_type,
+                    path_format=path_format,
+                )
+            except ExpressionError as exc:
+                raise FormatStringError(
+                    string=self.original_value,
+                    start=expr_info.start_pos,
+                    end=expr_info.end_pos,
+                    expr=expr_info.expression.expr,
+                    details=str(exc),
+                )
         resolved_list: list[str] = []
         for element in self._processed_list:
             assert isinstance(element, (ExpressionInfo, str))
@@ -112,7 +155,11 @@ class FormatString(DynamicConstrainedStr):
 
             assert element.expression is not None
             try:
-                element.resolved_value = element.expression.evaluate(symtab=symtab)
+                element.resolved_value = element.expression.evaluate(
+                    symtab=symtab,
+                    library=library,
+                    path_format=path_format,
+                )
             except ExpressionError as exc:
                 raise FormatStringError(
                     string=self.original_value,
@@ -124,7 +171,7 @@ class FormatString(DynamicConstrainedStr):
 
             resolved_list.append(str(element.resolved_value))
 
-        return "".join(resolved_list)
+        return ExprValue("".join(resolved_list))
 
     def _preprocess(
         self, *, context: ModelParsingContextInterface
@@ -193,7 +240,7 @@ class FormatString(DynamicConstrainedStr):
                 expr = InterpolationExpression(
                     self[expression_start:expression_end], context=context
                 )
-            except (ExpressionError, TokenError) as exc:
+            except (ExpressionError, ExprExpressionError, TokenError) as exc:
                 raise FormatStringError(
                     string=self.original_value,
                     start=expression_info.start_pos,

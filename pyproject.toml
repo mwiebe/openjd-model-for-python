@@ -127,7 +127,11 @@ addopts = [
     "--cov-report=xml:build/coverage/coverage.xml",
     "--cov-report=term-missing",
     "--numprocesses=auto",
-    "--timeout=30"
+    "--timeout=30",
+    "-m not fuzz"
+]
+markers = [
+    "fuzz: fuzz tests using hypothesis (deselected by default, run with: -m fuzz)"
 ]
 
 [tool.coverage.run]
