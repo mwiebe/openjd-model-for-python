@@ -777,7 +777,7 @@ class FunctionLibrary:
             _re_findall,
         )
         self.register(
-            "re_replace",
+            "re_sub",
             [ExprType.STRING, ExprType.STRING, ExprType.STRING],
             ExprType.STRING,
             _re_replace,

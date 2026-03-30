@@ -937,36 +937,36 @@ class TestRegexWithRawStrings:
         result = evaluate_expression('re_findall("hello", r"\\d+")')
         assert result.item() == []
 
-    def test_re_replace_digits(self) -> None:
-        assert evaluate_expression('re_replace("a1b2c3", r"\\d", "X")').item() == "aXbXcX"
+    def test_re_sub_digits(self) -> None:
+        assert evaluate_expression('re_sub("a1b2c3", r"\\d", "X")').item() == "aXbXcX"
 
-    def test_re_replace_whitespace(self) -> None:
-        assert evaluate_expression('re_replace("a b  c", r"\\s+", "-")').item() == "a-b-c"
+    def test_re_sub_whitespace(self) -> None:
+        assert evaluate_expression('re_sub("a b  c", r"\\s+", "-")').item() == "a-b-c"
 
     def test_re_search_method_syntax(self) -> None:
         """Method syntax works for re_search."""
         result = evaluate_expression('"test123".re_search(r"(\\d+)")')
         assert result.item() == ["123", "123"]
 
-    def test_re_replace_method_syntax(self) -> None:
-        result = evaluate_expression('"hello".re_replace(r"l+", "L")')
+    def test_re_sub_method_syntax(self) -> None:
+        result = evaluate_expression('"hello".re_sub(r"l+", "L")')
         assert result.item() == "heLo"
 
-    def test_re_replace_group_ref_backslash(self) -> None:
+    def test_re_sub_group_ref_backslash(self) -> None:
         with pytest.raises(ExpressionError, match="Group references"):
-            evaluate_expression(r"""re_replace('hello', '(h)', r'\1')""")
+            evaluate_expression(r"""re_sub('hello', '(h)', r'\1')""")
 
-    def test_re_replace_group_ref_dollar(self) -> None:
+    def test_re_sub_group_ref_dollar(self) -> None:
         with pytest.raises(ExpressionError, match="Group references"):
-            evaluate_expression(r"""re_replace('hello', '(h)', '$1')""")
+            evaluate_expression(r"""re_sub('hello', '(h)', '$1')""")
 
-    def test_re_replace_group_ref_named(self) -> None:
+    def test_re_sub_group_ref_named(self) -> None:
         with pytest.raises(ExpressionError, match="Group references"):
-            evaluate_expression(r"""re_replace('hello', '(h)', r'\g<1>')""")
+            evaluate_expression(r"""re_sub('hello', '(h)', r'\g<1>')""")
 
-    def test_re_replace_group_ref_dollar_brace(self) -> None:
+    def test_re_sub_group_ref_dollar_brace(self) -> None:
         with pytest.raises(ExpressionError, match="Group references"):
-            evaluate_expression(r"""re_replace('hello', '(h)', '${1}')""")
+            evaluate_expression(r"""re_sub('hello', '(h)', '${1}')""")
 
     def test_re_search_empty_pattern(self) -> None:
         with pytest.raises(ExpressionError, match="Empty regex pattern"):
@@ -980,9 +980,9 @@ class TestRegexWithRawStrings:
         with pytest.raises(ExpressionError, match="Empty regex pattern"):
             evaluate_expression("""re_findall('hello', '')""")
 
-    def test_re_replace_empty_pattern(self) -> None:
+    def test_re_sub_empty_pattern(self) -> None:
         with pytest.raises(ExpressionError, match="Empty regex pattern"):
-            evaluate_expression("""re_replace('hello', '', 'x')""")
+            evaluate_expression("""re_sub('hello', '', 'x')""")
 
     def test_re_search_boolean_check(self) -> None:
         """Pattern to check if match exists."""
@@ -1100,9 +1100,9 @@ class TestRegexUnsupportedFeatures:
         with pytest.raises(ExpressionError, match="lookahead"):
             evaluate_expression(r're_findall("foobar", r"foo(?=bar)")')
 
-    def test_re_replace_validates(self) -> None:
+    def test_re_sub_validates(self) -> None:
         with pytest.raises(ExpressionError, match="lookbehind"):
-            evaluate_expression(r're_replace("foobar", r"(?<=foo)bar", "X")')
+            evaluate_expression(r're_sub("foobar", r"(?<=foo)bar", "X")')
 
     def test_end_of_string_Z_rejected(self) -> None:
         """Python's \\Z is rejected (Rust uses \\z instead)."""
