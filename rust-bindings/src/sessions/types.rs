@@ -13,7 +13,7 @@ use openjd_sessions::session::SessionState;
 // ── SessionState ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions.v1", name = "SessionState", eq, eq_int, frozen, hash)]
+#[pyclass(module = "openjd.sessions._v1", name = "SessionState", eq, eq_int, frozen, hash)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum PySessionState {
     READY,
@@ -38,7 +38,7 @@ impl From<SessionState> for PySessionState {
 // ── ActionState ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions.v1", name = "ActionState", eq, eq_int, frozen, hash)]
+#[pyclass(module = "openjd.sessions._v1", name = "ActionState", eq, eq_int, frozen, hash)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum PyActionState {
     RUNNING,
@@ -102,7 +102,7 @@ impl From<PyActionState> for ActionState {
 // ── ScriptRunnerState ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions.v1", name = "ScriptRunnerState", eq, eq_int, frozen, hash)]
+#[pyclass(module = "openjd.sessions._v1", name = "ScriptRunnerState", eq, eq_int, frozen, hash)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum PyScriptRunnerState {
     READY,
@@ -131,7 +131,7 @@ impl From<ScriptRunnerState> for PyScriptRunnerState {
 // ── ActionStatus ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions.v1", name = "ActionStatus", frozen)]
+#[pyclass(module = "openjd.sessions._v1", name = "ActionStatus", frozen)]
 #[derive(Clone)]
 pub(crate) struct PyActionStatus {
     inner: ActionStatus,
@@ -240,7 +240,7 @@ impl From<ActionStatus> for PyActionStatus {
 // ── ActionResult ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions.v1", name = "ActionResult", frozen)]
+#[pyclass(module = "openjd.sessions._v1", name = "ActionResult", frozen)]
 #[derive(Clone)]
 pub(crate) struct PyActionResult {
     #[pyo3(get)]

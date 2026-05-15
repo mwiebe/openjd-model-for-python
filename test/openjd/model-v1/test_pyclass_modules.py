@@ -3,7 +3,7 @@
 
 """Verify every Rust-backed PyO3 class advertises the module where it is
 conceptually exposed (e.g. `openjd.expr.FormatString`,
-`openjd.model._v1.Job`, `openjd.sessions.v1.Session`) rather than the
+`openjd.model._v1.Job`, `openjd.sessions._v1.Session`) rather than the
 default `builtins`.
 
 The module string is compiled into the class by the `#[pyclass(module = ...)]`
@@ -65,15 +65,15 @@ EXPECTED_MODULES: dict[str, str] = {
     "TaskParameterType": "openjd.model._v1",
     "TaskParameterValue": "openjd.model._v1",
     "TemplateSpecificationVersion": "openjd.model._v1",
-    # openjd.sessions.v1
-    "ActionResult": "openjd.sessions.v1",
-    "ActionState": "openjd.sessions.v1",
-    "ActionStatus": "openjd.sessions.v1",
-    "PosixSessionUser": "openjd.sessions.v1",
-    "ScriptRunnerState": "openjd.sessions.v1",
-    "Session": "openjd.sessions.v1",
-    "SessionState": "openjd.sessions.v1",
-    "WindowsSessionUser": "openjd.sessions.v1",
+    # openjd.sessions._v1
+    "ActionResult": "openjd.sessions._v1",
+    "ActionState": "openjd.sessions._v1",
+    "ActionStatus": "openjd.sessions._v1",
+    "PosixSessionUser": "openjd.sessions._v1",
+    "ScriptRunnerState": "openjd.sessions._v1",
+    "Session": "openjd.sessions._v1",
+    "SessionState": "openjd.sessions._v1",
+    "WindowsSessionUser": "openjd.sessions._v1",
 }
 
 
@@ -93,9 +93,9 @@ EXPECTED_EXCEPTION_MODULES: dict[str, str] = {
     "DecodeValidationError": "openjd.model._v1",
     "ModelValidationError": "openjd.model._v1",
     "UnsupportedSchema": "openjd.model._v1",
-    # openjd.sessions.v1
-    "SessionError": "openjd.sessions.v1",
-    "BadCredentialsException": "openjd.sessions.v1",
+    # openjd.sessions._v1
+    "SessionError": "openjd.sessions._v1",
+    "BadCredentialsException": "openjd.sessions._v1",
 }
 
 
@@ -253,7 +253,7 @@ class TestPyClassModules:
         import openjd.expr  # noqa: F401
         import openjd.model._v1  # noqa: F401
         try:
-            import openjd.sessions.v1  # noqa: F401
+            import openjd.sessions._v1  # noqa: F401
         except ImportError:
             pass
 

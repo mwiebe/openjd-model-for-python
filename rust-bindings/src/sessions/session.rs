@@ -93,7 +93,7 @@ struct StateSnapshot {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions.v1", name = "Session")]
+#[pyclass(module = "openjd.sessions._v1", name = "Session")]
 pub(crate) struct PySession {
     /// The Rust session. None while a background thread has taken ownership.
     session: Arc<Mutex<Option<Session>>>,

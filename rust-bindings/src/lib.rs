@@ -23,7 +23,7 @@ define_stub_info_gatherer!(stub_info);
 /// Register a PyO3 `create_exception!`-built exception under its canonical
 /// public name, and patch the type's `__name__`, `__qualname__`, and
 /// `__module__` attributes so that `repr`, `pickle`, and tracebacks all
-/// report the user-facing name (e.g. `openjd.sessions.v1.SessionError`)
+/// report the user-facing name (e.g. `openjd.sessions._v1.SessionError`)
 /// rather than the binding-internal `_openjd_rs.PySessionError`.
 ///
 /// PyO3's `create_exception!` macro stringifies its identifier argument and
@@ -174,13 +174,13 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m,
         m.py().get_type::<PySessionError>(),
         "SessionError",
-        "openjd.sessions.v1",
+        "openjd.sessions._v1",
     )?;
     register_renamed_exception(
         m,
         m.py().get_type::<PyBadCredentialsException>(),
         "BadCredentialsException",
-        "openjd.sessions.v1",
+        "openjd.sessions._v1",
     )?;
 
     Ok(())

@@ -15,7 +15,7 @@ use openjd_sessions::session_user::SessionUser;
 
 /// A PyO3 wrapper that holds an Arc<dyn SessionUser> for passing to Session.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions.v1", name = "PosixSessionUser")]
+#[pyclass(module = "openjd.sessions._v1", name = "PosixSessionUser")]
 #[derive(Clone)]
 pub(crate) struct PyPosixSessionUser {
     pub(crate) inner: Arc<dyn SessionUser>,
@@ -100,7 +100,7 @@ pyo3::create_exception!(
 /// fails on non-Windows hosts with a `RuntimeError`, matching the legacy
 /// Python class.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions.v1", name = "WindowsSessionUser")]
+#[pyclass(module = "openjd.sessions._v1", name = "WindowsSessionUser")]
 pub(crate) struct PyWindowsSessionUser {
     pub(crate) inner: Arc<dyn SessionUser>,
     /// Cached password (if construction supplied one). Stored in the
