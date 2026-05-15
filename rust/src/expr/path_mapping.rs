@@ -1,0 +1,157 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+use pyo3::prelude::*;
+#[cfg(feature = "stub-gen")]
+use pyo3_stub_gen::derive::*;
+use pyo3::types::PyDict;
+
+use openjd_expr::path_mapping::{PathFormat, PathMappingRule};
+
+use crate::expr::path_format::PyPathFormat;
+
+/// Extract a path argument, accepting str or the appropriate pathlib type for the format.
+fn extract_path_arg(obj: &Bound<'_, pyo3::PyAny>, fmt: PyPathFormat, name: &str) -> PyResult<String> {
+    if let Ok(s) = obj.extract::<String>() {
+        return Ok(s);
+    }
+    let type_name = obj.get_type().name()?.to_string();
+    match fmt {
+        PyPathFormat::POSIX => {
+            if type_name == "PurePosixPath" || type_name == "PosixPath" {
+                return Ok(obj.str()?.to_string());
+            }
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                format!("{name} must be str or PurePosixPath for POSIX format, got {type_name}")
+            ))
+        }
+        PyPathFormat::WINDOWS => {
+            if type_name == "PureWindowsPath" || type_name == "WindowsPath" {
+                return Ok(obj.str()?.to_string());
+            }
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                format!("{name} must be str or PureWindowsPath for WINDOWS format, got {type_name}")
+            ))
+        }
+        PyPathFormat::URI => {
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                format!("{name} must be str for URI format, got {type_name}")
+            ))
+        }
+    }
+}
+
+/// Extract a destination path, accepting str or any pathlib Path type.
+fn extract_path_str(obj: &Bound<'_, pyo3::PyAny>, name: &str) -> PyResult<String> {
+    if let Ok(s) = obj.extract::<String>() {
+        return Ok(s);
+    }
+    let type_name = obj.get_type().name()?.to_string();
+    if type_name.contains("Path") {
+        return Ok(obj.str()?.to_string());
+    }
+    Err(pyo3::exceptions::PyTypeError::new_err(
+        format!("{name} must be str or Path, got {type_name}")
+    ))
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.expr", name = "PathMappingRule", from_py_object)]
+#[derive(Clone)]
+pub(crate) struct PyPathMappingRule {
+    pub(crate) inner: PathMappingRule,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyPathMappingRule {
+    #[new]
+    #[pyo3(signature = (*, source_path_format, source_path, destination_path))]
+    fn new(
+        source_path_format: PyPathFormat,
+        source_path: &Bound<'_, pyo3::PyAny>,
+        destination_path: &Bound<'_, pyo3::PyAny>,
+    ) -> PyResult<Self> {
+        let src = extract_path_arg(source_path, source_path_format, "source_path")?;
+        let dst = extract_path_str(destination_path, "destination_path")?;
+        Ok(PyPathMappingRule {
+            inner: PathMappingRule {
+                source_path_format: source_path_format.into(),
+                source_path: src,
+                destination_path: dst,
+            },
+        })
+    }
+
+    #[getter]
+    fn source_path_format(&self) -> PyPathFormat {
+        self.inner.source_path_format.into()
+    }
+
+    #[getter]
+    fn source_path(&self) -> &str {
+        &self.inner.source_path
+    }
+
+    #[getter]
+    fn destination_path(&self) -> &str {
+        &self.inner.destination_path
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "PathMappingRule(source_path_format={:?}, source_path='{}', destination_path='{}')",
+            self.inner.source_path_format, self.inner.source_path, self.inner.destination_path
+        )
+    }
+
+    #[pyo3(signature = (*, path, output_format=None))]
+    fn apply(&self, path: &str, output_format: Option<PyPathFormat>) -> (bool, String) {
+        let result = match output_format {
+            Some(fmt) => self.inner.apply_with_format(path, fmt.into()),
+            None => self.inner.apply(path),
+        };
+        match result {
+            Some(mapped) => (true, mapped),
+            None => (false, path.to_string()),
+        }
+    }
+
+    fn to_dict(&self) -> std::collections::HashMap<String, String> {
+        let mut d = std::collections::HashMap::new();
+        d.insert("source_path_format".into(), match self.inner.source_path_format {
+            PathFormat::Posix => "POSIX", PathFormat::Windows => "WINDOWS", PathFormat::Uri => "URI",
+        }.into());
+        d.insert("source_path".into(), self.inner.source_path.clone());
+        d.insert("destination_path".into(), self.inner.destination_path.clone());
+        d
+    }
+
+    #[staticmethod]
+    fn from_dict(d: &Bound<'_, PyDict>) -> PyResult<Self> {
+        let get = |key: &str| -> PyResult<String> {
+            d.get_item(key)?
+                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(
+                    format!("Path mapping rule requires the following fields: [source_path_format, source_path, destination_path]")
+                ))?
+                .extract::<String>()
+        };
+        if d.is_empty() {
+            return Err(pyo3::exceptions::PyValueError::new_err("Empty path mapping rule"));
+        }
+        let fmt_str = get("source_path_format")?;
+        let fmt = match fmt_str.to_uppercase().as_str() {
+            "POSIX" => PyPathFormat::POSIX,
+            "WINDOWS" => PyPathFormat::WINDOWS,
+            "URI" => PyPathFormat::URI,
+            other => return Err(pyo3::exceptions::PyValueError::new_err(format!("Unknown path format: {other}"))),
+        };
+        Ok(PyPathMappingRule {
+            inner: PathMappingRule {
+                source_path_format: fmt.into(),
+                source_path: get("source_path")?,
+                destination_path: get("destination_path")?,
+            },
+        })
+    }
+}

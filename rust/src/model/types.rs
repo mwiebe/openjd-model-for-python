@@ -1,0 +1,284 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+use pyo3::prelude::*;
+#[cfg(feature = "stub-gen")]
+use pyo3_stub_gen::derive::*;
+
+use openjd_model::parse::DocumentType;
+use openjd_model::TemplateSpecificationVersion;
+use openjd_model::JobParameterType;
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model.v1", name = "DocumentType", eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq)]
+#[allow(non_camel_case_types)]
+pub(crate) enum PyDocumentType {
+    YAML = 0,
+    JSON = 1,
+}
+
+impl From<PyDocumentType> for DocumentType {
+    fn from(v: PyDocumentType) -> Self {
+        match v {
+            PyDocumentType::YAML => DocumentType::Yaml,
+            PyDocumentType::JSON => DocumentType::Json,
+        }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model.v1", name = "TemplateSpecificationVersion", eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq)]
+#[allow(non_camel_case_types)]
+pub(crate) enum PyTemplateSpecificationVersion {
+    JOBTEMPLATE_2023_09 = 0,
+    ENVIRONMENT_2023_09 = 1,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyTemplateSpecificationVersion {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::JOBTEMPLATE_2023_09 => "jobtemplate-2023-09",
+            Self::ENVIRONMENT_2023_09 => "environment-2023-09",
+        }
+    }
+
+    fn is_job_template(&self) -> bool {
+        matches!(self, Self::JOBTEMPLATE_2023_09)
+    }
+
+    fn is_environment_template(&self) -> bool {
+        matches!(self, Self::ENVIRONMENT_2023_09)
+    }
+
+    fn __str__(&self) -> &'static str {
+        self.as_str()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("TemplateSpecificationVersion.{}", match self {
+            Self::JOBTEMPLATE_2023_09 => "JOBTEMPLATE_2023_09",
+            Self::ENVIRONMENT_2023_09 => "ENVIRONMENT_2023_09",
+        })
+    }
+}
+
+impl From<TemplateSpecificationVersion> for PyTemplateSpecificationVersion {
+    fn from(v: TemplateSpecificationVersion) -> Self {
+        match v {
+            TemplateSpecificationVersion::JobTemplate2023_09 => Self::JOBTEMPLATE_2023_09,
+            TemplateSpecificationVersion::Environment2023_09 => Self::ENVIRONMENT_2023_09,
+            _ => Self::JOBTEMPLATE_2023_09, // future variants
+        }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model.v1", name = "JobParameterType", eq, eq_int, frozen, hash, from_py_object)]
+#[derive(Clone, Copy, PartialEq)]
+#[allow(non_camel_case_types)]
+pub(crate) enum PyJobParameterType {
+    STRING = 0,
+    INT = 1,
+    FLOAT = 2,
+    PATH = 3,
+    BOOL = 4,
+    RANGE_EXPR = 5,
+    LIST_STRING = 6,
+    LIST_INT = 7,
+    LIST_FLOAT = 8,
+    LIST_PATH = 9,
+    LIST_BOOL = 10,
+    LIST_LIST_INT = 11,
+}
+
+
+impl std::hash::Hash for PyJobParameterType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+    }
+}
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyJobParameterType {
+    fn as_str(&self) -> &'static str {
+        JobParameterType::from(*self).as_spec_str()
+    }
+
+    fn __str__(&self) -> &'static str {
+        self.as_str()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("JobParameterType.{}", self.as_str())
+    }
+}
+
+impl From<PyJobParameterType> for JobParameterType {
+    fn from(v: PyJobParameterType) -> Self {
+        match v {
+            PyJobParameterType::STRING => JobParameterType::String,
+            PyJobParameterType::INT => JobParameterType::Int,
+            PyJobParameterType::FLOAT => JobParameterType::Float,
+            PyJobParameterType::PATH => JobParameterType::Path,
+            PyJobParameterType::BOOL => JobParameterType::Bool,
+            PyJobParameterType::RANGE_EXPR => JobParameterType::RangeExpr,
+            PyJobParameterType::LIST_STRING => JobParameterType::ListString,
+            PyJobParameterType::LIST_INT => JobParameterType::ListInt,
+            PyJobParameterType::LIST_FLOAT => JobParameterType::ListFloat,
+            PyJobParameterType::LIST_PATH => JobParameterType::ListPath,
+            PyJobParameterType::LIST_BOOL => JobParameterType::ListBool,
+            PyJobParameterType::LIST_LIST_INT => JobParameterType::ListListInt,
+        }
+    }
+}
+
+impl From<JobParameterType> for PyJobParameterType {
+    fn from(v: JobParameterType) -> Self {
+        match v {
+            JobParameterType::String => PyJobParameterType::STRING,
+            JobParameterType::Int => PyJobParameterType::INT,
+            JobParameterType::Float => PyJobParameterType::FLOAT,
+            JobParameterType::Path => PyJobParameterType::PATH,
+            JobParameterType::Bool => PyJobParameterType::BOOL,
+            JobParameterType::RangeExpr => PyJobParameterType::RANGE_EXPR,
+            JobParameterType::ListString => PyJobParameterType::LIST_STRING,
+            JobParameterType::ListInt => PyJobParameterType::LIST_INT,
+            JobParameterType::ListFloat => PyJobParameterType::LIST_FLOAT,
+            JobParameterType::ListPath => PyJobParameterType::LIST_PATH,
+            JobParameterType::ListBool => PyJobParameterType::LIST_BOOL,
+            JobParameterType::ListListInt => PyJobParameterType::LIST_LIST_INT,
+            _ => PyJobParameterType::STRING, // future variants
+        }
+    }
+}
+
+// ── TaskParameterType ──
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model.v1", name = "TaskParameterType", eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum PyTaskParameterType {
+    INT,
+    FLOAT,
+    STRING,
+    PATH,
+    CHUNK_INT,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyTaskParameterType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::INT => "INT", Self::FLOAT => "FLOAT", Self::STRING => "STRING",
+            Self::PATH => "PATH", Self::CHUNK_INT => "CHUNK[INT]",
+        }
+    }
+    fn __repr__(&self) -> String {
+        format!("TaskParameterType.{}", self.as_str())
+    }
+}
+
+// ── TaskParameterValue ──
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model.v1", name = "TaskParameterValue", frozen)]
+#[derive(Clone)]
+pub(crate) struct PyTaskParameterValue {
+    #[pyo3(get)]
+    pub(crate) param_type: PyTaskParameterType,
+    #[pyo3(get)]
+    pub(crate) value: String,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyTaskParameterValue {
+    #[new]
+    #[pyo3(signature = (*, r#type, value))]
+    fn new(r#type: PyTaskParameterType, value: String) -> Self {
+        Self { param_type: r#type, value }
+    }
+
+    #[getter(r#type)]
+    fn get_type(&self) -> PyTaskParameterType {
+        self.param_type
+    }
+
+    fn as_str(&self) -> &str {
+        self.param_type.as_str()
+    }
+
+    fn __eq__(&self, other: &Bound<'_, pyo3::PyAny>) -> PyResult<bool> {
+        let other_type = other.getattr("type")?;
+        let other_type_str: String = other_type.call_method0("as_str")?.extract()?;
+        let other_value: String = other.getattr("value")?.extract()?;
+        Ok(self.param_type.as_str() == other_type_str && self.value == other_value)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("TaskParameterValue(type={}, value={:?})", self.param_type.as_str(), self.value)
+    }
+
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        self.param_type.as_str().hash(&mut h);
+        self.value.hash(&mut h);
+        h.finish()
+    }
+}
+
+// ── JobParameterValue ──
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model.v1", name = "JobParameterValue", frozen)]
+#[derive(Clone)]
+pub(crate) struct PyJobParameterValue {
+    #[pyo3(get)]
+    pub(crate) param_type: PyJobParameterType,
+    #[pyo3(get)]
+    pub(crate) value: String,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyJobParameterValue {
+    #[new]
+    #[pyo3(signature = (*, r#type, value))]
+    fn new(r#type: PyJobParameterType, value: String) -> Self {
+        Self { param_type: r#type, value }
+    }
+
+    #[getter(r#type)]
+    fn get_type(&self) -> PyJobParameterType {
+        self.param_type
+    }
+
+    fn as_str(&self) -> &str {
+        self.param_type.as_str()
+    }
+
+    fn __eq__(&self, other: &Bound<'_, pyo3::PyAny>) -> PyResult<bool> {
+        let other_type = other.getattr("type")?;
+        let other_type_str: String = other_type.call_method0("as_str")?.extract()?;
+        let other_value: String = other.getattr("value")?.extract()?;
+        Ok(self.param_type.as_str() == other_type_str && self.value == other_value)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("JobParameterValue(type={}, value={:?})", self.param_type.as_str(), self.value)
+    }
+
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        self.param_type.as_str().hash(&mut h);
+        self.value.hash(&mut h);
+        h.finish()
+    }
+}

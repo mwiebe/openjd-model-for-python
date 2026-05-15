@@ -1,5 +1,7 @@
 [envs.default]
 pre-install-commands = [
+  "pip install maturin setuptools_scm",
+  "python scripts/maturin_build.py develop --manifest-path rust/Cargo.toml",
   "pip install -r requirements-testing.txt"
 ]
 
