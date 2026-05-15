@@ -24,7 +24,7 @@ If a previous run died before restoring, that file is detected and
 restored before this run starts.
 
 Usage:
-    python scripts/maturin_build.py develop --release --manifest-path rust/Cargo.toml
+    python scripts/maturin_build.py develop --release --manifest-path rust-bindings/Cargo.toml
     python scripts/maturin_build.py build --release
 """
 from __future__ import annotations

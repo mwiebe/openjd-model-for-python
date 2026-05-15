@@ -239,7 +239,7 @@ runs on its own thread.
 
 ### Phase 1: Enums, errors, and simple types
 
-Add to `rust/src/sessions/` in the model-for-python extension:
+Add to `rust-bindings/src/sessions/` in the model-for-python extension:
 
 - `SessionState` enum
 - `ActionState` enum (replaces Python `ActionState(str, Enum)`)
@@ -308,7 +308,7 @@ Verify action status, progress, stdout capture.
 ## Dependencies
 
 ```toml
-# rust/Cargo.toml additions
+# rust-bindings/Cargo.toml additions
 openjd-sessions = { git = "...", branch = "prototype" }
 tokio = { version = "1", features = ["rt", "process", "io-util", "sync", "time"] }
 uuid = { version = "1", features = ["v4"] }

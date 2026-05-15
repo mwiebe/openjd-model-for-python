@@ -21,18 +21,18 @@ fi
 PYTHON_LIB=$(python3 -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
 
 # Build the stub_gen binary (without extension-module so it can link against libpython)
-LIBRARY_PATH="$PYTHON_LIB" cargo build --manifest-path rust/Cargo.toml --bin stub_gen
+LIBRARY_PATH="$PYTHON_LIB" cargo build --manifest-path rust-bindings/Cargo.toml --bin stub_gen
 
 # Create a temporary pyproject.toml symlink for pyo3-stub-gen
-ln -sf ../pyproject.toml rust/pyproject.toml
+ln -sf ../pyproject.toml rust-bindings/pyproject.toml
 
 # Run the generator
-CARGO_MANIFEST_DIR=rust LD_LIBRARY_PATH="$PYTHON_LIB" ./target/debug/stub_gen
+CARGO_MANIFEST_DIR=rust-bindings LD_LIBRARY_PATH="$PYTHON_LIB" ./target/debug/stub_gen
 
 # Move to correct location
-mv rust/src/openjd/_openjd_rs/__init__.pyi src/openjd/_openjd_rs.pyi
-rm -rf rust/src/openjd
-rm rust/pyproject.toml
+mv rust-bindings/src/openjd/_openjd_rs/__init__.pyi src/openjd/_openjd_rs.pyi
+rm -rf rust-bindings/src/openjd
+rm rust-bindings/pyproject.toml
 
 # Post-process: fix Rust raw identifiers and remove internal types
 sed -i 's/r#type/type/g' src/openjd/_openjd_rs.pyi

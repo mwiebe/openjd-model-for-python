@@ -29,7 +29,7 @@ _version.py
 
 # Rust build artifacts
 /target/
-/rust/target/
+/rust-bindings/target/
 Cargo.lock
 
 # Compiled extension modules

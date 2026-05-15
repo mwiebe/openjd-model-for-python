@@ -39,7 +39,7 @@ Source = "https://github.com/OpenJobDescription/openjd-model-for-python"
 [tool.maturin]
 python-source = "src"
 module-name = "openjd._openjd_rs"
-manifest-path = "rust/Cargo.toml"
+manifest-path = "rust-bindings/Cargo.toml"
 features = ["extension-module"]
 # `_version.py` is generated at build time by `_build_backend.py` (or
 # `scripts/generate_version.py`) and is gitignored. Maturin honors
