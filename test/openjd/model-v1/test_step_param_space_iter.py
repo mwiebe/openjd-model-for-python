@@ -4,7 +4,7 @@ from typing import Callable, Union
 
 import pytest
 
-from openjd.model.v1 import (
+from openjd.model._v1 import (
     IntRangeExpr,
     ParameterValue,
     ParameterValueType,
@@ -13,7 +13,7 @@ from openjd.model.v1 import (
     parse_model,
 )
 
-from openjd.model.v1.v2023_09 import (
+from openjd.model._v1.v2023_09 import (
     JobTemplate as JobTemplate_2023_09,
     RangeExpressionTaskParameterDefinition as RangeExpressionTaskParameterDefinition_2023_09,
     RangeListTaskParameterDefinition as RangeListTaskParameterDefinition_2023_09,

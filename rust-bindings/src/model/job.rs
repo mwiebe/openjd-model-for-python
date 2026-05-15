@@ -15,7 +15,7 @@ use crate::expr::range_expr::PyRangeExpr;
 // ── PyJob ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "Job", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "Job", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyJob {
     pub(crate) inner: job::Job,
@@ -77,7 +77,7 @@ impl PyJob {
 // ── PyStep ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "Step", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "Step", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyStep {
     pub(crate) inner: job::Step,
@@ -162,7 +162,7 @@ impl PyStep {
 // ── PyStepScript ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "StepScript", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "StepScript", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyStepScript {
     pub(crate) inner: job::StepScript,
@@ -220,7 +220,7 @@ impl PyStepScript {
 // ── PyStepActions ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "StepActions", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "StepActions", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyStepActions {
     inner: job::StepActions,
@@ -254,7 +254,7 @@ impl PyStepActions {
 // ── PyAction ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "Action", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "Action", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyAction {
     inner: job::Action,
@@ -305,7 +305,7 @@ impl PyAction {
 // ── PyEnvironment ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "Environment", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "Environment", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyEnvironment {
     pub(crate) inner: job::Environment,
@@ -344,7 +344,7 @@ impl PyEnvironment {
 // ── PyEnvironmentScript ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "EnvironmentScript", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "EnvironmentScript", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyEnvironmentScript {
     inner: job::EnvironmentScript,
@@ -375,7 +375,7 @@ impl PyEnvironmentScript {
 // ── PyEnvironmentActions ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "EnvironmentActions", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "EnvironmentActions", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyEnvironmentActions {
     inner: job::EnvironmentActions,
@@ -410,7 +410,7 @@ impl PyEnvironmentActions {
 // ── PyEmbeddedFile ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "EmbeddedFile", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "EmbeddedFile", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyEmbeddedFile {
     inner: job::EmbeddedFile,
@@ -504,7 +504,7 @@ impl PyEmbeddedFile {
 // ── PyJobParameter ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "JobParameter", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "JobParameter", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyJobParameter {
     inner: job::JobParameter,
@@ -536,7 +536,7 @@ impl PyJobParameter {
 // ── PyStepParameterSpace ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "StepParameterSpace", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "StepParameterSpace", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyStepParameterSpace {
     pub(crate) inner: job::StepParameterSpace,
@@ -746,7 +746,7 @@ impl PyStepParameterSpace {
 // ── PyStepDependency ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "StepDependency", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "StepDependency", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyStepDependency {
     inner: job::StepDependency,
@@ -774,7 +774,7 @@ impl PyStepDependency {
 // ── PyCancelationMode ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "CancelationMode", from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "CancelationMode", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyCancelationMode {
     inner: job::CancelationMode,

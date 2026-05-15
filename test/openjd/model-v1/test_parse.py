@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from openjd.model.v1 import (
+from openjd.model._v1 import (
     DecodeValidationError,
     ModelValidationError,
     DocumentType,
@@ -19,8 +19,8 @@ from openjd.model.v1 import (
     model_to_object,
 )
 import openjd
-from openjd.model.v1.v2023_09 import JobTemplate as JobTemplate_2023_09
-from openjd.model.v1.v2023_09 import EnvironmentTemplate as EnvironmentTemplate_2023_09
+from openjd.model._v1.v2023_09 import JobTemplate as JobTemplate_2023_09
+from openjd.model._v1.v2023_09 import EnvironmentTemplate as EnvironmentTemplate_2023_09
 
 
 class TestDocStringToObject:

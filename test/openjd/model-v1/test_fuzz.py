@@ -17,7 +17,7 @@ import time
 import traceback
 from typing import Optional
 
-from openjd.model.v1 import (
+from openjd.model._v1 import (
     DecodeValidationError,
     DocumentType,
     ModelValidationError,

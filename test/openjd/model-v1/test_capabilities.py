@@ -3,7 +3,7 @@
 import pytest
 import string
 
-from openjd.model.v1 import validate_amount_capability_name, validate_attribute_capability_name
+from openjd.model._v1 import validate_amount_capability_name, validate_attribute_capability_name
 
 TEST_BUILTIN_AMOUNTS: list[str] = [
     "amount.worker.foo",

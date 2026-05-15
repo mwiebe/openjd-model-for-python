@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Optional
-from openjd.model.v1.v2023_09._model import OpenJDModel_v2023_09
+from openjd.model._v1.v2023_09._model import OpenJDModel_v2023_09
 
 
 # First define a class we'll reference properly

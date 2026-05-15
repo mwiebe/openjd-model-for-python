@@ -6,4 +6,4 @@ def test_openjd_importable():
 
 
 def test_openjd_model_importable():
-    import openjd.model.v1  # noqa: F401
+    import openjd.model._v1  # noqa: F401

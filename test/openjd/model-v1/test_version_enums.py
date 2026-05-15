@@ -2,7 +2,7 @@
 
 import pytest
 
-from openjd.model.v1 import TemplateSpecificationVersion
+from openjd.model._v1 import TemplateSpecificationVersion
 
 
 class TestTemplateSpecificationVersion:

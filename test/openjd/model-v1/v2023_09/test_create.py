@@ -5,8 +5,8 @@
 
 from decimal import Decimal
 
-from openjd.model.v1 import ParameterValue, ParameterValueType, create_job, decode_job_template
-from openjd.model.v1.v2023_09 import (
+from openjd.model._v1 import ParameterValue, ParameterValueType, create_job, decode_job_template
+from openjd.model._v1.v2023_09 import (
     Action,
     AmountRequirement,
     AttributeRequirement,

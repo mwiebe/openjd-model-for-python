@@ -6,7 +6,7 @@ import pstats
 import io
 import logging
 import pytest
-from openjd.model.v1 import create_job, decode_job_template
+from openjd.model._v1 import create_job, decode_job_template
 
 # Configure logging
 logging.basicConfig(

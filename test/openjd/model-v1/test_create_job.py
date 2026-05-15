@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 from typing import Any
 
-from openjd.model.v1 import (
+from openjd.model._v1 import (
     DecodeValidationError,
     JobParameterInputValues,
     JobParameterType,
@@ -18,7 +18,7 @@ from openjd.model.v1 import (
     decode_job_template,
     decode_environment_template,
 )
-from openjd.model.v1.v2023_09 import (
+from openjd.model._v1.v2023_09 import (
     Job as Job_2023_09,
 )
 

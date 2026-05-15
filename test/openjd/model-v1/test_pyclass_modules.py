@@ -3,15 +3,15 @@
 
 """Verify every Rust-backed PyO3 class advertises the module where it is
 conceptually exposed (e.g. `openjd.expr.FormatString`,
-`openjd.model.v1.Job`, `openjd.sessions.v1.Session`) rather than the
+`openjd.model._v1.Job`, `openjd.sessions.v1.Session`) rather than the
 default `builtins`.
 
 The module string is compiled into the class by the `#[pyclass(module = ...)]`
 attribute on the Rust side, and surfaces via:
 
 * ``cls.__module__``
-* ``repr(cls)``            (`<class 'openjd.model.v1.Job'>`)
-* ``pickle`` / error messages (`TypeError: cannot create 'openjd.model.v1.X'`)
+* ``repr(cls)``            (`<class 'openjd.model._v1.Job'>`)
+* ``pickle`` / error messages (`TypeError: cannot create 'openjd.model._v1.X'`)
 
 A class reporting `builtins` is a bug — it breaks pickling, makes error
 messages unhelpful, and fools tools (Sphinx, IDEs) into looking for the
@@ -39,32 +39,32 @@ EXPECTED_MODULES: dict[str, str] = {
     "RangeExpr": "openjd.expr",
     "SymbolTable": "openjd.expr",
     "TypeCode": "openjd.expr",
-    # openjd.model.v1
-    "Action": "openjd.model.v1",
-    "CancelationMode": "openjd.model.v1",
-    "DocumentType": "openjd.model.v1",
-    "EmbeddedFile": "openjd.model.v1",
-    "Environment": "openjd.model.v1",
-    "EnvironmentActions": "openjd.model.v1",
-    "EnvironmentScript": "openjd.model.v1",
-    "EnvironmentTemplate": "openjd.model.v1",
-    "Job": "openjd.model.v1",
-    "JobParameter": "openjd.model.v1",
-    "JobParameterType": "openjd.model.v1",
-    "JobParameterValue": "openjd.model.v1",
-    "JobTemplate": "openjd.model.v1",
-    "Step": "openjd.model.v1",
-    "StepActions": "openjd.model.v1",
-    "StepDependency": "openjd.model.v1",
-    "StepDependencyEdge": "openjd.model.v1",
-    "StepDependencyGraph": "openjd.model.v1",
-    "StepDependencyNode": "openjd.model.v1",
-    "StepParameterSpace": "openjd.model.v1",
-    "StepParameterSpaceIterator": "openjd.model.v1",
-    "StepScript": "openjd.model.v1",
-    "TaskParameterType": "openjd.model.v1",
-    "TaskParameterValue": "openjd.model.v1",
-    "TemplateSpecificationVersion": "openjd.model.v1",
+    # openjd.model._v1
+    "Action": "openjd.model._v1",
+    "CancelationMode": "openjd.model._v1",
+    "DocumentType": "openjd.model._v1",
+    "EmbeddedFile": "openjd.model._v1",
+    "Environment": "openjd.model._v1",
+    "EnvironmentActions": "openjd.model._v1",
+    "EnvironmentScript": "openjd.model._v1",
+    "EnvironmentTemplate": "openjd.model._v1",
+    "Job": "openjd.model._v1",
+    "JobParameter": "openjd.model._v1",
+    "JobParameterType": "openjd.model._v1",
+    "JobParameterValue": "openjd.model._v1",
+    "JobTemplate": "openjd.model._v1",
+    "Step": "openjd.model._v1",
+    "StepActions": "openjd.model._v1",
+    "StepDependency": "openjd.model._v1",
+    "StepDependencyEdge": "openjd.model._v1",
+    "StepDependencyGraph": "openjd.model._v1",
+    "StepDependencyNode": "openjd.model._v1",
+    "StepParameterSpace": "openjd.model._v1",
+    "StepParameterSpaceIterator": "openjd.model._v1",
+    "StepScript": "openjd.model._v1",
+    "TaskParameterType": "openjd.model._v1",
+    "TaskParameterValue": "openjd.model._v1",
+    "TemplateSpecificationVersion": "openjd.model._v1",
     # openjd.sessions.v1
     "ActionResult": "openjd.sessions.v1",
     "ActionState": "openjd.sessions.v1",
@@ -89,10 +89,10 @@ EXPECTED_EXCEPTION_MODULES: dict[str, str] = {
     "ExpressionTypeError": "openjd.expr",
     "FormatStringValidationError": "openjd.expr",
     "RangeExprError": "openjd.expr",
-    # openjd.model.v1
-    "DecodeValidationError": "openjd.model.v1",
-    "ModelValidationError": "openjd.model.v1",
-    "UnsupportedSchema": "openjd.model.v1",
+    # openjd.model._v1
+    "DecodeValidationError": "openjd.model._v1",
+    "ModelValidationError": "openjd.model._v1",
+    "UnsupportedSchema": "openjd.model._v1",
     # openjd.sessions.v1
     "SessionError": "openjd.sessions.v1",
     "BadCredentialsException": "openjd.sessions.v1",
@@ -174,7 +174,7 @@ class TestPyClassModules:
         # The macro bakes a `Py` prefix into the class's __name__, e.g.
         # `PyDecodeValidationError`. The Rust module init's
         # `register_renamed_exception` helper strips it so tracebacks show
-        # `openjd.model.v1.DecodeValidationError: ...` rather than
+        # `openjd.model._v1.DecodeValidationError: ...` rather than
         # `_openjd_rs.PyDecodeValidationError: ...`.
         cls = getattr(_openjd_rs, class_name)
         # THEN __name__ should match the user-facing class name (no Py prefix)
@@ -251,7 +251,7 @@ class TestPyClassModules:
         # otherwise still show `_openjd_rs` as their module and would be
         # misclassified by this scan.
         import openjd.expr  # noqa: F401
-        import openjd.model.v1  # noqa: F401
+        import openjd.model._v1  # noqa: F401
         try:
             import openjd.sessions.v1  # noqa: F401
         except ImportError:

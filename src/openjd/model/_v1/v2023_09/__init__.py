@@ -1,9 +1,9 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Backward compatibility shim — re-exports from openjd.model.v1."""
+"""Backward compatibility shim — re-exports from openjd.model._v1."""
 
-from openjd.model.v1 import (
+from openjd.model._v1 import (
     Action,
     EmbeddedFile as EmbeddedFileText,
     Environment,

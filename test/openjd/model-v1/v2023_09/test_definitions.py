@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel
 from typing import Type, ForwardRef
-import openjd.model.v1.v2023_09 as mod
+import openjd.model._v1.v2023_09 as mod
 from inspect import getmembers, getmodule, isclass
 
 

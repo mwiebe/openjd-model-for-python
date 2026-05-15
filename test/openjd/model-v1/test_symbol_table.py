@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from openjd.model.v1 import SymbolTable
+from openjd.model._v1 import SymbolTable
 
 
 class TestSymbolTable:

@@ -10,7 +10,7 @@ use openjd_model::TemplateSpecificationVersion;
 use openjd_model::JobParameterType;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "DocumentType", eq, eq_int, from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "DocumentType", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq)]
 #[allow(non_camel_case_types)]
 pub(crate) enum PyDocumentType {
@@ -28,7 +28,7 @@ impl From<PyDocumentType> for DocumentType {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "TemplateSpecificationVersion", eq, eq_int, from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "TemplateSpecificationVersion", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq)]
 #[allow(non_camel_case_types)]
 pub(crate) enum PyTemplateSpecificationVersion {
@@ -77,7 +77,7 @@ impl From<TemplateSpecificationVersion> for PyTemplateSpecificationVersion {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "JobParameterType", eq, eq_int, frozen, hash, from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "JobParameterType", eq, eq_int, frozen, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq)]
 #[allow(non_camel_case_types)]
 pub(crate) enum PyJobParameterType {
@@ -159,7 +159,7 @@ impl From<JobParameterType> for PyJobParameterType {
 // ── TaskParameterType ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "TaskParameterType", eq, eq_int, from_py_object)]
+#[pyclass(module = "openjd.model._v1", name = "TaskParameterType", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum PyTaskParameterType {
     INT,
@@ -186,7 +186,7 @@ impl PyTaskParameterType {
 // ── TaskParameterValue ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "TaskParameterValue", frozen)]
+#[pyclass(module = "openjd.model._v1", name = "TaskParameterValue", frozen)]
 #[derive(Clone)]
 pub(crate) struct PyTaskParameterValue {
     #[pyo3(get)]
@@ -236,7 +236,7 @@ impl PyTaskParameterValue {
 // ── JobParameterValue ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "JobParameterValue", frozen)]
+#[pyclass(module = "openjd.model._v1", name = "JobParameterValue", frozen)]
 #[derive(Clone)]
 pub(crate) struct PyJobParameterValue {
     #[pyo3(get)]

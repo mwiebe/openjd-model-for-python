@@ -77,7 +77,7 @@ fn param_type_to_expr_type(pt: TaskParameterType) -> openjd_expr::ExprType {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model.v1", name = "StepParameterSpaceIterator")]
+#[pyclass(module = "openjd.model._v1", name = "StepParameterSpaceIterator")]
 pub(crate) struct PyStepParameterSpaceIterator {
     space: StepParameterSpace,
     len: usize,

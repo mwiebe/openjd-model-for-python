@@ -66,7 +66,7 @@ from openjd._openjd_rs import TemplateSpecificationVersion as _RustTSV
 # exceptions (DecodeValidationError, ModelValidationError, UnsupportedSchema,
 # and the openjd.expr exceptions re-imported above) are set by the
 # `_openjd_rs` module init in Rust to their canonical user-facing values
-# (e.g. `openjd.model.v1.DecodeValidationError`). No Python-side fix-up
+# (e.g. `openjd.model._v1.DecodeValidationError`). No Python-side fix-up
 # needed.
 
 

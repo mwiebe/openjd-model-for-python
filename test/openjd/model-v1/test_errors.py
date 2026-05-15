@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from openjd.model.v1 import (
+from openjd.model._v1 import (
     DecodeValidationError,
     ExpressionError,
     TokenError,

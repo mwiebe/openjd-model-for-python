@@ -5,8 +5,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from openjd.model.v1._parse import _parse_model
-from openjd.model.v1.v2023_09 import Action, EnvironmentActions, StepActions
+from openjd.model._v1._parse import _parse_model
+from openjd.model._v1.v2023_09 import Action, EnvironmentActions, StepActions
 
 
 class TestAction:

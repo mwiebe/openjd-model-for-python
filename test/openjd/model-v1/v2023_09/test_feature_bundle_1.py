@@ -4,9 +4,9 @@
 import pytest
 from pydantic import ValidationError
 
-from openjd.model.v1 import create_job, decode_job_template
-from openjd.model.v1._parse import _parse_model
-from openjd.model.v1.v2023_09 import (
+from openjd.model._v1 import create_job, decode_job_template
+from openjd.model._v1._parse import _parse_model
+from openjd.model._v1.v2023_09 import (
     Action,
     ArgString,
     AmountRequirementTemplate,
@@ -535,8 +535,8 @@ class TestCreateJobWithFormatStrings:
 
     def test_amount_requirement_min_max_resolved_valid(self) -> None:
         """Test that resolved min/max values are validated correctly."""
-        from openjd.model.v1 import create_job, decode_job_template
-        from openjd.model.v1._types import ParameterValue, ParameterValueType
+        from openjd.model._v1 import create_job, decode_job_template
+        from openjd.model._v1._types import ParameterValue, ParameterValueType
 
         template = decode_job_template(
             template={
@@ -579,9 +579,9 @@ class TestCreateJobWithFormatStrings:
 
     def test_amount_requirement_min_greater_than_max_resolved_fails(self) -> None:
         """Test that resolved min > max fails validation."""
-        from openjd.model.v1 import create_job, decode_job_template
-        from openjd.model.v1._errors import DecodeValidationError
-        from openjd.model.v1._types import ParameterValue, ParameterValueType
+        from openjd.model._v1 import create_job, decode_job_template
+        from openjd.model._v1._errors import DecodeValidationError
+        from openjd.model._v1._types import ParameterValue, ParameterValueType
 
         template = decode_job_template(
             template={
@@ -758,8 +758,8 @@ class TestJobNameLength:
 
     def test_job_name_format_string_longer_than_limit_succeeds(self) -> None:
         """Test that format string longer than limit passes if resolved value is shorter."""
-        from openjd.model.v1 import create_job, decode_job_template
-        from openjd.model.v1._types import ParameterValue, ParameterValueType
+        from openjd.model._v1 import create_job, decode_job_template
+        from openjd.model._v1._types import ParameterValue, ParameterValueType
 
         # Template name with format string is > 128 chars, but resolved is short
         long_prefix = "J" * 120
@@ -817,7 +817,7 @@ class TestEnvironmentNameLength:
 
     def test_env_name_65_chars_without_extension_fails(self) -> None:
         """Test that environment name > 64 chars fails without extension."""
-        from openjd.model.v1.v2023_09 import Environment
+        from openjd.model._v1.v2023_09 import Environment
 
         data = {"name": "E" * 65, "variables": {"FOO": "bar"}}
         with pytest.raises(ValidationError) as excinfo:
@@ -826,7 +826,7 @@ class TestEnvironmentNameLength:
 
     def test_env_name_64_chars_without_extension_succeeds(self) -> None:
         """Test that environment name = 64 chars works without extension."""
-        from openjd.model.v1.v2023_09 import Environment
+        from openjd.model._v1.v2023_09 import Environment
 
         data = {"name": "E" * 64, "variables": {"FOO": "bar"}}
         result = _parse_model(model=Environment, obj=data, context=ModelParsingContext())
@@ -834,7 +834,7 @@ class TestEnvironmentNameLength:
 
     def test_env_name_512_chars_with_extension_succeeds(self) -> None:
         """Test that environment name = 512 chars works with extension."""
-        from openjd.model.v1.v2023_09 import Environment
+        from openjd.model._v1.v2023_09 import Environment
 
         data = {"name": "E" * 512, "variables": {"FOO": "bar"}}
         result = _parse_model(model=Environment, obj=data, context=fb1_context())
@@ -842,7 +842,7 @@ class TestEnvironmentNameLength:
 
     def test_env_name_513_chars_with_extension_fails(self) -> None:
         """Test that environment name > 512 chars fails even with extension."""
-        from openjd.model.v1.v2023_09 import Environment
+        from openjd.model._v1.v2023_09 import Environment
 
         data = {"name": "E" * 513, "variables": {"FOO": "bar"}}
         with pytest.raises(ValidationError) as excinfo:

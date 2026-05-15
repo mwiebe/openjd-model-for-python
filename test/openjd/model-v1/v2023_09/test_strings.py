@@ -6,7 +6,7 @@ import string
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from openjd.model.v1.v2023_09 import (
+from openjd.model._v1.v2023_09 import (
     AmountCapabilityName,
     ArgString,
     AttributeCapabilityName,
