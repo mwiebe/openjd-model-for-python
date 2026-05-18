@@ -5,6 +5,21 @@
 **Reference branch:** `openjd-sessions-for-python` @ `mainline` (commit `9e28bc5`) vs. `bindings-rs` (commit `0ce8bd7`)
 **Active workspace:** `/home/markw/openjd-model-for-python`
 
+> **Status note (2026-05-18, post `reshape-profiles`):** None of the
+> recommendations in this report are addressed by the
+> `ExprProfile` / `ModelProfile` reshape on the `openjd-model-for-python`
+> side. That work changed the inputs to expr and model entry points
+> (`evaluate_expression(profile=…)`, `decode_*_template(supported_extensions=…)`,
+> `JobTemplate.profile`), but the Session layer is above those and
+> still passes `path_mapping_rules` and `revision_extensions` to its
+> binding constructor. Consequently every regression listed below
+> reproduces unchanged on the post-reshape build (verified via
+> `git diff` of pytest output between `bindings-rs` and
+> `reshape-profiles`). The reshape did, however, produce the
+> `ModelProfile` / `ExprProfile` types that recommendation #5
+> (plumb `revision_extensions` to the binding) would consume —
+> the foundation is in place; the wiring is not.
+
 ## Executive Summary
 
 The Rust-backed `openjd.sessions` bindings under evaluation are **not yet a faithful drop-in for the pure-Python reference**. The new architecture (a `PySession` PyO3 wrapper that owns the Rust `Session`, plus a thin Python wrapper that emulates the legacy non-blocking callback semantics with a poll thread) is sound in shape, but the surface has many regressions that affect callers. The most material problems:

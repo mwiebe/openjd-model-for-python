@@ -744,6 +744,16 @@ proves the gap so it can be fixed and the proof regenerated.
     through `decode_job_template` again. Resolves
     `test/openjd/model-v1/test_known_gaps.py::test_job_template_specification_version_camelcase`.
 
+    **Partially resolved.** `JobTemplate.profile` now exposes the
+    declared revision and extensions list as a typed `ModelProfile`
+    (mirrors `JobTemplate::profile()` in the Rust crate). See
+    `rust-bindings/src/model/template.rs:49`. Read the template's
+    `extensions:` field via `template.profile.extensions`. Still
+    missing: `specificationVersion` (camelCase accessor),
+    `parameter_definitions`, `steps`, `job_environments`, full
+    `EnvironmentTemplate.environment` body. The xfail test
+    `test_job_template_specification_version_camelcase` is unchanged.
+
 12. **Map `ModelError::FormatStringError` → `FormatStringError`, not
     `ModelValidationError`.** File: `rust-bindings/src/model/errors.rs`.
     The current `model_err_to_py` collapses three distinct exception
@@ -767,6 +777,18 @@ proves the gap so it can be fixed and the proof regenerated.
     `graph.step_names` snippets to match the property/method shape
     actually implemented. Document that `JobParameterType` is hashable
     and pickleable but `TaskParameterType` and `DocumentType` are not.
+
+    **Partially resolved.** Added a Profile section documenting
+    `ModelProfile`, `ModelExtension`, `SpecificationRevision`,
+    `CallerLimits`, `ValidationContext`. Updated the
+    `decode_job_template` example to show the Rust-aligned
+    `supported_extensions=[<str>, ...]` + `caller_limits=` signature
+    and the `template.profile` getter. The other items in this
+    recommendation (parse_model, document_string_to_object,
+    decode_template, STANDARD_*, validate_*_capability_name,
+    evaluate_let_bindings, deserialize_step, create_environment,
+    JobParameterValue, TaskParameterValue, StepDependencyNode,
+    StepDependencyEdge) remain undocumented.
 
 15. **Regenerate `src/openjd/_openjd_rs.pyi` via
     `cargo run --bin stub_gen --features stub-gen`.** The current file

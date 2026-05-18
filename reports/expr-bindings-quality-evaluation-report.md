@@ -12,11 +12,15 @@ pure-Python reference and pass all 1550 existing parity tests, but **three
 bugs and several minor parity gaps prevent them from being a 100% drop-in
 replacement**:
 
-1. `path_mapping_rules=` is silently ignored on `ParsedExpression.evaluate()`,
+1. ~~`path_mapping_rules=` is silently ignored on `ParsedExpression.evaluate()`,
    `FormatString.resolve_string()`, and `FormatString.resolve()` (three TODOs
    in the binding source). Code that relies on the spec-documented kwarg
    gets wrong, non-mapped results without any error. `evaluate_expression()`
-   *does* honor it, so the inconsistency is silent.
+   *does* honor it, so the inconsistency is silent.~~ **Resolved** by the
+   reshape that replaced the per-call `path_mapping_rules=` kwarg with a
+   `profile=` kwarg on every entry point. Path-mapping rules now live inside
+   `ExprProfile.with_host_context(HostContext.with_rules(rules))`. See
+   recommendation 1 below.
 2. Target-type handling does not follow RFC 0005's "operators evaluate
    operands unconstrained" rule. `evaluate_expression("Param.Count - 1",
    values={"Param.Count": 100}, target_type=ExprType("string"))` raises
@@ -551,7 +555,7 @@ Numbered for the [report-driven workflow in
 Priority order: 1–3 are correctness regressions, 4–9 are spec/parity
 fixes, 10+ are hygiene/UX.
 
-1. **Honor `path_mapping_rules=` in `ParsedExpression.evaluate`,
+1. ~~**Honor `path_mapping_rules=` in `ParsedExpression.evaluate`,
    `FormatString.resolve_string`, and `FormatString.resolve`.** Three
    `let _ = path_mapping_rules; // TODO` lines in
    `rust-bindings/src/expr/parsed_expression.rs:102` and
@@ -563,7 +567,18 @@ fixes, 10+ are hygiene/UX.
    Tests `test_parsed_expression_evaluate_applies_path_mapping_rules`,
    `test_format_string_resolve_string_applies_path_mapping_rules`, and
    `test_format_string_resolve_applies_path_mapping_rules` in
-   `test/openjd/expr/test_known_gaps.py` exercise the fix.
+   `test/openjd/expr/test_known_gaps.py` exercise the fix.~~ **Resolved**
+   by the reshape that exposes `ExprRevision`, `ExprExtension`,
+   `HostContext`, and `ExprProfile` in `openjd.expr`, replaces the
+   per-call `path_mapping_rules=` kwarg with `profile=` on
+   `evaluate_expression`, `ParsedExpression.evaluate`, `FormatString.resolve`,
+   and `FormatString.resolve_string`, and replaces
+   `FunctionLibrary().with_host_context()` /
+   `with_unresolved_host_context()` with `FunctionLibrary.for_profile(profile)`.
+   Path-mapping rules now live inside `HostContext.with_rules(rules)`.
+   See `rust-bindings/src/expr/profile.rs` and the migrated tests in
+   `test/openjd/expr/test_known_gaps.py` (the three originally-xfail
+   tests are now passing).
 
 2. **Fix target-type propagation through operators.** `evaluate_expression`
    should follow RFC 0005 ("operators evaluate operands unconstrained"):
