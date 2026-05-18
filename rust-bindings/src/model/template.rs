@@ -8,6 +8,7 @@ use pyo3_stub_gen::derive::*;
 use openjd_model::{JobTemplate, EnvironmentTemplate};
 use openjd_model::TemplateSpecificationVersion;
 
+use super::profile::PyModelProfile;
 use super::types::PyTemplateSpecificationVersion;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
@@ -36,6 +37,17 @@ impl PyJobTemplate {
     #[getter]
     fn description(&self) -> Option<String> {
         self.inner.description.as_ref().map(|d| d.0.clone())
+    }
+
+    /// The [`ModelProfile`](crate::model::profile::PyModelProfile)
+    /// described by this template: the revision from
+    /// `specificationVersion` and the extensions set declared on
+    /// the template's `extensions:` field.
+    ///
+    /// Mirrors `JobTemplate::profile()` in the underlying Rust crate.
+    #[getter]
+    fn profile(&self) -> PyModelProfile {
+        PyModelProfile { inner: self.inner.profile() }
     }
 
     fn __repr__(&self) -> String {

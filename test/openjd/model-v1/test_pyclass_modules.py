@@ -29,10 +29,14 @@ from openjd import _openjd_rs
 # the module that class's `__module__` should report.
 EXPECTED_MODULES: dict[str, str] = {
     # openjd.expr
+    "ExprExtension": "openjd.expr",
+    "ExprProfile": "openjd.expr",
+    "ExprRevision": "openjd.expr",
     "ExprType": "openjd.expr",
     "ExprValue": "openjd.expr",
     "FormatString": "openjd.expr",
     "FunctionLibrary": "openjd.expr",
+    "HostContext": "openjd.expr",
     "ParsedExpression": "openjd.expr",
     "PathFormat": "openjd.expr",
     "PathMappingRule": "openjd.expr",
@@ -41,6 +45,7 @@ EXPECTED_MODULES: dict[str, str] = {
     "TypeCode": "openjd.expr",
     # openjd.model._v1
     "Action": "openjd.model._v1",
+    "CallerLimits": "openjd.model._v1",
     "CancelationMode": "openjd.model._v1",
     "DocumentType": "openjd.model._v1",
     "EmbeddedFile": "openjd.model._v1",
@@ -53,6 +58,9 @@ EXPECTED_MODULES: dict[str, str] = {
     "JobParameterType": "openjd.model._v1",
     "JobParameterValue": "openjd.model._v1",
     "JobTemplate": "openjd.model._v1",
+    "ModelExtension": "openjd.model._v1",
+    "ModelProfile": "openjd.model._v1",
+    "SpecificationRevision": "openjd.model._v1",
     "Step": "openjd.model._v1",
     "StepActions": "openjd.model._v1",
     "StepDependency": "openjd.model._v1",
@@ -65,6 +73,7 @@ EXPECTED_MODULES: dict[str, str] = {
     "TaskParameterType": "openjd.model._v1",
     "TaskParameterValue": "openjd.model._v1",
     "TemplateSpecificationVersion": "openjd.model._v1",
+    "ValidationContext": "openjd.model._v1",
     # openjd.sessions._v1
     "ActionResult": "openjd.sessions._v1",
     "ActionState": "openjd.sessions._v1",

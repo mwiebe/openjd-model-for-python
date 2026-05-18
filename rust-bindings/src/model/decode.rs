@@ -10,6 +10,7 @@ use openjd_model::parse::DocumentType;
 use openjd_model::CallerLimits;
 
 use super::errors::model_err_to_py;
+use super::profile::PyCallerLimits;
 use super::types::PyDocumentType;
 use super::template::{PyJobTemplate, PyEnvironmentTemplate};
 
@@ -30,50 +31,59 @@ fn dict_to_json_value(template: &Bound<'_, PyDict>) -> PyResult<serde_json::Valu
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
-/// Borrow `Option<Vec<String>>` as `Option<&[&str]>` for the Rust API.
-fn as_supported_slice(v: &Option<Vec<String>>) -> Option<Vec<&str>> {
+/// Borrow the Python `Vec<String>` allowlist as the `&[&str]` form
+/// the Rust crate's `decode_*_template` expects.
+fn as_str_slice(v: &Option<Vec<String>>) -> Option<Vec<&str>> {
     v.as_ref().map(|exts| exts.iter().map(String::as_str).collect())
+}
+
+fn limits_or_default(c: Option<&PyCallerLimits>) -> CallerLimits {
+    c.map(|c| c.inner.clone()).unwrap_or_default()
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction(module = "openjd._openjd_rs"))]
 #[pyfunction]
-#[pyo3(signature = (document, format=PyDocumentType::YAML, supported_extensions=None))]
+#[pyo3(signature = (document, format=PyDocumentType::YAML, *, supported_extensions=None, caller_limits=None))]
 pub(crate) fn decode_job_template_str(
     document: &str,
     format: PyDocumentType,
     supported_extensions: Option<Vec<String>>,
+    caller_limits: Option<&PyCallerLimits>,
 ) -> PyResult<PyJobTemplate> {
     let value = parse_string(document, format)?;
-    let exts = as_supported_slice(&supported_extensions);
-    let jt = openjd_model::decode_job_template(value, exts.as_deref(), &CallerLimits::default())
+    let exts = as_str_slice(&supported_extensions);
+    let limits = limits_or_default(caller_limits);
+    let jt = openjd_model::decode_job_template(value, exts.as_deref(), &limits)
         .map_err(model_err_to_py)?;
     Ok(PyJobTemplate { inner: jt })
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction(module = "openjd._openjd_rs"))]
 #[pyfunction]
-#[pyo3(signature = (template, supported_extensions=None))]
+#[pyo3(signature = (template, *, supported_extensions=None, caller_limits=None))]
 pub(crate) fn decode_job_template_dict(
     template: &Bound<'_, PyDict>,
     supported_extensions: Option<Vec<String>>,
+    caller_limits: Option<&PyCallerLimits>,
 ) -> PyResult<PyJobTemplate> {
     let value = dict_to_json_value(template)?;
-    let exts = as_supported_slice(&supported_extensions);
-    let jt = openjd_model::decode_job_template(value, exts.as_deref(), &CallerLimits::default())
+    let exts = as_str_slice(&supported_extensions);
+    let limits = limits_or_default(caller_limits);
+    let jt = openjd_model::decode_job_template(value, exts.as_deref(), &limits)
         .map_err(model_err_to_py)?;
     Ok(PyJobTemplate { inner: jt })
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction(module = "openjd._openjd_rs"))]
 #[pyfunction]
-#[pyo3(signature = (document, format=PyDocumentType::YAML, supported_extensions=None))]
+#[pyo3(signature = (document, format=PyDocumentType::YAML, *, supported_extensions=None))]
 pub(crate) fn decode_environment_template_str(
     document: &str,
     format: PyDocumentType,
     supported_extensions: Option<Vec<String>>,
 ) -> PyResult<PyEnvironmentTemplate> {
     let value = parse_string(document, format)?;
-    let exts = as_supported_slice(&supported_extensions);
+    let exts = as_str_slice(&supported_extensions);
     let et = openjd_model::decode_environment_template(value, exts.as_deref())
         .map_err(model_err_to_py)?;
     Ok(PyEnvironmentTemplate { inner: et })
@@ -81,13 +91,13 @@ pub(crate) fn decode_environment_template_str(
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction(module = "openjd._openjd_rs"))]
 #[pyfunction]
-#[pyo3(signature = (template, supported_extensions=None))]
+#[pyo3(signature = (template, *, supported_extensions=None))]
 pub(crate) fn decode_environment_template_dict(
     template: &Bound<'_, PyDict>,
     supported_extensions: Option<Vec<String>>,
 ) -> PyResult<PyEnvironmentTemplate> {
     let value = dict_to_json_value(template)?;
-    let exts = as_supported_slice(&supported_extensions);
+    let exts = as_str_slice(&supported_extensions);
     let et = openjd_model::decode_environment_template(value, exts.as_deref())
         .map_err(model_err_to_py)?;
     Ok(PyEnvironmentTemplate { inner: et })

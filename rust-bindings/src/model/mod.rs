@@ -3,6 +3,7 @@
 
 pub(crate) mod errors;
 pub(crate) mod types;
+pub(crate) mod profile;
 pub(crate) mod template;
 pub(crate) mod decode;
 pub(crate) mod job;
@@ -12,6 +13,7 @@ pub(crate) mod step_dependency_graph;
 
 pub(crate) use errors::{PyDecodeValidationError, PyModelValidationError, PyUnsupportedSchema};
 pub(crate) use types::{PyDocumentType, PyTemplateSpecificationVersion, PyJobParameterType, PyTaskParameterType, PyTaskParameterValue, PyJobParameterValue};
+pub(crate) use profile::{PyCallerLimits, PyModelExtension, PyModelProfile, PySpecificationRevision, PyValidationContext};
 pub(crate) use template::{PyJobTemplate, PyEnvironmentTemplate};
 pub(crate) use decode::{decode_job_template_str, decode_environment_template_str, decode_job_template_dict, decode_environment_template_dict};
 pub(crate) use job::{

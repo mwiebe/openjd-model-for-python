@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use pyo3::prelude::*;
+use pyo3::types::PyType;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
-use openjd_expr::profile::{ExprProfile, HostContext};
+use openjd_expr::profile::ExprProfile;
 use openjd_expr::FunctionLibrary;
 
-use crate::expr::path_mapping::PyPathMappingRule;
+use crate::expr::profile::PyExprProfile;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.expr", name = "FunctionLibrary", from_py_object)]
@@ -20,38 +21,30 @@ pub(crate) struct PyFunctionLibrary {
 #[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl PyFunctionLibrary {
+    /// Build a library for the default profile (current revision, no
+    /// extensions, no host context). Equivalent to
+    /// `FunctionLibrary.for_profile(ExprProfile.current())`.
     #[new]
     fn new() -> Self {
         let lib = FunctionLibrary::for_profile(&ExprProfile::current());
         PyFunctionLibrary { inner: (*lib).clone() }
     }
 
+    /// Build (or fetch from the per-profile cache) the library
+    /// matching the given profile. The Rust crate's profile cache
+    /// keys on revision + extensions + host-kind, so callers that
+    /// reuse the same profile reuse the same `Arc<FunctionLibrary>`.
+    #[classmethod]
+    fn for_profile(_cls: &Bound<'_, PyType>, profile: &PyExprProfile) -> Self {
+        let lib = FunctionLibrary::for_profile(&profile.inner);
+        PyFunctionLibrary { inner: (*lib).clone() }
+    }
+
+    /// True iff this library has any host-context functions
+    /// registered (today: `apply_path_mapping`).
     #[getter]
     fn host_context_enabled(&self) -> bool {
         self.inner.host_context_enabled
-    }
-
-    #[pyo3(signature = (path_mapping_rules=None))]
-    fn with_host_context(&self, path_mapping_rules: Option<Vec<PyPathMappingRule>>) -> Self {
-        let rules: Vec<openjd_expr::path_mapping::PathMappingRule> = path_mapping_rules
-            .unwrap_or_default()
-            .into_iter()
-            .map(|r| r.inner)
-            .collect();
-        let host_ctx = if rules.is_empty() {
-            HostContext::WithRules(std::sync::Arc::new(Vec::new()))
-        } else {
-            HostContext::with_rules(rules)
-        };
-        let profile = ExprProfile::current().with_host_context(host_ctx);
-        let lib = FunctionLibrary::for_profile(&profile);
-        PyFunctionLibrary { inner: (*lib).clone() }
-    }
-
-    fn with_unresolved_host_context(&self) -> Self {
-        let profile = ExprProfile::current().with_host_context(HostContext::Unresolved);
-        let lib = FunctionLibrary::for_profile(&profile);
-        PyFunctionLibrary { inner: (*lib).clone() }
     }
 
     fn __repr__(&self) -> &'static str {

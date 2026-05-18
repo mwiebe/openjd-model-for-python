@@ -4,7 +4,9 @@ import pytest
 
 from openjd.expr import (
     evaluate_expression,
+    ExprProfile,
     FunctionLibrary,
+    HostContext,
     ExpressionError,
     PathMappingRule,
     PathFormat,
@@ -12,29 +14,31 @@ from openjd.expr import (
 
 
 class TestFunctionLibraryContext:
-    """Test that functions are available/unavailable based on context."""
+    """Test that functions are available/unavailable based on profile."""
 
     def test_default_library_no_host_context(self) -> None:
         """Default library should not have host context enabled."""
         library = FunctionLibrary()
         assert library.host_context_enabled is False
 
-    def test_with_host_context_returns_new_library(self) -> None:
-        """with_host_context should return a new library (not mutate original)."""
-        library = FunctionLibrary()
-        result = library.with_host_context()
-        assert result is not library
+    def test_for_profile_returns_new_library(self) -> None:
+        """`FunctionLibrary.for_profile(...)` returns a fresh library."""
+        default_lib = FunctionLibrary()
+        profile = ExprProfile().with_host_context(HostContext.with_rules([]))
+        result = FunctionLibrary.for_profile(profile)
+        assert result is not default_lib
         assert result.host_context_enabled is True
-        assert library.host_context_enabled is False
+        assert default_lib.host_context_enabled is False
 
-    def test_with_host_context_chaining(self) -> None:
-        """Should support FunctionLibrary().with_host_context() pattern."""
-        library = FunctionLibrary().with_host_context()
-        assert library.host_context_enabled is True
+    def test_for_profile_with_unresolved_host_context(self) -> None:
+        """`HostContext.unresolved()` enables stub host functions."""
+        profile = ExprProfile().with_host_context(HostContext.unresolved())
+        lib = FunctionLibrary.for_profile(profile)
+        assert lib.host_context_enabled is True
 
 
 class TestApplyPathMappingContext:
-    """Test apply_path_mapping availability based on context (RFC 0006)."""
+    """Test apply_path_mapping availability based on profile (RFC 0006)."""
 
     def test_not_available_without_host_context(self) -> None:
         """apply_path_mapping should error without host context."""
@@ -43,16 +47,16 @@ class TestApplyPathMappingContext:
             evaluate_expression("apply_path_mapping('/path')", library=library)
 
     def test_not_available_with_default_library(self) -> None:
-        """apply_path_mapping should error with default library."""
+        """apply_path_mapping should error with the default library."""
         with pytest.raises(ExpressionError, match="apply_path_mapping"):
             evaluate_expression("apply_path_mapping('/path')")
 
     def test_available_with_host_context(self) -> None:
-        """apply_path_mapping should work after enabling host context."""
+        """apply_path_mapping should work when host context is enabled."""
         from pathlib import PurePath
 
-        library = FunctionLibrary().with_host_context()
-        result = evaluate_expression("apply_path_mapping('/some/path')", library=library)
+        profile = ExprProfile().with_host_context(HostContext.with_rules([]))
+        result = evaluate_expression("apply_path_mapping('/some/path')", profile=profile)
         # No rules configured, path returned normalized to OS-native format
         assert str(result) == str(PurePath("/some/path"))
 
@@ -66,13 +70,12 @@ class TestApplyPathMappingContext:
         """Method syntax should work with host context."""
         from pathlib import PurePath
 
-        library = FunctionLibrary().with_host_context()
-        result = evaluate_expression("'/some/path'.apply_path_mapping()", library=library)
-        # No rules configured, path returned normalized to OS-native format
+        profile = ExprProfile().with_host_context(HostContext.with_rules([]))
+        result = evaluate_expression("'/some/path'.apply_path_mapping()", profile=profile)
         assert str(result) == str(PurePath("/some/path"))
 
     def test_with_path_mapping_rules(self, tmp_path) -> None:
-        """apply_path_mapping should apply rules when provided."""
+        """apply_path_mapping should apply rules when configured on the profile."""
         from pathlib import PurePosixPath
 
         dest = tmp_path / "new" / "path"
@@ -83,9 +86,11 @@ class TestApplyPathMappingContext:
                 destination_path=dest,
             )
         ]
-        library = FunctionLibrary().with_host_context()
+        profile = ExprProfile().with_host_context(HostContext.with_rules(rules))
 
-        result = evaluate_expression("apply_path_mapping('/old/path/file.txt')", library=library, path_mapping_rules=rules)
+        result = evaluate_expression(
+            "apply_path_mapping('/old/path/file.txt')", profile=profile
+        )
         assert str(result) == str(dest / "file.txt")
 
     def test_unmatched_path_unchanged(self, tmp_path) -> None:
@@ -100,18 +105,19 @@ class TestApplyPathMappingContext:
                 destination_path=dest,
             )
         ]
-        library = FunctionLibrary().with_host_context()
+        profile = ExprProfile().with_host_context(HostContext.with_rules(rules))
 
-        result = evaluate_expression("apply_path_mapping('/other/path/file.txt')", library=library, path_mapping_rules=rules)
-        # No rule matched, path returned normalized to OS-native format
+        result = evaluate_expression(
+            "apply_path_mapping('/other/path/file.txt')", profile=profile
+        )
         assert str(result) == str(PurePath("/other/path/file.txt"))
 
     def test_no_rules_returns_path_unchanged(self) -> None:
         """With no rules configured, path should be returned normalized to OS-native format."""
         from pathlib import PurePath
 
-        library = FunctionLibrary().with_host_context()
-        result = evaluate_expression("apply_path_mapping('/any/path')", library=library)
+        profile = ExprProfile().with_host_context(HostContext.with_rules([]))
+        result = evaluate_expression("apply_path_mapping('/any/path')", profile=profile)
         assert str(result) == str(PurePath("/any/path"))
 
 
@@ -159,33 +165,34 @@ class TestSubmissionContextFunctions:
 
 
 class TestUnresolvedHostContext:
-    """Test with_unresolved_host_context for job creation time type checking."""
+    """Test HostContext.unresolved() for job creation time type checking."""
 
-    def test_with_unresolved_host_context_returns_new_library(self) -> None:
-        library = FunctionLibrary()
-        result = library.with_unresolved_host_context()
-        assert result is not library
+    def test_for_profile_unresolved_returns_enabled_library(self) -> None:
+        default_lib = FunctionLibrary()
+        profile = ExprProfile().with_host_context(HostContext.unresolved())
+        result = FunctionLibrary.for_profile(profile)
+        assert result is not default_lib
         assert result.host_context_enabled is True
-        assert library.host_context_enabled is False
+        assert default_lib.host_context_enabled is False
 
     def test_apply_path_mapping_returns_unresolved_path(self) -> None:
         """At job creation time, apply_path_mapping returns unresolved[path]."""
-        from openjd.expr import ExprType, TypeCode
+        from openjd.expr import TypeCode
 
-        library = FunctionLibrary().with_unresolved_host_context()
-        result = evaluate_expression("apply_path_mapping('/some/path')", library=library)
+        profile = ExprProfile().with_host_context(HostContext.unresolved())
+        result = evaluate_expression("apply_path_mapping('/some/path')", profile=profile)
         assert result.type.type_code == TypeCode.UNRESOLVED
 
     def test_apply_path_mapping_method_returns_unresolved_path(self) -> None:
         """Method syntax also returns unresolved[path] at job creation time."""
         from openjd.expr import TypeCode
 
-        library = FunctionLibrary().with_unresolved_host_context()
-        result = evaluate_expression("'/some/path'.apply_path_mapping()", library=library)
+        profile = ExprProfile().with_host_context(HostContext.unresolved())
+        result = evaluate_expression("'/some/path'.apply_path_mapping()", profile=profile)
         assert result.type.type_code == TypeCode.UNRESOLVED
 
     def test_not_available_without_any_context(self) -> None:
-        """apply_path_mapping should still error without any context."""
+        """apply_path_mapping should still error without any host context."""
         library = FunctionLibrary()
         with pytest.raises(ExpressionError, match="apply_path_mapping"):
             evaluate_expression("apply_path_mapping('/path')", library=library)

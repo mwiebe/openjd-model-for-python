@@ -1,16 +1,19 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Failing tests demonstrating behavioral gaps between Rust-backed bindings and the
-pure-Python reference. These are intended as evidence for the
-`expr-bindings-quality-evaluation-report.md`. Once the gaps are fixed in the
-bindings, these tests should pass.
+"""Failing tests demonstrating behavioral gaps between the Rust-backed
+bindings and the pure-Python reference. These started life as evidence
+for `expr-bindings-quality-evaluation-report.md`. Tests for resolved
+gaps are kept as passing regression tests under their original names so
+git history shows the resolution.
 """
 
 import pytest
 from openjd.expr import (
+    ExprProfile,
+    ExprType,
     FormatString,
     FunctionLibrary,
-    ExprType,
+    HostContext,
     PathFormat,
     PathMappingRule,
     RangeExpr,
@@ -27,28 +30,36 @@ PATH_RULE = PathMappingRule(
 )
 
 
-@pytest.mark.xfail(reason="Bindings ParsedExpression.evaluate silently drops path_mapping_rules")
+# ── Resolved by the path-mapping-via-profile reshape ──────────────
+
+
+def _profile_with_rule() -> ExprProfile:
+    return ExprProfile().with_host_context(HostContext.with_rules([PATH_RULE]))
+
+
 def test_parsed_expression_evaluate_applies_path_mapping_rules():
+    """Resolved by replacing the per-call `path_mapping_rules=` kwarg with
+    `profile=` (where path-mapping rules live inside `HostContext.with_rules`)."""
     parsed = parse_expression("apply_path_mapping('/mnt/shared/file.exr')")
-    lib = FunctionLibrary().with_host_context()
-    result = parsed.evaluate(library=lib, path_mapping_rules=[PATH_RULE])
+    result = parsed.evaluate(profile=_profile_with_rule())
     assert result.item() == "/local/cache/file.exr"
 
 
-@pytest.mark.xfail(reason="Bindings FormatString.resolve_string silently drops path_mapping_rules")
 def test_format_string_resolve_string_applies_path_mapping_rules():
+    """Same resolution at the `FormatString` boundary."""
     fs = FormatString("{{apply_path_mapping('/mnt/shared/file.exr')}}")
-    lib = FunctionLibrary().with_host_context()
-    result = fs.resolve_string(SymbolTable({}), library=lib, path_mapping_rules=[PATH_RULE])
+    result = fs.resolve_string(SymbolTable({}), profile=_profile_with_rule())
     assert result == "/local/cache/file.exr"
 
 
-@pytest.mark.xfail(reason="Bindings FormatString.resolve silently drops path_mapping_rules")
 def test_format_string_resolve_applies_path_mapping_rules():
+    """And on the typed `FormatString.resolve` path."""
     fs = FormatString("{{apply_path_mapping('/mnt/shared/file.exr')}}")
-    lib = FunctionLibrary().with_host_context()
-    result = fs.resolve(SymbolTable({}), library=lib, path_mapping_rules=[PATH_RULE])
+    result = fs.resolve(SymbolTable({}), profile=_profile_with_rule())
     assert result.item() == "/local/cache/file.exr"
+
+
+# ── Still-failing gaps (xfail) ────────────────────────────────────
 
 
 @pytest.mark.xfail(
@@ -91,10 +102,12 @@ def test_range_expr_is_hashable():
 @pytest.mark.xfail(reason="Bindings PathFormat is not pickleable; reference is")
 def test_path_format_is_pickleable():
     import pickle
+
     pickle.dumps(PathFormat.POSIX)
 
 
 @pytest.mark.xfail(reason="Bindings PathMappingRule is not pickleable; reference is")
 def test_path_mapping_rule_is_pickleable():
     import pickle
+
     pickle.dumps(PATH_RULE)

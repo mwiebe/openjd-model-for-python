@@ -86,11 +86,12 @@ fn extract_env_templates(env_templates: Option<Vec<PyEnvironmentTemplate>>) -> V
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction(module = "openjd._openjd_rs"))]
 #[pyfunction(name = "create_job")]
-#[pyo3(signature = (*, job_template, job_parameter_values, environment_templates=None))]
+#[pyo3(signature = (*, job_template, job_parameter_values, environment_templates=None, validation_context=None))]
 pub(crate) fn py_create_job(
     job_template: &PyJobTemplate,
     job_parameter_values: &Bound<'_, PyDict>,
     environment_templates: Option<Vec<PyEnvironmentTemplate>>,
+    validation_context: Option<&super::profile::PyValidationContext>,
 ) -> PyResult<PyJob> {
     let env_templates = extract_env_templates(environment_templates);
     let params = extract_parameter_values(job_parameter_values)?;
@@ -105,7 +106,12 @@ pub(crate) fn py_create_job(
         }
     }
 
-    let ctx = job_template.inner.default_validation_context();
+    // Use the caller-supplied validation_context if given; otherwise
+    // derive the default one from the template's declared profile.
+    let ctx = match validation_context {
+        Some(vc) => vc.inner.clone(),
+        None => job_template.inner.default_validation_context(),
+    };
     let job = openjd_model::create_job(&job_template.inner, &params, &ctx)
         .map_err(model_err_to_py)?;
     Ok(PyJob { inner: job })

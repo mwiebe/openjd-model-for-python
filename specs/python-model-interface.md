@@ -10,36 +10,61 @@ No Pydantic dependency.
 
 #### `decode_job_template`
 
-Decode and validate a job template from a Python dict.
+Decode and validate a job template from a Python dict. Mirrors the
+Rust `openjd_model::decode_job_template` signature: takes a list of
+extension *strings* as the caller's allowlist, plus optional
+`CallerLimits`.
 
 ```python
 from openjd.model import decode_job_template
 
-template = decode_job_template(template={
-    "specificationVersion": "jobtemplate-2023-09",
-    "name": "MyRenderJob",
-    "parameterDefinitions": [
-        {"name": "Frames", "type": "STRING", "default": "1-10"},
-    ],
-    "steps": [{
-        "name": "Render",
-        "parameterSpace": {
-            "taskParameterDefinitions": [
-                {"name": "Frame", "type": "INT", "range": "{{Param.Frames}}"}
-            ]
-        },
-        "script": {
-            "actions": {
-                "onRun": {
-                    "command": "render",
-                    "args": ["--frame", "{{Task.Param.Frame}}"]
+template = decode_job_template(
+    template={
+        "specificationVersion": "jobtemplate-2023-09",
+        "name": "MyRenderJob",
+        "extensions": ["EXPR"],
+        "parameterDefinitions": [
+            {"name": "Frames", "type": "STRING", "default": "1-10"},
+        ],
+        "steps": [{
+            "name": "Render",
+            "parameterSpace": {
+                "taskParameterDefinitions": [
+                    {"name": "Frame", "type": "INT", "range": "{{Param.Frames}}"}
+                ]
+            },
+            "script": {
+                "actions": {
+                    "onRun": {
+                        "command": "render",
+                        "args": ["--frame", "{{Task.Param.Frame}}"]
+                    }
                 }
             }
-        }
-    }]
-})
-template.name  # "MyRenderJob"
+        }],
+    },
+    supported_extensions=["EXPR"],
+)
+template.name        # "MyRenderJob"
+template.profile     # ModelProfile from the *template's* declared extensions:
+                     # ModelProfile(revision=V2023_09, extensions=[EXPR])
 ```
+
+Argument semantics (matching the Rust API):
+
+* `supported_extensions` — the caller's *allowlist*. The template's
+  `extensions:` field is validated against this list; any name in the
+  template that is not both a recognized `ModelExtension` AND in this
+  list is rejected with `Unsupported extension names: ...`. Pass
+  `None` (the default) for an empty allowlist.
+* `caller_limits` — optional `CallerLimits` to tighten spec-defined
+  limits (max steps, max envs, max task count, max template size, …).
+
+The `ModelProfile` type is used as an *output* of decoding (via
+`JobTemplate.profile`) and as an *input* to other functions
+(`create_job(validation_context=...)`, `ModelProfile.to_expr_profile(host)`).
+It is not an input to `decode_*_template` itself — that function takes
+a flat list of strings, mirroring the Rust crate.
 
 #### `decode_job_template_str`
 
@@ -394,13 +419,72 @@ from openjd.model import ParameterValue, JobParameterType
 # A parameter value with its type
 pv = ParameterValue(type=JobParameterType.STRING, value="hello")
 
-from openjd.model import RevisionExtensions, SpecificationRevision
+## Profile
 
-# Track active extensions
-re = RevisionExtensions(
-    spec_rev=SpecificationRevision.v2023_09,
-    supported_extensions=["EXPR"],
+### `ModelProfile` / `ModelExtension` / `SpecificationRevision` / `CallerLimits` / `ValidationContext`
+
+Profile types that describe what features a template or job uses.
+Mirror the equivalent types in the underlying `openjd-model` Rust crate.
+
+`decode_*_template` does **not** take a `ModelProfile` — it takes a
+`supported_extensions: list[str]` allowlist (see [Decode](#decode)
+above), matching the Rust API. `ModelProfile` is an *output* of
+decoding (read it off `JobTemplate.profile`) and an *input* to
+`create_job(validation_context=...)` and to the bridge to the
+expression engine.
+
+```python
+from openjd.model import (
+    ModelProfile, ModelExtension, SpecificationRevision,
+    CallerLimits, ValidationContext,
+    decode_job_template, create_job,
 )
+
+# 1. Decode a template using the string-list allowlist (Rust-aligned).
+template = decode_job_template(template={...}, supported_extensions=["EXPR"])
+
+# 2. Read the template's declared profile back out.
+profile = template.profile        # ModelProfile(revision=V2023_09, extensions=[EXPR])
+profile.revision                  # SpecificationRevision.V2023_09
+profile.extensions                # [ModelExtension.EXPR]
+profile.has_extension(ModelExtension.EXPR)  # True
+
+# 3. Build it manually if needed (e.g. when validating against a different
+#    policy than the template declared).
+manual = ModelProfile(extensions=[ModelExtension.EXPR, ModelExtension.TASK_CHUNKING])
+ModelProfile.from_strings(SpecificationRevision.V2023_09, ["EXPR"])
+
+# 4. Pass to create_job through a ValidationContext if you want to
+#    override the template's default validation context.
+limits = CallerLimits(max_step_count=100, max_task_count=10_000)
+ctx = ValidationContext(profile, caller_limits=limits)
+job = create_job(
+    job_template=template,
+    job_parameter_values={...},
+    validation_context=ctx,   # optional; defaults to template.default_validation_context()
+)
+
+# 5. Bridge to the expression engine.
+from openjd.expr import HostContext
+expr_profile = profile.to_expr_profile(HostContext.unresolved())
+```
+
+`ModelExtension` members:
+
+| Member | String form | Notes |
+|---|---|---|
+| `TASK_CHUNKING` | `"TASK_CHUNKING"` | RFC 0001 |
+| `REDACTED_ENV_VARS` | `"REDACTED_ENV_VARS"` | RFC 0003 |
+| `FEATURE_BUNDLE_1` | `"FEATURE_BUNDLE_1"` | RFC 0004 |
+| `EXPR` | `"EXPR"` | RFC 0005 |
+
+### `RevisionExtensions` (legacy)
+
+`RevisionExtensions(spec_rev=..., supported_extensions=[...])` is a
+thin Python wrapper kept for backward compatibility with code in
+`openjd-sessions`, `openjd-cli`, and `deadline-cloud-worker-agent`.
+It exposes `.to_profile()` to convert to a `ModelProfile`. New code
+should construct a `ModelProfile` directly.
 
 from openjd.model import CancelationMethodTerminate, CancelationMethodNotifyThenTerminate
 

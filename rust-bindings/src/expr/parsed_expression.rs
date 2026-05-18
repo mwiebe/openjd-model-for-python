@@ -10,11 +10,12 @@ use pyo3_stub_gen::derive::*;
 use openjd_expr::symbol_table::SymbolTable;
 
 use crate::expr::errors::expr_err_to_py;
+use crate::expr::evaluate::library_for_call;
 use crate::expr::expr_type::PyExprType;
 use crate::expr::expr_value::PyExprValue;
 use crate::expr::function_library::PyFunctionLibrary;
 use crate::expr::path_format::PyPathFormat;
-use crate::expr::path_mapping::PyPathMappingRule;
+use crate::expr::profile::PyExprProfile;
 use crate::expr::symbol_table::extract_symtab;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
@@ -52,16 +53,16 @@ impl PyParsedExpression {
         self.inner.expression()
     }
 
-    #[pyo3(signature = (*, values=None, library=None, target_type=None, path_format=None, memory_limit=None, operation_limit=None, path_mapping_rules=None))]
+    #[pyo3(signature = (*, values=None, library=None, profile=None, target_type=None, path_format=None, memory_limit=None, operation_limit=None))]
     fn evaluate(
         &self,
         values: Option<&Bound<'_, pyo3::PyAny>>,
         library: Option<&PyFunctionLibrary>,
+        profile: Option<&PyExprProfile>,
         target_type: Option<&PyExprType>,
         path_format: Option<PyPathFormat>,
         memory_limit: Option<usize>,
         operation_limit: Option<usize>,
-        path_mapping_rules: Option<Vec<PyPathMappingRule>>,
     ) -> PyResult<PyExprValue> {
         let symtab;
         let symtab_refs: Vec<&SymbolTable> = if let Some(v) = values {
@@ -71,20 +72,8 @@ impl PyParsedExpression {
             vec![]
         };
 
-        let lib;
-        let mut builder = match library {
-            Some(l) => {
-                lib = l.inner.clone();
-                self.inner.with_library(&lib)
-            }
-            None => {
-                let arc = openjd_expr::FunctionLibrary::for_profile(
-                    &openjd_expr::profile::ExprProfile::current()
-                );
-                lib = (*arc).clone();
-                self.inner.with_library(&lib)
-            }
-        };
+        let lib = library_for_call(library, profile);
+        let mut builder = self.inner.with_library(&lib);
 
         if let Some(ml) = memory_limit {
             builder = builder.with_memory_limit(ml);
@@ -98,8 +87,6 @@ impl PyParsedExpression {
         if let Some(tt) = target_type {
             builder = builder.with_target_type(&tt.inner);
         }
-
-        let _ = path_mapping_rules; // TODO: path mapping rules on EvalBuilder
 
         let result = builder.evaluate_with_metrics(&symtab_refs).map_err(expr_err_to_py)?;
         self.last_peak_memory.store(result.peak_memory, Ordering::Relaxed);

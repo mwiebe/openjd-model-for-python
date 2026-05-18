@@ -224,32 +224,100 @@ Auto-converts Python values: `int`, `float`, `str`, `bool`, `None`, `list`,
 
 ### `FunctionLibrary`
 
-Registry of functions available during expression evaluation. The default
-library includes all built-in functions. Host-context functions like
-`apply_path_mapping` require explicit opt-in.
+Registry of functions available during expression evaluation. Built and
+cached per-profile by `FunctionLibrary.for_profile(profile)` — concurrent
+evaluations sharing the same profile reuse a single library allocation.
 
 ```python
-from openjd.expr import FunctionLibrary, evaluate_expression, PathMappingRule, PathFormat
+from openjd.expr import (
+    FunctionLibrary, ExprProfile, HostContext, PathMappingRule, PathFormat,
+    evaluate_expression,
+)
 
-# Default library (no host context)
+# Default library (no host context, no extensions, current revision)
 lib = FunctionLibrary()
 lib.host_context_enabled  # False
 
-# Enable host-context functions with path mapping rules
+# Library bound to an explicit profile
+profile = ExprProfile.current()
+lib = FunctionLibrary.for_profile(profile)
+```
+
+### `ExprRevision` / `ExprExtension` / `HostContext` / `ExprProfile`
+
+Profile types that select which functions, operators, and types are
+available for a given evaluation. Mirror the equivalent types in the
+underlying `openjd-expr` Rust crate.
+
+```python
+from openjd.expr import (
+    ExprProfile, ExprRevision, ExprExtension, HostContext,
+    PathMappingRule, PathFormat,
+)
+
+# Empty profile: current revision, no extensions, no host context.
+ExprProfile()  # same as ExprProfile.current()
+ExprProfile.current()
+ExprProfile.latest()  # current revision + every known extension (intentionally
+                      # unstable across crate versions; use ExprProfile.current()
+                      # if you want stable parse behavior)
+
+# Builder-style — every with_* method returns a new profile.
+profile = ExprProfile().with_host_context(HostContext.unresolved())
+
+# Three host-context states, mirroring openjd_expr::HostContext:
+HostContext.none()                      # default — apply_path_mapping is not registered
+HostContext.unresolved()                # template-validation time — returns unresolved[T]
+HostContext.with_rules([rule, ...])     # runtime — real apply_path_mapping with rules
+
+# Inspecting a profile
+profile.revision      # ExprRevision.V2026_02
+profile.extensions    # [] today
+profile.host_context  # HostContext.unresolved()
+profile.has_extension(ext)  # False today
+```
+
+`ExprExtension` is empty today — no expression-level extensions exist
+yet — but the type is reserved for the first one. `ExprExtension.ALL`
+returns `[]` today and will grow as new variants land.
+
+### Path-mapping in evaluation
+
+Path-mapping rules are *part of the profile*, not a per-call kwarg. To
+evaluate `apply_path_mapping(...)` against a real rule set:
+
+```python
+from openjd.expr import (
+    ExprProfile, FunctionLibrary, HostContext, PathFormat, PathMappingRule,
+    evaluate_expression,
+)
+
 rules = [PathMappingRule(
     source_path_format=PathFormat.POSIX,
     source_path="/mnt/shared",
     destination_path="/local/cache",
 )]
-lib = FunctionLibrary().with_host_context()
+
+# Build the profile once; every entry point accepts profile=.
+profile = ExprProfile().with_host_context(HostContext.with_rules(rules))
+
 evaluate_expression(
     "apply_path_mapping('/mnt/shared/file.exr')",
-    library=lib,
-    path_mapping_rules=rules,
+    profile=profile,
 ).item()  # "/local/cache/file.exr"
 
-# For job creation time (returns unresolved types)
-lib = FunctionLibrary().with_unresolved_host_context()
+# Or build the library once and pass library= for repeated use:
+lib = FunctionLibrary.for_profile(profile)
+evaluate_expression("apply_path_mapping('/x')", library=lib)
+```
+
+For template-validation type-checking (where rules aren't known yet but
+function signatures need to be) use `HostContext.unresolved()`:
+
+```python
+profile = ExprProfile().with_host_context(HostContext.unresolved())
+evaluate_expression("apply_path_mapping('/p')", profile=profile)
+# returns ExprValue.unresolved("path")
 ```
 
 ### `ParsedExpression`

@@ -65,6 +65,10 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTypeCode>()?;
     m.add_class::<PyExprValue>()?;
     m.add_class::<PySymbolTable>()?;
+    m.add_class::<PyExprRevision>()?;
+    m.add_class::<PyExprExtension>()?;
+    m.add_class::<PyHostContext>()?;
+    m.add_class::<PyExprProfile>()?;
     m.add_class::<PyFunctionLibrary>()?;
     m.add_class::<PyParsedExpression>()?;
     m.add_class::<PyPathMappingRule>()?;
@@ -107,6 +111,11 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // ── Model types ──
     m.add_class::<PyDocumentType>()?;
     m.add_class::<PyTemplateSpecificationVersion>()?;
+    m.add_class::<PySpecificationRevision>()?;
+    m.add_class::<PyModelExtension>()?;
+    m.add_class::<PyModelProfile>()?;
+    m.add_class::<PyCallerLimits>()?;
+    m.add_class::<PyValidationContext>()?;
     m.add_class::<PyJobParameterType>()?;
     m.add_class::<PyTaskParameterType>()?;
     m.add_class::<PyTaskParameterValue>()?;

@@ -25,6 +25,14 @@ from openjd._openjd_rs import (
     TypeCode,
     DEFAULT_MEMORY_LIMIT,
     DEFAULT_OPERATION_LIMIT,
+    # Profile types — pass to FunctionLibrary.for_profile(...) and to
+    # evaluate_expression / ParsedExpression.evaluate / FormatString.resolve*
+    # via the `profile=` kwarg. Mirror openjd_expr's profile module:
+    # https://github.com/OpenJobDescription/openjd-rs/blob/main/crates/openjd-expr/src/profile.rs
+    ExprProfile,
+    ExprRevision,
+    ExprExtension,
+    HostContext,
 )
 
 
@@ -34,25 +42,34 @@ from openjd._openjd_rs import (
 # (e.g. `openjd.expr.ExpressionError`). No Python-side fix-up needed.
 
 __all__ = [
+    # Types
     "ExprType",
     "TypeCode",
     "ExprValue",
     "SymbolTable",
     "FunctionLibrary",
-    "get_default_library",
-    "evaluate_expression",
-    "parse_expression",
     "ParsedExpression",
-    "ExpressionError",
-    "ExpressionTypeError",
     "PathMappingRule",
     "PathFormat",
     "RangeExpr",
-    "RangeExprError",
     "FormatString",
-    "FormatStringValidationError",
-    "escape_format_string",
+    # Profile
+    "ExprProfile",
+    "ExprRevision",
+    "ExprExtension",
+    "HostContext",
+    # Functions
+    "get_default_library",
+    "evaluate_expression",
+    "parse_expression",
     "evaluate_let_bindings",
+    "escape_format_string",
+    # Errors
+    "ExpressionError",
+    "ExpressionTypeError",
+    "RangeExprError",
+    "FormatStringValidationError",
+    # Constants
     "DEFAULT_MEMORY_LIMIT",
     "DEFAULT_OPERATION_LIMIT",
 ]
