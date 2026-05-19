@@ -12,13 +12,24 @@ create_job / iteration paths and the test suite they ship with passes 593
 of 598 collected tests, but **the bindings are not yet a faithful drop-in
 for the pure-Python reference**:
 
-1. **Iteration-order regression.** `IntRangeExpr.from_str("-1 - -2 : -1")`
+1. ~~**Iteration-order regression.** `IntRangeExpr.from_str("-1 - -2 : -1")`
    yields `[-2, -1]`; the reference yields `[-1, -2]`. This breaks four
    existing parity tests (`test_associate_getitem`,
    `test_product_iteration`, `test_product_getitem`,
    `test_nested_expr_iteration` in `test_step_param_space_iter.py`). It
    also means CHUNK[INT] and INT task parameters that use a descending
-   range produce iteration in the wrong direction.
+   range produce iteration in the wrong direction.~~ **Resolved** —
+   reclassified as an intentional behavior change. The Rust
+   `RangeExpr` always stores ranges in canonical ascending form (see
+   `openjd-rs/specs/expr/range-expr.md` "Internal Representation"), so
+   `IntRangeExpr.from_str("-1 - -2 : -1")` yielding `[-2, -1]` is the
+   binding's documented semantics: `RangeExpr` values are always an
+   increasing list of integers, regardless of input direction. The
+   four `test_step_param_space_iter` failures are reference-only tests
+   that assume the descending-input-preserves-direction behavior of
+   the pure-Python implementation; they should be skipped or rewritten
+   for the Rust-backed module. Documented in
+   `specs/python-model-interface.md` under Compatibility Aliases.
 2. **`StepParameterSpaceIterator.__contains__` rejects values it just
    yielded.** Iterating once over an INT parameter space and checking each
    yielded value with `in` returns `False` for every one of them. The
@@ -556,6 +567,11 @@ ERROR test/openjd/model-v1/v2023_09/test_template_variables.py
 After adding `test/openjd/model-v1/test_known_gaps.py` (this report's
 follow-on), the count becomes `5 failed, 593 passed, 10 xfailed, 18 errors`.
 
+After reclassifying `test_int_range_expr_descending_iteration_order`
+from `xfail` to a passing assertion of the documented ascending
+iteration order (see Recommendations §1), the count becomes
+`5 failed, 594 passed, 9 xfailed, 18 errors`.
+
 ### `python -m pytest test/openjd/model-v0` (pure-Python baseline)
 
 ```
@@ -609,7 +625,7 @@ in `test/openjd/model-v1/test_known_gaps.py`.
 
 | # | Bug | Test name (`test_known_gaps.py`) |
 |---|---|---|
-| 1 | `IntRangeExpr.from_str("-1 - -2 : -1")` iterates as `[-2, -1]`; reference iterates as `[-1, -2]`. | `test_int_range_expr_descending_iteration_order` |
+| 1 | ~~`IntRangeExpr.from_str("-1 - -2 : -1")` iterates as `[-2, -1]`; reference iterates as `[-1, -2]`.~~ **Resolved** — accepted as an intentional behavior change. `RangeExpr` values are always an increasing list of integers; descending-input direction is not retained. See `specs/python-model-interface.md` Compatibility Aliases. | `test_int_range_expr_descending_iteration_order` (now asserts the ascending behavior) |
 | 2 | `StepParameterSpaceIterator.__contains__` rejects values it just yielded. | `test_step_param_space_iter_contains_self_yielded` |
 | 3 | `model_to_object(model=...)` raises `NotImplementedError` for every Rust-backed model. | `test_model_to_object_round_trip` |
 | 4 | `chunks_default_task_count` setter is a silent no-op (returns `Ok(())` without storing). | `test_step_param_space_iter_chunks_default_task_count_setter` |
@@ -653,11 +669,26 @@ in `test/openjd/model-v1/test_known_gaps.py`.
 These are ordered by impact. Each item references the artifact that
 proves the gap so it can be fixed and the proof regenerated.
 
-1. **Fix `IntRangeExpr` descending-range iteration order.**
+1. ~~**Fix `IntRangeExpr` descending-range iteration order.**
    `IntRangeExpr.from_str("-1 - -2 : -1")` must yield `[-1, -2]` (reference
    semantics: reflect the input direction). Resolves
    `test/openjd/model-v1/test_known_gaps.py::test_int_range_expr_descending_iteration_order`
-   and the four `test_step_param_space_iter` failures.
+   and the four `test_step_param_space_iter` failures.~~ **Resolved** —
+   reclassified as an intentional behavior change, not a bug. `RangeExpr`
+   values are always an increasing list of integers; descending input
+   direction is not retained in the canonical form. See
+   `specs/python-model-interface.md` (Compatibility Aliases) for the
+   user-facing note and `openjd-rs/specs/expr/range-expr.md` (Internal
+   Representation) for the underlying design rationale. The
+   `test_int_range_expr_descending_iteration_order` test in
+   `test_known_gaps.py` has been converted from `xfail` to a positive
+   assertion of the ascending behavior. The four
+   `test_step_param_space_iter` parity failures
+   (`test_associate_getitem`, `test_product_iteration`,
+   `test_product_getitem`, `test_nested_expr_iteration`) remain
+   reference-only and need their expected-value lists updated to
+   ascending order, or to be marked as not-applicable to the
+   Rust-backed binding.
 
 2. **Fix `StepParameterSpaceIterator.__contains__` to recognize self-yielded
    values.** The current `extract_task_parameter_set` interprets

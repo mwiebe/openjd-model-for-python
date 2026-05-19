@@ -4,12 +4,17 @@
 Regression tests demonstrating known parity gaps between the openjd.model._v1
 Rust-backed bindings and the pure-Python reference implementation.
 
-Each test should *fail* against the current bindings — they document the
-gaps. Mark them xfail so CI is honest about the gap until the underlying
-bug is fixed.
+Most tests in this file should *fail* against the current bindings — they
+document the gaps. Those are marked `xfail` so CI is honest about the gap
+until the underlying bug is fixed.
+
+Some entries instead document **intentional** behavior changes. They pass
+under the bindings, encode the difference, and reference the spec note
+that calls it out (see, e.g., `test_int_range_expr_descending_iteration_order`).
 
 Cross-reference:
 - /home/markw/openjd-model-for-python/reports/model-bindings-quality-evaluation-report.md
+- /home/markw/openjd-model-for-python/specs/python-model-interface.md
 """
 
 import pickle
@@ -30,13 +35,29 @@ from openjd.model._v1 import (
 )
 
 
-@pytest.mark.xfail(strict=True, reason="Issue: descending IntRangeExpr.from_str loses input order")
 def test_int_range_expr_descending_iteration_order():
-    # Reference: IntRangeExpr.from_str('-1 - -2 : -1') iterates as [-1, -2]
-    # because IntRange normalises to positive step but stores _start = end of
-    # the input range.
+    # Documented behavior change versus the pure-Python reference:
+    # RangeExpr values are always an increasing list of integers,
+    # regardless of input direction. The Rust IntRange normalises
+    # descending input to canonical ascending form, and iteration
+    # walks that canonical form.
+    #
+    # The pure-Python reference preserves the user-supplied direction
+    # and would iterate as [-1, -2] for the same input.
+    #
+    # See:
+    # - specs/python-model-interface.md
+    #   "Behavior change: RangeExpr iteration is always ascending"
+    # - openjd-rs/specs/expr/range-expr.md
+    #   "Internal Representation" (canonical ascending form)
     r = IntRangeExpr.from_str("-1 - -2 : -1")
-    assert list(r) == [-1, -2]
+    assert list(r) == [-2, -1]
+    # __getitem__ also operates on the canonical ascending form.
+    assert r[0] == -2
+    assert r[-1] == -1
+    # Multi-element descending range normalises the same way.
+    r2 = IntRangeExpr.from_str("10-1:-1")
+    assert list(r2) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 
 @pytest.mark.xfail(strict=True, reason="Issue: __contains__ rejects items it just yielded")

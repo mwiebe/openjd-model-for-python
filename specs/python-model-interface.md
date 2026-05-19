@@ -504,6 +504,49 @@ CancelationMethodNotifyThenTerminate(mode="NOTIFY_THEN_TERMINATE", notify_period
 | `JobParameterValues` | `dict` | `dict[str, ParameterValue]` |
 | `TaskParameterSet` | `dict` | `dict[str, Any]` |
 
+### Behavior change: `RangeExpr` iteration is always ascending
+
+`RangeExpr` (and its `IntRangeExpr` alias) always presents its values
+as an **increasing list of integers**, regardless of how the source
+expression was written. Iteration, indexing, and `__str__` all operate
+on the canonical ascending form; the input's direction is not
+retained.
+
+```python
+from openjd.model import IntRangeExpr
+
+r = IntRangeExpr.from_str("-1 - -2 : -1")
+list(r)   # [-2, -1]   (ascending)
+r[0]      # -2
+r[-1]     # -1
+
+r = IntRangeExpr.from_str("10-1:-1")
+list(r)   # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  (ascending)
+```
+
+This differs from the pure-Python reference implementation
+(`openjd.model._range_expr.IntRangeExpr`), which preserves the
+user-supplied direction so that `IntRangeExpr.from_str("-1 - -2 : -1")`
+iterates as `[-1, -2]`. The Rust-backed binding intentionally drops
+that direction-preserving behavior because every consumer of
+`RangeExpr` in the model layer treats a range as an unordered set of
+integers, and the canonical form eliminates a class of edge cases
+from indexing and length arithmetic. See
+`openjd-rs/specs/expr/range-expr.md` ("Internal Representation") for
+the underlying design rationale.
+
+Practical consequences:
+
+- Code that constructs a descending range expression and depends on
+  iteration yielding values in descending order must sort the result
+  itself, or build the expected ordering from the parsed `(start, end,
+  step)` tuples.
+- INT and CHUNK[INT] task parameters defined with a descending range
+  (e.g. `"10-1:-1"`) iterate frames in ascending order under the Rust
+  bindings.
+- `__contains__`, `__len__`, and equality (`==`) are unaffected:
+  `RangeExpr` equality is set-based.
+
 ## Exceptions
 
 ```python
