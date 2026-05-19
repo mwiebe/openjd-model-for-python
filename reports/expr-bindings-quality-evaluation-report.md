@@ -21,11 +21,13 @@ replacement**:
    `profile=` kwarg on every entry point. Path-mapping rules now live inside
    `ExprProfile.with_host_context(HostContext.with_rules(rules))`. See
    recommendation 1 below.
-2. Target-type handling does not follow RFC 0005's "operators evaluate
+2. ~~Target-type handling does not follow RFC 0005's "operators evaluate
    operands unconstrained" rule. `evaluate_expression("Param.Count - 1",
    values={"Param.Count": 100}, target_type=ExprType("string"))` raises
    `ExpressionError: Cannot use '-' operator with string and string`
-   instead of returning `"99"`.
+   instead of returning `"99"`.~~ **Resolved** crate-side in `openjd-rs`
+   ([PR #192](https://github.com/OpenJobDescription/openjd-rs/pull/192));
+   see recommendation 2 below. Will pass on the next bindings build.
 3. `target_type` with a union like `int | string` rejects values that are
    already a member of the union (e.g. `'42'` against `int | string`),
    instead of returning the value unchanged as the reference does.
@@ -580,7 +582,7 @@ fixes, 10+ are hygiene/UX.
    `test/openjd/expr/test_known_gaps.py` (the three originally-xfail
    tests are now passing).
 
-2. **Fix target-type propagation through operators.** `evaluate_expression`
+2. ~~**Fix target-type propagation through operators.** `evaluate_expression`
    should follow RFC 0005 ("operators evaluate operands unconstrained"):
    evaluate operands without target-type constraint, then coerce the
    final result. Currently the binding pushes the target type into
@@ -589,7 +591,22 @@ fixes, 10+ are hygiene/UX.
    `test_arithmetic_with_string_target_propagates_unconstrained` in
    `test/openjd/expr/test_known_gaps.py` exercises the fix. Likely
    resides in the `openjd-rs/crates/openjd-expr` crate's evaluator
-   rather than the binding glue; cross-crate change.
+   rather than the binding glue; cross-crate change.~~ **Resolved**
+   crate-side in `openjd-rs`
+   ([PR #192](https://github.com/OpenJobDescription/openjd-rs/pull/192))
+   by adding an
+   `Evaluator::evaluate_with_target` helper that scopes the
+   `target_type` field around a single recursive call, and applying
+   it in `eval_binop`, `eval_unaryop`, `eval_compare`, and
+   `eval_ifexp` (test slot) per the RFC 0005 propagation table. New
+   tests in `crates/openjd-expr/tests/integration/test_target_type_propagation.rs`
+   (the `outer_target_*` group) exercise the public
+   `EvalBuilder::with_target_type` surface that the bindings forward
+   to. Once a wheel built from a crate version containing the fix is
+   installed, `test_arithmetic_with_string_target_propagates_unconstrained`
+   should flip from `XFAIL` to passing — no binding glue change
+   required, since `rust-bindings/src/expr/evaluate.rs` already
+   forwards `target_type` to `EvalBuilder::with_target_type`.
 
 3. **Fix target-type union membership.** When `target_type` is a union
    that already contains the result type (e.g. result is `string`,
