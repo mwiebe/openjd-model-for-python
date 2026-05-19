@@ -30,26 +30,47 @@ for the pure-Python reference**:
    the pure-Python implementation; they should be skipped or rewritten
    for the Rust-backed module. Documented in
    `specs/python-model-interface.md` under Compatibility Aliases.
-2. **`StepParameterSpaceIterator.__contains__` rejects values it just
+2. ~~**`StepParameterSpaceIterator.__contains__` rejects values it just
    yielded.** Iterating once over an INT parameter space and checking each
    yielded value with `in` returns `False` for every one of them. The
    reference returns `True`. This is the same root cause as a frequently-
-   used test pattern (`for v in expected_values: assert v in it`).
+   used test pattern (`for v in expected_values: assert v in it`).~~
+   **Resolved** — `extract_task_parameter_set` now reads the parameter
+   type via `as_str()` (the Rust pyclass-enum convention used by
+   `PyTaskParameterType` / `PyJobParameterType` and by the Python-side
+   `ParameterValue` shim), then falls back to `.value` (stdlib
+   `enum.Enum`) and `__str__`. Yielded values now round-trip through
+   `__contains__`. As a side-effect this also fixes
+   `test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
+   which uses the same `for v in expected_values: assert v in it`
+   pattern.
 3. **`model_to_object` is unimplemented for every Rust-backed model.** The
    wrapper module raises `NotImplementedError`. The reference round-trips
    through `model.model_dump(by_alias=True, exclude_unset=True)` to produce
    the input dict. One existing parity test fails because of this
    (`TestModelToObject::test[translates Decimal to string]`).
-4. **`StepParameterSpaceIterator.chunks_default_task_count` setter is a
+4. ~~**`StepParameterSpaceIterator.chunks_default_task_count` setter is a
    silent no-op.** The setter validates that the space is adaptively
    chunked, then returns without storing the value. The reference mutates
    the iterator. Adaptive-runtime callers (e.g. the worker agent) cannot
-   actually adapt chunk size.
-5. **`__len__` returns 0 on adaptive-chunked spaces; reference raises
+   actually adapt chunk size.~~ **Resolved** — `PyStepParameterSpaceIterator`
+   now holds a persistent `Mutex<StepParameterSpaceIterator>` rather than
+   reconstructing a fresh iterator on every method call. The setter
+   validates that the value is a positive integer and that the space is
+   adaptively chunked, then calls `iter.set_chunks_default_task_count(value)`,
+   which mutates the shared `Arc<AtomicUsize>` that the live iteration
+   nodes read from. Subsequent reads via the getter return the new
+   value.
+5. ~~**`__len__` returns 0 on adaptive-chunked spaces; reference raises
    `ValueError`.** The reference documents that `len()` is unavailable for
    adaptively-chunked spaces and raises with an explanatory message; the
    binding silently returns 0, which the caller will mistake for an empty
-   space.
+   space.~~ **Resolved** — `__len__` now raises
+   `ValueError("Length is not available because the parameter space uses
+   adaptive chunking.")`, matching the reference's message. The
+   underlying Rust `StepParameterSpaceIterator::len()` continues to return
+   0 for adaptive (its documented contract); the wrapper short-circuits
+   on `chunks_adaptive()` before consulting it.
 6. **`taskParameterDefinitions` getter returns serde-internal JSON, not
    typed objects.** The reference returns `RangeExpressionTaskParameterDefinition`
    / `RangeListTaskParameterDefinition` / etc. with `.type` (a
@@ -572,6 +593,16 @@ from `xfail` to a passing assertion of the documented ascending
 iteration order (see Recommendations §1), the count becomes
 `5 failed, 594 passed, 9 xfailed, 18 errors`.
 
+After resolving Recommendations §2, §4, and §5 — converting
+`test_step_param_space_iter_contains_self_yielded`,
+`test_step_param_space_iter_chunks_default_task_count_setter`, and
+`test_step_param_space_iter_adaptive_len_raises` from `xfail` to
+passing — the count becomes
+`4 failed, 598 passed, 6 xfailed, 18 errors`. (The fourth gain is
+`test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
+which was failing on the same `__contains__` bug as §2 and now
+transparently passes.)
+
 ### `python -m pytest test/openjd/model-v0` (pure-Python baseline)
 
 ```
@@ -626,10 +657,10 @@ in `test/openjd/model-v1/test_known_gaps.py`.
 | # | Bug | Test name (`test_known_gaps.py`) |
 |---|---|---|
 | 1 | ~~`IntRangeExpr.from_str("-1 - -2 : -1")` iterates as `[-2, -1]`; reference iterates as `[-1, -2]`.~~ **Resolved** — accepted as an intentional behavior change. `RangeExpr` values are always an increasing list of integers; descending-input direction is not retained. See `specs/python-model-interface.md` Compatibility Aliases. | `test_int_range_expr_descending_iteration_order` (now asserts the ascending behavior) |
-| 2 | `StepParameterSpaceIterator.__contains__` rejects values it just yielded. | `test_step_param_space_iter_contains_self_yielded` |
+| 2 | ~~`StepParameterSpaceIterator.__contains__` rejects values it just yielded.~~ **Resolved** — `extract_task_parameter_set` now reads the parameter type via `as_str()` first. | `test_step_param_space_iter_contains_self_yielded` (now passing) |
 | 3 | `model_to_object(model=...)` raises `NotImplementedError` for every Rust-backed model. | `test_model_to_object_round_trip` |
-| 4 | `chunks_default_task_count` setter is a silent no-op (returns `Ok(())` without storing). | `test_step_param_space_iter_chunks_default_task_count_setter` |
-| 5 | `len(iter)` returns 0 on adaptive-chunked space; reference raises `ValueError`. | `test_step_param_space_iter_adaptive_len_raises` |
+| 4 | ~~`chunks_default_task_count` setter is a silent no-op (returns `Ok(())` without storing).~~ **Resolved** — wrapper now holds a persistent `Mutex<StepParameterSpaceIterator>`; the setter calls `iter.set_chunks_default_task_count(value)` on it. | `test_step_param_space_iter_chunks_default_task_count_setter` (now passing) |
+| 5 | ~~`len(iter)` returns 0 on adaptive-chunked space; reference raises `ValueError`.~~ **Resolved** — `__len__` now raises `ValueError("Length is not available because the parameter space uses adaptive chunking.")`. | `test_step_param_space_iter_adaptive_len_raises` (now passing) |
 | 6 | `JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType` — none pickleable. (`TemplateSpecificationVersion` *is* pickleable because it's a Python `Enum`.) | `test_job_template_pickleable` |
 | 7 | `TaskParameterType` is not hashable, but `JobParameterType` is. | `test_task_parameter_type_hashable` |
 | 8 | `StepParameterSpace.taskParameterDefinitions[name]` returns serde-tagged JSON, not typed object. | `test_task_parameter_definitions_typed_objects` |
@@ -690,11 +721,21 @@ proves the gap so it can be fixed and the proof regenerated.
    ascending order, or to be marked as not-applicable to the
    Rust-backed binding.
 
-2. **Fix `StepParameterSpaceIterator.__contains__` to recognize self-yielded
+2. ~~**Fix `StepParameterSpaceIterator.__contains__` to recognize self-yielded
    values.** The current `extract_task_parameter_set` interprets
    `TaskParameterValue` instances incorrectly when they are the dict
    values. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_contains_self_yielded`.
+   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_contains_self_yielded`.~~
+   **Resolved** — `extract_task_parameter_set` in
+   `rust-bindings/src/model/step_param_space.rs` now reads the parameter
+   type via `as_str()` (the convention used by `PyTaskParameterType` and
+   `PyJobParameterType` and by the Python-side `ParameterValue` shim)
+   before falling back to `.value` (stdlib `enum.Enum`) and `__str__`.
+   Yielded values now round-trip through `__contains__`. The fix also
+   transparently repairs
+   `test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
+   which uses the same `for v in expected_values: assert v in it` idiom.
+   Verified by promoting the `xfail` test to a passing test.
 
 3. **Implement `model_to_object` for every Rust-backed model type, or stop
    exporting it.** `decode_job_template(template=t); model_to_object(model=t)`
@@ -702,19 +743,36 @@ proves the gap so it can be fixed and the proof regenerated.
    `test/openjd/model-v1/test_parse.py::TestModelToObject::test[translates Decimal to string]`
    and `test/openjd/model-v1/test_known_gaps.py::test_model_to_object_round_trip`.
 
-4. **Fix `StepParameterSpaceIterator.chunks_default_task_count` setter.**
+4. ~~**Fix `StepParameterSpaceIterator.chunks_default_task_count` setter.**
    File: `rust-bindings/src/model/step_param_space.rs:199`. Currently
    returns `Ok(())` after validating `chunks_adaptive()`; must actually
    mutate the iterator state (or hold an interior `RefCell` for the
    chunk count). Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_chunks_default_task_count_setter`.
+   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_chunks_default_task_count_setter`.~~
+   **Resolved** — `PyStepParameterSpaceIterator` now holds a persistent
+   `Mutex<StepParameterSpaceIterator>` (the upstream `NodeIterator` trait
+   gained a `Send + Sync` bound; the upstream
+   `StepParameterSpaceIterator` gained a public `reset()` method).
+   The setter validates the value is a positive integer and that the
+   space is adaptively chunked, then calls
+   `iter.set_chunks_default_task_count(value)` on the persistent
+   iterator. The shared `Arc<AtomicUsize>` propagates the new value to
+   the live iteration nodes. Verified by promoting the `xfail` test to
+   a passing test.
 
-5. **Make `len(StepParameterSpaceIterator)` raise `ValueError` for
+5. ~~**Make `len(StepParameterSpaceIterator)` raise `ValueError` for
    adaptive-chunked spaces.** File: `rust-bindings/src/model/step_param_space.rs`.
    When `chunks_adaptive()` is `True`, `__len__` should raise the same
    message as the reference: `"Length is not available because the
    parameter space uses adaptive chunking."`. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_adaptive_len_raises`.
+   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_adaptive_len_raises`.~~
+   **Resolved** — `__len__` in
+   `rust-bindings/src/model/step_param_space.rs` now checks
+   `iter.chunks_adaptive()` and raises
+   `ValueError("Length is not available because the parameter space uses
+   adaptive chunking.")` (matching the reference's exact message)
+   before consulting the underlying iterator's `len()`. Verified by
+   promoting the `xfail` test to a passing test.
 
 6. **Expose `taskParameterDefinitions` as typed objects, not serde-tagged
    JSON.** `Step.parameterSpace.taskParameterDefinitions["F"]` must

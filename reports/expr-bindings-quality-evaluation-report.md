@@ -28,9 +28,11 @@ replacement**:
    instead of returning `"99"`.~~ **Resolved** crate-side in `openjd-rs`
    ([PR #192](https://github.com/OpenJobDescription/openjd-rs/pull/192));
    see recommendation 2 below. Will pass on the next bindings build.
-3. `target_type` with a union like `int | string` rejects values that are
+3. ~~`target_type` with a union like `int | string` rejects values that are
    already a member of the union (e.g. `'42'` against `int | string`),
-   instead of returning the value unchanged as the reference does.
+   instead of returning the value unchanged as the reference does.~~
+   **Resolved** crate-side in `openjd-rs`; see recommendation 3 below.
+   Will pass on the next bindings build.
 
 In addition, several documented-in-spec details are missed: `SymbolTable.keys`
 returns `list` instead of `set`; `escape_format_string` produces output that
@@ -608,13 +610,26 @@ fixes, 10+ are hygiene/UX.
    required, since `rust-bindings/src/expr/evaluate.rs` already
    forwards `target_type` to `EvalBuilder::with_target_type`.
 
-3. **Fix target-type union membership.** When `target_type` is a union
+3. ~~**Fix target-type union membership.** When `target_type` is a union
    that already contains the result type (e.g. result is `string`,
    target is `int | string`), the result should be returned unchanged
    rather than rejected. Test
    `test_target_type_union_picks_matching_string` in
    `test/openjd/expr/test_known_gaps.py` exercises the fix. Likely
-   crate-side as well.
+   crate-side as well.~~ **Resolved** crate-side in `openjd-rs` by
+   updating `ExprValue::coerce` in
+   `crates/openjd-expr/src/value.rs` to handle union targets in two
+   steps: (1) match-first via `target.match_type(&value_type)`, so a
+   value whose type is already one of the union's members is returned
+   unchanged; (2) per-member non-destructive coercion, skipping
+   `nulltype`, `list[T]`, and nested unions. The new
+   `crates/openjd-expr/tests/integration/test_target_type_union.rs`
+   integration suite covers match-first, per-member coercion, error
+   cases, and optional-`T` (`T?` = `T | nulltype`). On the next bindings
+   build, `test_target_type_union_picks_matching_string` should flip
+   from XFAIL to passing — no binding glue change required, since
+   `rust-bindings/src/expr/evaluate.rs` already forwards `target_type`
+   to `EvalBuilder::with_target_type`.
 
 4. **Make `SymbolTable.keys` return a `set[str]`** to match
    `specs/python-expr-interface.md`. File:

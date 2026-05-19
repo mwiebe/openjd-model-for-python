@@ -567,3 +567,81 @@ class TestStepParameterSpaceIterator_2023_09:  # noqa: N801
             "Param3": ParameterValue(type=ParameterValueType.STRING, value="11"),
             "Param4": ParameterValue(type=ParameterValueType.INT, value="20"),
         } not in it
+
+    def test_contains_self_yielded_values(self) -> None:
+        # __contains__ must recognise the dict values the iterator just
+        # yielded — a frequently-used test idiom is
+        # `for v in expected_values: assert v in it`.
+        # GIVEN
+        space = StepParameterSpace_2023_09(
+            taskParameterDefinitions={
+                "Frame": RangeExpressionTaskParameterDefinition_2023_09(
+                    type=ParameterValueType.INT, range=IntRangeExpr.from_str("1-3")
+                ),
+            }
+        )
+
+        # WHEN
+        it = StepParameterSpaceIterator(space=space)
+        yielded = list(iter(it))
+
+        # THEN
+        assert len(yielded) == 3
+        it.reset_iter()
+        for v in yielded:
+            assert v in it
+
+    def test_chunks_default_task_count_setter_mutates_iterator(self) -> None:
+        # The setter must actually mutate iterator state — adaptive
+        # chunking callers (e.g. the worker agent) need to be able to
+        # reduce or grow the chunk size at runtime.
+        # GIVEN
+        space = StepParameterSpace_2023_09(
+            taskParameterDefinitions={
+                "F": dict(
+                    type="CHUNK[INT]",
+                    range=IntRangeExpr.from_str("1-100"),
+                    chunks=dict(
+                        defaultTaskCount=10,
+                        targetRuntimeSeconds=120,
+                        rangeConstraint="CONTIGUOUS",
+                    ),
+                ),
+            }
+        )
+
+        # WHEN
+        it = StepParameterSpaceIterator(space=space)
+
+        # THEN
+        assert it.chunks_adaptive is True
+        assert it.chunks_default_task_count == 10
+        it.chunks_default_task_count = 5
+        assert it.chunks_default_task_count == 5
+
+    def test_len_raises_on_adaptive_chunking(self) -> None:
+        # __len__ must raise ValueError on adaptive-chunked spaces with
+        # the reference's exact message — silently returning 0 would let
+        # callers mistake an adaptive space for an empty one.
+        # GIVEN
+        space = StepParameterSpace_2023_09(
+            taskParameterDefinitions={
+                "F": dict(
+                    type="CHUNK[INT]",
+                    range=IntRangeExpr.from_str("1-100"),
+                    chunks=dict(
+                        defaultTaskCount=10,
+                        targetRuntimeSeconds=120,
+                        rangeConstraint="CONTIGUOUS",
+                    ),
+                ),
+            }
+        )
+
+        # WHEN
+        it = StepParameterSpaceIterator(space=space)
+
+        # THEN
+        assert it.chunks_adaptive is True
+        with pytest.raises(ValueError, match="adaptive chunking"):
+            len(it)

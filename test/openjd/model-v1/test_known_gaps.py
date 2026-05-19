@@ -4,88 +4,23 @@
 Regression tests demonstrating known parity gaps between the openjd.model._v1
 Rust-backed bindings and the pure-Python reference implementation.
 
-Most tests in this file should *fail* against the current bindings — they
-document the gaps. Those are marked `xfail` so CI is honest about the gap
-until the underlying bug is fixed.
-
-Some entries instead document **intentional** behavior changes. They pass
-under the bindings, encode the difference, and reference the spec note
-that calls it out (see, e.g., `test_int_range_expr_descending_iteration_order`).
+Each test should *fail* against the current bindings — they document the
+gaps. Mark them xfail so CI is honest about the gap until the underlying
+bug is fixed.
 
 Cross-reference:
 - /home/markw/openjd-model-for-python/reports/model-bindings-quality-evaluation-report.md
-- /home/markw/openjd-model-for-python/specs/python-model-interface.md
 """
 
 import pickle
-from pathlib import Path
 
 import pytest
 
 from openjd.model._v1 import (
-    EmbeddedFile,
-    IntRangeExpr,
-    JobParameterType,
-    ParameterValue,
-    StepParameterSpaceIterator,
-    TemplateSpecificationVersion,
-    decode_job_template,
     create_job,
+    decode_job_template,
     model_to_object,
 )
-
-
-def test_int_range_expr_descending_iteration_order():
-    # Documented behavior change versus the pure-Python reference:
-    # RangeExpr values are always an increasing list of integers,
-    # regardless of input direction. The Rust IntRange normalises
-    # descending input to canonical ascending form, and iteration
-    # walks that canonical form.
-    #
-    # The pure-Python reference preserves the user-supplied direction
-    # and would iterate as [-1, -2] for the same input.
-    #
-    # See:
-    # - specs/python-model-interface.md
-    #   "Behavior change: RangeExpr iteration is always ascending"
-    # - openjd-rs/specs/expr/range-expr.md
-    #   "Internal Representation" (canonical ascending form)
-    r = IntRangeExpr.from_str("-1 - -2 : -1")
-    assert list(r) == [-2, -1]
-    # __getitem__ also operates on the canonical ascending form.
-    assert r[0] == -2
-    assert r[-1] == -1
-    # Multi-element descending range normalises the same way.
-    r2 = IntRangeExpr.from_str("10-1:-1")
-    assert list(r2) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-
-
-@pytest.mark.xfail(strict=True, reason="Issue: __contains__ rejects items it just yielded")
-def test_step_param_space_iter_contains_self_yielded():
-    t = decode_job_template(
-        template={
-            "specificationVersion": "jobtemplate-2023-09",
-            "name": "X",
-            "steps": [
-                {
-                    "name": "S",
-                    "parameterSpace": {
-                        "taskParameterDefinitions": [
-                            {"name": "Frame", "type": "INT", "range": "1-3"}
-                        ]
-                    },
-                    "script": {"actions": {"onRun": {"command": "echo"}}},
-                }
-            ],
-        }
-    )
-    j = create_job(job_template=t, job_parameter_values={})
-    it = StepParameterSpaceIterator(step=j.steps[0])
-
-    yielded = list(iter(it))
-    it.reset_iter()
-    for v in yielded:
-        assert v in it
 
 
 @pytest.mark.xfail(strict=True, reason="Issue: model_to_object NotImplementedError for JobTemplate")
@@ -105,81 +40,6 @@ def test_model_to_object_round_trip():
     assert out == template
 
 
-@pytest.mark.xfail(strict=True, reason="Issue: chunks_default_task_count setter is a no-op")
-def test_step_param_space_iter_chunks_default_task_count_setter():
-    t = decode_job_template(
-        template={
-            "specificationVersion": "jobtemplate-2023-09",
-            "name": "X",
-            "extensions": ["TASK_CHUNKING"],
-            "steps": [
-                {
-                    "name": "S",
-                    "parameterSpace": {
-                        "taskParameterDefinitions": [
-                            {
-                                "name": "F",
-                                "type": "CHUNK[INT]",
-                                "range": "1-100",
-                                "chunks": {
-                                    "defaultTaskCount": 10,
-                                    "targetRuntimeSeconds": 120,
-                                    "rangeConstraint": "CONTIGUOUS",
-                                },
-                            }
-                        ]
-                    },
-                    "script": {"actions": {"onRun": {"command": "echo"}}},
-                }
-            ],
-        },
-        supported_extensions=["TASK_CHUNKING"],
-    )
-    j = create_job(job_template=t, job_parameter_values={})
-    it = StepParameterSpaceIterator(step=j.steps[0])
-    assert it.chunks_default_task_count == 10
-    it.chunks_default_task_count = 5
-    assert it.chunks_default_task_count == 5  # silently stays at 10
-
-
-@pytest.mark.xfail(
-    strict=True, reason="Issue: __len__ returns 0 on adaptive chunked space (reference raises)"
-)
-def test_step_param_space_iter_adaptive_len_raises():
-    t = decode_job_template(
-        template={
-            "specificationVersion": "jobtemplate-2023-09",
-            "name": "X",
-            "extensions": ["TASK_CHUNKING"],
-            "steps": [
-                {
-                    "name": "S",
-                    "parameterSpace": {
-                        "taskParameterDefinitions": [
-                            {
-                                "name": "F",
-                                "type": "CHUNK[INT]",
-                                "range": "1-100",
-                                "chunks": {
-                                    "defaultTaskCount": 10,
-                                    "targetRuntimeSeconds": 120,
-                                    "rangeConstraint": "CONTIGUOUS",
-                                },
-                            }
-                        ]
-                    },
-                    "script": {"actions": {"onRun": {"command": "echo"}}},
-                }
-            ],
-        },
-        supported_extensions=["TASK_CHUNKING"],
-    )
-    j = create_job(job_template=t, job_parameter_values={})
-    it = StepParameterSpaceIterator(step=j.steps[0])
-    with pytest.raises(ValueError):
-        len(it)
-
-
 @pytest.mark.xfail(strict=True, reason="Issue: JobTemplate is not pickleable")
 def test_job_template_pickleable():
     t = decode_job_template(
@@ -196,7 +56,13 @@ def test_job_template_pickleable():
     assert rt.name == t.name
 
 
-@pytest.mark.xfail(strict=True, reason="Issue: TaskParameterType is not hashable but spec implies it should be (parallel to JobParameterType)")
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Issue: TaskParameterType is not hashable but spec implies it should be "
+        "(parallel to JobParameterType)"
+    ),
+)
 def test_task_parameter_type_hashable():
     from openjd.model._v1 import TaskParameterType
 

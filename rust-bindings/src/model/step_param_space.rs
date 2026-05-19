@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::HashSet;
+use std::sync::Mutex;
 
 use pyo3::prelude::*;
 #[cfg(feature = "stub-gen")]
@@ -14,7 +15,7 @@ use openjd_model::types::{TaskParameterSet, TaskParameterType, TaskParameterValu
 
 use super::job::{PyStep, PyStepParameterSpace};
 use super::types::{PyTaskParameterValue, PyTaskParameterType};
-use crate::expr::expr_value::{expr_value_to_py, py_to_expr_value};
+use crate::expr::expr_value::py_to_expr_value;
 use crate::model::errors::model_err_to_py;
 
 fn task_param_set_to_py(py: Python<'_>, params: &TaskParameterSet) -> PyResult<Py<PyDict>> {
@@ -46,7 +47,14 @@ fn extract_task_parameter_set(dict: &Bound<'_, PyDict>) -> PyResult<TaskParamete
     for (key, val) in dict.iter() {
         let name: String = key.extract()?;
         if let Ok(type_attr) = val.getattr("type") {
-            let type_str: String = type_attr.getattr("value")
+            // Resolve the parameter type's spec string. Try `as_str()` first
+            // (the convention used by the Rust-backed `PyTaskParameterType`
+            // and `PyJobParameterType` pyclass enums, plus the Python-side
+            // `ParameterValue` shim), then `.value` (stdlib `enum.Enum`
+            // members from the pure-Python reference), then `__str__`.
+            let type_str: String = type_attr
+                .call_method0("as_str")
+                .or_else(|_| type_attr.getattr("value"))
                 .or_else(|_| type_attr.call_method0("__str__"))
                 .and_then(|v| v.extract())?;
             let param_type = TaskParameterType::from_spec_str(&type_str)
@@ -79,14 +87,26 @@ fn param_type_to_expr_type(pt: TaskParameterType) -> openjd_expr::ExprType {
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.model._v1", name = "StepParameterSpaceIterator")]
 pub(crate) struct PyStepParameterSpaceIterator {
+    /// Resolved parameter space — kept so `__getitem__` can build a
+    /// fresh non-mutating iterator without having to walk back through
+    /// `iter`'s internal cursor.
     space: StepParameterSpace,
+    /// Cached length captured at construction time. Used by `__len__`
+    /// for non-adaptive spaces (adaptive spaces raise instead).
     len: usize,
+    /// Cached parameter names captured at construction time.
     names: HashSet<String>,
-    /// Cursor for the iterator-protocol methods (`__iter__`/`__next__`)
-    /// directly on this object. Tests call `next(it)` on the wrapper
-    /// itself (not just `iter(it)`), and `reset_iter()` resets this.
-    /// `AtomicUsize` because pyclasses require `Sync`.
-    cursor: std::sync::atomic::AtomicUsize,
+    /// The persistent iterator that backs `__next__`, `reset_iter`,
+    /// `__contains__`, and `chunks_default_task_count` (getter and
+    /// setter). Holding it across calls is what lets the setter
+    /// actually mutate state — the underlying `Arc<AtomicUsize>` for
+    /// adaptive chunking lives inside this iterator.
+    ///
+    /// `Mutex` is required because pyclass types must be `Sync`. The
+    /// inner `StepParameterSpaceIterator` is `Send + Sync` because
+    /// every `NodeIterator` impl is `Send + Sync` (enforced at the
+    /// trait bound in `openjd-model`).
+    iter: Mutex<StepParameterSpaceIterator>,
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
@@ -116,12 +136,21 @@ impl PyStepParameterSpaceIterator {
             space: ps,
             len,
             names,
-            cursor: std::sync::atomic::AtomicUsize::new(0),
+            iter: Mutex::new(iter),
         })
     }
 
-    fn __len__(&self) -> usize {
-        self.len
+    fn __len__(&self) -> PyResult<usize> {
+        // Match the pure-Python reference: adaptive-chunked spaces
+        // cannot answer `len()` because the count depends on the
+        // dynamic chunk size that may change during execution.
+        let iter = self.iter.lock().unwrap();
+        if iter.chunks_adaptive() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Length is not available because the parameter space uses adaptive chunking.",
+            ));
+        }
+        Ok(self.len)
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<Py<PyDict>> {
@@ -134,6 +163,8 @@ impl PyStepParameterSpaceIterator {
         } else {
             index as usize
         };
+        // Random access uses a fresh iterator — don't disturb the
+        // persistent iter's cursor or its adaptive Arc.
         let iter = StepParameterSpaceIterator::new(&self.space).map_err(model_err_to_py)?;
         match iter.get(idx) {
             Some(params) => task_param_set_to_py(py, &params),
@@ -142,34 +173,30 @@ impl PyStepParameterSpaceIterator {
     }
 
     /// Iterator protocol — return self so `next(it)` and `for x in it`
-    /// both advance the same shared cursor. Mirrors the Python reference
-    /// implementation, which also exposes `__iter__`/`__next__` directly.
+    /// both advance the same shared cursor inside the persistent
+    /// `StepParameterSpaceIterator`. Mirrors the Python reference,
+    /// which also exposes `__iter__`/`__next__` directly.
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
     fn __next__(&self, py: Python<'_>) -> PyResult<Option<Py<PyDict>>> {
-        use std::sync::atomic::Ordering;
-        let i = self.cursor.fetch_add(1, Ordering::Relaxed);
-        if i >= self.len {
-            // Roll back so repeated `next()` calls past the end stay
-            // saturated at `len` rather than overflowing.
-            self.cursor.store(self.len, Ordering::Relaxed);
-            return Ok(None);
+        let mut iter = self.iter.lock().unwrap();
+        match iter.next() {
+            Some(params) => Ok(Some(task_param_set_to_py(py, &params)?)),
+            None => Ok(None),
         }
-        let iter = StepParameterSpaceIterator::new(&self.space).map_err(model_err_to_py)?;
-        let result = iter.get(i).map(|p| task_param_set_to_py(py, &p)).transpose()?;
-        Ok(result)
     }
 
     fn __contains__(&self, item: &Bound<'_, PyDict>) -> PyResult<bool> {
-        let iter = StepParameterSpaceIterator::new(&self.space).map_err(model_err_to_py)?;
         let params = extract_task_parameter_set(item)?;
+        let iter = self.iter.lock().unwrap();
         Ok(iter.contains(&params))
     }
 
     fn reset_iter(&self) {
-        self.cursor.store(0, std::sync::atomic::Ordering::Relaxed);
+        let mut iter = self.iter.lock().unwrap();
+        iter.reset();
     }
 
     #[getter]
@@ -178,31 +205,37 @@ impl PyStepParameterSpaceIterator {
     }
 
     #[getter]
-    fn chunks_adaptive(&self) -> PyResult<bool> {
-        let iter = StepParameterSpaceIterator::new(&self.space).map_err(model_err_to_py)?;
-        Ok(iter.chunks_adaptive())
+    fn chunks_adaptive(&self) -> bool {
+        let iter = self.iter.lock().unwrap();
+        iter.chunks_adaptive()
     }
 
     #[getter]
-    fn chunks_parameter_name(&self) -> PyResult<Option<String>> {
-        let iter = StepParameterSpaceIterator::new(&self.space).map_err(model_err_to_py)?;
-        Ok(iter.chunks_parameter_name().map(|s| s.to_string()))
+    fn chunks_parameter_name(&self) -> Option<String> {
+        let iter = self.iter.lock().unwrap();
+        iter.chunks_parameter_name().map(|s| s.to_string())
     }
 
     #[getter]
-    fn chunks_default_task_count(&self) -> PyResult<Option<usize>> {
-        let iter = StepParameterSpaceIterator::new(&self.space).map_err(model_err_to_py)?;
-        Ok(iter.chunks_default_task_count())
+    fn chunks_default_task_count(&self) -> Option<usize> {
+        let iter = self.iter.lock().unwrap();
+        iter.chunks_default_task_count()
     }
 
     #[setter]
-    fn set_chunks_default_task_count(&self, _value: usize) -> PyResult<()> {
-        let iter = StepParameterSpaceIterator::new(&self.space).map_err(model_err_to_py)?;
-        if !iter.chunks_adaptive() {
+    fn set_chunks_default_task_count(&self, value: usize) -> PyResult<()> {
+        if value == 0 {
             return Err(pyo3::exceptions::PyValueError::new_err(
-                "Cannot set chunks_default_task_count on a non-chunked parameter space",
+                "chunks_default_task_count must be a positive integer.",
             ));
         }
+        let mut iter = self.iter.lock().unwrap();
+        if !iter.chunks_adaptive() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "The parameter space does not use adaptive chunking, so cannot modify chunks_default_task_count.",
+            ));
+        }
+        iter.set_chunks_default_task_count(value);
         Ok(())
     }
 }
