@@ -56,14 +56,11 @@ def test_job_template_pickleable():
     assert rt.name == t.name
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Issue: TaskParameterType is not hashable but spec implies it should be "
-        "(parallel to JobParameterType)"
-    ),
-)
 def test_task_parameter_type_hashable():
+    """Resolved by adding ``frozen, hash`` to the ``#[pyclass]`` attribute
+    on ``PyTaskParameterType``. (Pickle support for the enum landed in
+    the same change set; both follow from giving the enum a stable
+    discriminant identity.)"""
     from openjd.model._v1 import TaskParameterType
 
     s = {TaskParameterType.INT, TaskParameterType.STRING}

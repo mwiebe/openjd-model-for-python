@@ -501,7 +501,7 @@ This section lists every public symbol in the **reference**
 | `DocumentType.{JSON,YAML}` | str-based Enum | int-eq pyclass | ⚠ different shape (Enum vs pyclass), `==` between them works only because pyclass implements `__eq__` against str via `as_str()` |
 | `TemplateSpecificationVersion.JOBTEMPLATE_v2023_09` | str-based Enum | str-based Enum (Python-side wrapper) | ✓ |
 | `JobParameterType.{STRING,INT,…,LIST_LIST_INT}` | str-based Enum | int-eq pyclass | ⚠ shape difference. `as_str()` returns the spec name. Hashable. |
-| `TaskParameterType.{INT,FLOAT,STRING,PATH,CHUNK_INT}` | str-based Enum | int-eq pyclass | ⚠ shape; `CHUNK_INT.as_str() = "CHUNK[INT]"` ✓ but **not hashable** (no `frozen, hash`) |
+| `TaskParameterType.{INT,FLOAT,STRING,PATH,CHUNK_INT}` | str-based Enum | int-eq pyclass, hashable, pickleable | ✓ resolved (Rec #9) |
 | `SpecificationRevision.v2023_09` | str-based Enum | str-based Enum | ✓ |
 | `ValueReferenceConstants` | Reference exposes `JOB_PARAMETER_PREFIX`, `TASK_PARAMETER_PREFIX`, `WORKING_DIRECTORY`, `HAS_PATH_MAPPING_RULES`, `JOB_PARAMETER_RAWPREFIX`, `TASK_PARAMETER_RAWPREFIX`, `ENV_FILE_PREFIX`, `TASK_FILE_PREFIX`, `PATH_MAPPING_RULES_FILE` | Binding exposes the same set | ✓ |
 
@@ -661,8 +661,8 @@ in `test/openjd/model-v1/test_known_gaps.py`.
 | 3 | `model_to_object(model=...)` raises `NotImplementedError` for every Rust-backed model. | `test_model_to_object_round_trip` |
 | 4 | ~~`chunks_default_task_count` setter is a silent no-op (returns `Ok(())` without storing).~~ **Resolved** — wrapper now holds a persistent `Mutex<StepParameterSpaceIterator>`; the setter calls `iter.set_chunks_default_task_count(value)` on it. | `test_step_param_space_iter_chunks_default_task_count_setter` (now passing) |
 | 5 | ~~`len(iter)` returns 0 on adaptive-chunked space; reference raises `ValueError`.~~ **Resolved** — `__len__` now raises `ValueError("Length is not available because the parameter space uses adaptive chunking.")`. | `test_step_param_space_iter_adaptive_len_raises` (now passing) |
-| 6 | `JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType` — none pickleable. (`TemplateSpecificationVersion` *is* pickleable because it's a Python `Enum`.) | `test_job_template_pickleable` |
-| 7 | `TaskParameterType` is not hashable, but `JobParameterType` is. | `test_task_parameter_type_hashable` |
+| 6 | ~~`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType` — none pickleable. (`TemplateSpecificationVersion` *is* pickleable because it's a Python `Enum`.)~~ **Partially resolved (Rec #8).** `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType`, and `TemplateSpecificationVersion` (Rust-side) all pickle now. The decoded model containers (`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`) still don't — they need `to_dict()` / `to_json()` accessors first. | `test_job_template_pickleable` (still xfail) |
+| 7 | ~~`TaskParameterType` is not hashable, but `JobParameterType` is.~~ **Resolved (Rec #9).** Added `frozen, hash` to `PyTaskParameterType`. | `test_task_parameter_type_hashable` (now passing) |
 | 8 | `StepParameterSpace.taskParameterDefinitions[name]` returns serde-tagged JSON, not typed object. | `test_task_parameter_definitions_typed_objects` |
 | 9 | `decode_template` not exported (reference exports it). | `test_decode_template_re_export` |
 | 10 | `JobTemplate.specificationVersion` (camel) not exposed. | `test_job_template_specification_version_camelcase` |
@@ -814,9 +814,30 @@ proves the gap so it can be fixed and the proof regenerated.
    `DocumentType`. Resolves
    `test/openjd/model-v1/test_known_gaps.py::test_job_template_pickleable`.
 
-9. **Make `TaskParameterType` hashable** by adding `frozen, hash` to the
+   **Partially resolved.** All Group A enums (`DocumentType`,
+   `JobParameterType`, `TaskParameterType`, `ModelExtension`,
+   `SpecificationRevision`, `TemplateSpecificationVersion`) and
+   Group B value types (`ModelProfile`, `CallerLimits`,
+   `ValidationContext`, `JobParameterValue`, `TaskParameterValue`,
+   plus the cross-component types `FormatString`, `RangeExpr`,
+   `SymbolTable` from `openjd.expr`) now pickle through the shared
+   `_reconstruct_enum` / `_reconstruct_kwargs` helpers in
+   `rust-bindings/src/pickle_helpers.rs`. New tests live in
+   `test/openjd/model-v1/test_pickle.py`.
+   The decoded model containers (`JobTemplate`, `EnvironmentTemplate`,
+   `Job`, `Step`, `StepScript`, `StepParameterSpace`) and the live
+   `StepParameterSpaceIterator` / `StepDependencyGraph` types are
+   not yet pickleable — they need the underlying `openjd-rs` types
+   to expose `to_dict()` / `to_json()` first. Will be tracked
+   separately when those accessors land.
+   `test_job_template_pickleable` remains xfail.
+
+9. ~~**Make `TaskParameterType` hashable** by adding `frozen, hash` to the
    `#[pyclass]` attribute. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_task_parameter_type_hashable`.
+   `test/openjd/model-v1/test_known_gaps.py::test_task_parameter_type_hashable`.~~
+   **Resolved.** `PyTaskParameterType` now declares `frozen, hash` and
+   provides a `name` getter. The `test_task_parameter_type_hashable`
+   xfail is now a passing regression test.
 
 10. **Re-export `decode_template` from `openjd.model._v1`.** Either
     implement it as a thin wrapper (auto-detect job vs environment

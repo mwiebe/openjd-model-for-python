@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyType};
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
@@ -27,8 +28,36 @@ impl From<PyDocumentType> for DocumentType {
     }
 }
 
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyDocumentType {
+    /// Variant name as a string (e.g. `"YAML"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::YAML => "YAML",
+            Self::JSON => "JSON",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("DocumentType.{}", self.name())
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
+    }
+}
+
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "TemplateSpecificationVersion", eq, eq_int, from_py_object)]
+#[pyclass(module = "openjd._openjd_rs", name = "TemplateSpecificationVersion", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq)]
 #[allow(non_camel_case_types)]
 pub(crate) enum PyTemplateSpecificationVersion {
@@ -63,6 +92,26 @@ impl PyTemplateSpecificationVersion {
             Self::JOBTEMPLATE_2023_09 => "JOBTEMPLATE_2023_09",
             Self::ENVIRONMENT_2023_09 => "ENVIRONMENT_2023_09",
         })
+    }
+
+    /// Variant name as a string (e.g. `"JOBTEMPLATE_2023_09"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::JOBTEMPLATE_2023_09 => "JOBTEMPLATE_2023_09",
+            Self::ENVIRONMENT_2023_09 => "ENVIRONMENT_2023_09",
+        }
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -115,6 +164,36 @@ impl PyJobParameterType {
     fn __repr__(&self) -> String {
         format!("JobParameterType.{}", self.as_str())
     }
+
+    /// Variant name as a string (e.g. `"INT"`, `"LIST_STRING"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::STRING => "STRING",
+            Self::INT => "INT",
+            Self::FLOAT => "FLOAT",
+            Self::PATH => "PATH",
+            Self::BOOL => "BOOL",
+            Self::RANGE_EXPR => "RANGE_EXPR",
+            Self::LIST_STRING => "LIST_STRING",
+            Self::LIST_INT => "LIST_INT",
+            Self::LIST_FLOAT => "LIST_FLOAT",
+            Self::LIST_PATH => "LIST_PATH",
+            Self::LIST_BOOL => "LIST_BOOL",
+            Self::LIST_LIST_INT => "LIST_LIST_INT",
+        }
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
+    }
 }
 
 impl From<PyJobParameterType> for JobParameterType {
@@ -159,8 +238,8 @@ impl From<JobParameterType> for PyJobParameterType {
 // ── TaskParameterType ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "TaskParameterType", eq, eq_int, from_py_object)]
-#[derive(Clone, Copy, PartialEq)]
+#[pyclass(module = "openjd.model._v1", name = "TaskParameterType", eq, eq_int, frozen, hash, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum PyTaskParameterType {
     INT,
     FLOAT,
@@ -179,7 +258,33 @@ impl PyTaskParameterType {
         }
     }
     fn __repr__(&self) -> String {
-        format!("TaskParameterType.{}", self.as_str())
+        format!("TaskParameterType.{}", self.name())
+    }
+
+    /// Variant name as a string (e.g. `"INT"`, `"CHUNK_INT"`).
+    ///
+    /// Distinct from `as_str()` for the `CHUNK_INT` variant, whose
+    /// spec form is `"CHUNK[INT]"`.
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::INT => "INT",
+            Self::FLOAT => "FLOAT",
+            Self::STRING => "STRING",
+            Self::PATH => "PATH",
+            Self::CHUNK_INT => "CHUNK_INT",
+        }
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -231,6 +336,23 @@ impl PyTaskParameterValue {
         self.value.hash(&mut h);
         h.finish()
     }
+
+    /// Pickle support — round-trips through `__init__(*, type, value)`.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("type", self.param_type)?;
+        kwargs.set_item("value", &self.value)?;
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
+    }
 }
 
 // ── JobParameterValue ──
@@ -280,5 +402,22 @@ impl PyJobParameterValue {
         self.param_type.as_str().hash(&mut h);
         self.value.hash(&mut h);
         h.finish()
+    }
+
+    /// Pickle support — round-trips through `__init__(*, type, value)`.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("type", self.param_type)?;
+        kwargs.set_item("value", &self.value)?;
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
     }
 }

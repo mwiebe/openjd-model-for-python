@@ -577,4 +577,33 @@ except DecodeValidationError as e:
 | `ExpressionError` | `ValueError` |
 | `FormatStringError` | `ValueError` |
 | `CompatibilityError` | `Exception` |
+
+## Pickle Support
+
+The following value types are pickleable. Pickled state round-trips
+through ``pickle.dumps`` / ``pickle.loads`` and compares equal to the
+original.
+
+| Type | Reduces through |
+|---|---|
+| ``DocumentType`` | variant name (``YAML`` / ``JSON``) |
+| ``JobParameterType`` | variant name (``INT``, ``LIST_PATH``, …) |
+| ``TaskParameterType`` | variant name (``INT``, ``CHUNK_INT``, …) |
+| ``ModelExtension`` | variant name (``EXPR``, ``TASK_CHUNKING``, …) |
+| ``ModelProfile`` | constructor arguments (``revision``, ``extensions``) |
+| ``CallerLimits`` | constructor arguments (six optional fields) |
+| ``ValidationContext`` | constructor arguments (``profile``, ``caller_limits``) |
+| ``JobParameterValue`` | constructor arguments (``type``, ``value``) |
+| ``TaskParameterValue`` | constructor arguments (``type``, ``value``) |
+| ``DecodeValidationError``, ``ModelValidationError``, ``UnsupportedSchema`` | standard exception pickle, under their canonical ``openjd.model._v1`` module path |
+
+``SpecificationRevision`` and ``TemplateSpecificationVersion`` pickle
+through the Python ``str``-Enum shims provided by ``openjd.model._v1``
+(the underlying Rust pyclasses live at ``openjd._openjd_rs`` and pickle
+correctly there too).
+
+The decoded model containers (``JobTemplate``, ``EnvironmentTemplate``,
+``Job``, ``Step``, etc.) and the live ``StepParameterSpaceIterator`` /
+``StepDependencyGraph`` types are not yet pickleable. To round-trip a
+decoded template, re-decode from the source document.
 | `TokenError` | `Exception` |

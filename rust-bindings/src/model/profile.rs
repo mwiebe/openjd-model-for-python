@@ -13,7 +13,7 @@
 use std::collections::HashSet;
 
 use pyo3::prelude::*;
-use pyo3::types::PyType;
+use pyo3::types::{PyDict, PyType};
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
@@ -32,7 +32,7 @@ use crate::expr::profile::{PyExprProfile, PyHostContext};
 /// `#[non_exhaustive]` in Rust so future revisions can be added
 /// without a SemVer break; the Python enum has the same growth path.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "SpecificationRevision", eq, eq_int, hash, frozen, from_py_object)]
+#[pyclass(module = "openjd._openjd_rs", name = "SpecificationRevision", eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum PySpecificationRevision {
     V2023_09 = 0,
@@ -52,6 +52,25 @@ impl PySpecificationRevision {
         match self {
             PySpecificationRevision::V2023_09 => "2023-09",
         }
+    }
+
+    /// Variant name as a string (e.g. `"V2023_09"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            PySpecificationRevision::V2023_09 => "V2023_09",
+        }
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -116,6 +135,24 @@ impl PyModelExtension {
     fn from_str(s: &str) -> Option<PyModelExtension> {
         use std::str::FromStr;
         ModelExtension::from_str(s).ok().map(Into::into)
+    }
+
+    /// Variant name as a string (e.g. `"EXPR"`). Equivalent to
+    /// [`as_str()`](Self::as_str).
+    #[getter]
+    fn name(&self) -> &'static str {
+        self.as_str()
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -257,6 +294,34 @@ impl PyModelProfile {
             exts.join(", "),
         )
     }
+
+    /// Pickle support — round-trips through `__init__(revision,
+    /// extensions=...)`.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "revision",
+            PySpecificationRevision::from(self.inner.revision()),
+        )?;
+        let exts: Vec<PyModelExtension> = self
+            .inner
+            .extensions()
+            .iter()
+            .copied()
+            .map(Into::into)
+            .collect();
+        kwargs.set_item("extensions", exts)?;
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
+    }
 }
 
 // Helper for in-tree Rust callers that have a PyModelProfile and need
@@ -346,6 +411,28 @@ impl PyCallerLimits {
             self.inner.max_template_size,
         )
     }
+
+    /// Pickle support — round-trips through `__init__` with all six
+    /// optional fields as keyword arguments.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("max_step_count", self.inner.max_step_count)?;
+        kwargs.set_item("max_env_count", self.inner.max_env_count)?;
+        kwargs.set_item("max_task_count", self.inner.max_task_count)?;
+        kwargs.set_item("max_step_script_size", self.inner.max_step_script_size)?;
+        kwargs.set_item("max_environment_size", self.inner.max_environment_size)?;
+        kwargs.set_item("max_template_size", self.inner.max_template_size)?;
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
+    }
 }
 
 impl Default for PyCallerLimits {
@@ -404,5 +491,29 @@ impl PyValidationContext {
             PyModelProfile { inner: self.inner.profile.clone() }.__repr__(),
             PyCallerLimits { inner: self.inner.caller_limits.clone() }.__repr__(),
         )
+    }
+
+    /// Pickle support — round-trips through `__init__(profile,
+    /// caller_limits=...)`.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "profile",
+            PyModelProfile { inner: self.inner.profile.clone() },
+        )?;
+        kwargs.set_item(
+            "caller_limits",
+            PyCallerLimits { inner: self.inner.caller_limits.clone() },
+        )?;
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
     }
 }

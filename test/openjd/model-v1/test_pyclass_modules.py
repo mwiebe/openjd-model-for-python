@@ -27,6 +27,15 @@ from openjd import _openjd_rs
 # Canonical module for each Rust-backed class. The left-hand column is the
 # class name as exported from `openjd._openjd_rs`; the right-hand column is
 # the module that class's `__module__` should report.
+#
+# Most classes report their public-facing module (e.g. ``openjd.model._v1``)
+# so that ``repr`` and pickle produce friendly names. ``SpecificationRevision``
+# and ``TemplateSpecificationVersion`` are exceptions: the ``_v1`` wrapper
+# module shadows them with Python ``Enum`` shims of the same name (for
+# backwards-compat with consumers that rely on ``str``-Enum semantics),
+# so the Rust pyclasses report ``openjd._openjd_rs`` to keep pickle
+# resolution unambiguous. The Python Enum shims pickle independently
+# under ``openjd.model._v1`` via Python's standard Enum support.
 EXPECTED_MODULES: dict[str, str] = {
     # openjd.expr
     "ExprExtension": "openjd.expr",
@@ -60,7 +69,7 @@ EXPECTED_MODULES: dict[str, str] = {
     "JobTemplate": "openjd.model._v1",
     "ModelExtension": "openjd.model._v1",
     "ModelProfile": "openjd.model._v1",
-    "SpecificationRevision": "openjd.model._v1",
+    "SpecificationRevision": "openjd._openjd_rs",
     "Step": "openjd.model._v1",
     "StepActions": "openjd.model._v1",
     "StepDependency": "openjd.model._v1",
@@ -72,7 +81,7 @@ EXPECTED_MODULES: dict[str, str] = {
     "StepScript": "openjd.model._v1",
     "TaskParameterType": "openjd.model._v1",
     "TaskParameterValue": "openjd.model._v1",
-    "TemplateSpecificationVersion": "openjd.model._v1",
+    "TemplateSpecificationVersion": "openjd._openjd_rs",
     "ValidationContext": "openjd.model._v1",
     # openjd.sessions._v1
     "ActionResult": "openjd.sessions._v1",
