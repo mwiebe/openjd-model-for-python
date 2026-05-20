@@ -160,6 +160,58 @@ class TestSymbolTable:
     def test_keys_empty_table(self) -> None:
         assert SymbolTable().keys == set()
 
+    def test_symbols_returns_dotted_leaf_paths(self) -> None:
+        """``SymbolTable.symbols`` returns the set of every dotted leaf
+        path. Top-level keys with leaf values appear bare; nested
+        subtables flatten to their leaves."""
+        symtab = SymbolTable(
+            {"Param": {"Frame": 1, "Name": "x"}, "Task.Index": 0}
+        )
+        assert symtab.symbols == {"Param.Frame", "Param.Name", "Task.Index"}
+
+    def test_symbols_empty_table(self) -> None:
+        assert SymbolTable().symbols == set()
+
+    def test_union_with_symbol_tables(self) -> None:
+        """``union`` returns a fresh table; the original is not mutated.
+        Later arguments win on key collision."""
+        a = SymbolTable({"Shared": 1, "OnlyA": "a"})
+        b = SymbolTable({"Shared": 2, "OnlyB": "b"})
+
+        result = a.union(b)
+        assert result is not a
+        assert result is not b
+        assert result["Shared"].item() == 2  # later argument wins
+        assert result["OnlyA"].item() == "a"
+        assert result["OnlyB"].item() == "b"
+        # Original is not touched.
+        assert a["Shared"].item() == 1
+
+    def test_union_with_dict(self) -> None:
+        a = SymbolTable({"X": 1})
+        result = a.union({"Y": 2})
+        assert result["X"].item() == 1
+        assert result["Y"].item() == 2
+
+    def test_union_multiple_args(self) -> None:
+        a = SymbolTable({"X": 1})
+        result = a.union(SymbolTable({"Y": 2}), {"Z": 3})
+        assert result.symbols == {"X", "Y", "Z"}
+
+    def test_repr_matches_reference_format(self) -> None:
+        """``__repr__`` produces ``SymbolTable({...})`` with sorted keys,
+        matching the pure-Python reference's debugging UX."""
+        symtab = SymbolTable({"Task.Index": 0, "Param.Frame": 1})
+
+        text = repr(symtab)
+        assert text.startswith("SymbolTable(")
+        assert text.endswith(")")
+        # Top-level keys are sorted; their repr appears once each.
+        assert text.index("'Param'") < text.index("'Task'")
+
+    def test_repr_empty(self) -> None:
+        assert repr(SymbolTable()) == "SymbolTable({})"
+
 
 class TestDottedPathLookup:
     """Test dotted path lookup in __getitem__, __contains__, and get."""

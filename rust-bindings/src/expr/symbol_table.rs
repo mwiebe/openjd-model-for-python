@@ -137,4 +137,29 @@ impl PySymbolTable {
         }
         Ok((py.get_type::<Self>(), (dict,)))
     }
+
+    /// Mirror the pure-Python reference's ``SymbolTable({...})`` repr.
+    /// The dict shows each top-level key mapped to either an
+    /// ``ExprValue`` (leaf) or a nested ``SymbolTable`` (subtable),
+    /// recursing through nested subtables for free via Python's repr.
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        use pyo3::IntoPyObjectExt;
+        let dict = PyDict::new(py);
+        // Walk top-level keys in sorted order so the repr is
+        // deterministic (`HashMap` iteration order is otherwise random).
+        let mut keys: Vec<&str> = self.inner.keys().collect();
+        keys.sort_unstable();
+        for key in keys {
+            match self.inner.get(key) {
+                Some(openjd_expr::symbol_table::SymbolTableEntry::Value(v)) => {
+                    dict.set_item(key, PyExprValue { inner: v.clone() }.into_py_any(py)?)?;
+                }
+                Some(openjd_expr::symbol_table::SymbolTableEntry::Table(t)) => {
+                    dict.set_item(key, PySymbolTable { inner: t.clone() }.into_py_any(py)?)?;
+                }
+                None => {}
+            }
+        }
+        Ok(format!("SymbolTable({})", dict.repr()?))
+    }
 }

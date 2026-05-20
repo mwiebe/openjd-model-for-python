@@ -53,7 +53,16 @@ impl From<TypeCode> for PyTypeCode {
             TypeCode::TypeVarT2 => PyTypeCode::TYPEVAR_T2,
             TypeCode::TypeVarT3 => PyTypeCode::TYPEVAR_T3,
             TypeCode::Signature => PyTypeCode::NORETURN, // no Python equivalent
-            _ => PyTypeCode::ANY, // future variants
+            // `TypeCode` is `#[non_exhaustive]`; if a new variant is
+            // added crate-side it MUST be mirrored here. Surfacing a
+            // panic at the binding boundary is preferable to silently
+            // collapsing future variants into `ANY` (the previous
+            // fallback), which would corrupt round-trips and mask the
+            // missing handler.
+            tc => unreachable!(
+                "openjd-expr added a new TypeCode variant ({tc:?}) but the Python binding has no mapping; \
+                 add a match arm in `rust-bindings/src/expr/expr_type.rs` and a corresponding `PyTypeCode` variant"
+            ),
         }
     }
 }

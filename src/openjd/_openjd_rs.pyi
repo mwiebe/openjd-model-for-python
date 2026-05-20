@@ -395,6 +395,15 @@ class ExprValue:
     def unresolved(ty: typing.Any) -> ExprValue: ...
     @staticmethod
     def from_float(value: builtins.float, original_str: builtins.str) -> ExprValue: ...
+    def memory_size(self) -> builtins.int:
+        r"""
+        Memory footprint of this value in bytes, including the inline
+        struct and heap-allocated payload. Mirrors
+        ``ExprValue::memory_size`` in the underlying Rust crate; values
+        are sized in Rust terms, not Python ones, and are intended for
+        memory-limit-aware code (the same accounting that
+        ``DEFAULT_MEMORY_LIMIT`` enforces during evaluation).
+        """
     def item(self) -> typing.Any: ...
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, index: builtins.int) -> ExprValue: ...
@@ -724,9 +733,29 @@ class PyRangeExprIter:
 
 @typing.final
 class RangeExpr:
+    @property
+    def start(self) -> builtins.int:
+        r"""
+        Smallest value in the range expression.
+        """
+    @property
+    def end(self) -> builtins.int:
+        r"""
+        Largest value in the range expression.
+        """
     def __new__(cls, expr: builtins.str) -> RangeExpr: ...
     @staticmethod
     def from_str(expr: builtins.str) -> RangeExpr: ...
+    @staticmethod
+    def from_list(values: typing.Any) -> RangeExpr:
+        r"""
+        Build a `RangeExpr` from a list of values. Values may be ints,
+        strs (parsed as ints), or a mix. Duplicates are removed and the
+        final range is sorted ascending.
+        
+        Raises ``ValueError`` if the list is empty (matching the
+        pure-Python reference).
+        """
     def __len__(self) -> builtins.int: ...
     def __eq__(self, other: RangeExpr) -> builtins.bool: ...
     def __contains__(self, value: builtins.int) -> builtins.bool: ...
@@ -943,6 +972,13 @@ class SymbolTable:
         r"""
         Pickle support — round-trips through a flat
         `dict[str, ExprValue]` of all dotted leaf paths.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Mirror the pure-Python reference's ``SymbolTable({...})`` repr.
+        The dict shows each top-level key mapped to either an
+        ``ExprValue`` (leaf) or a nested ``SymbolTable`` (subtable),
+        recursing through nested subtables for free via Python's repr.
         """
 
 @typing.final

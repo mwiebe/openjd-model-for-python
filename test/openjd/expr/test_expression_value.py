@@ -235,3 +235,87 @@ class TestExprValueRepr:
             rf"path_format=PathFormat\.{pf.name}\)",
             r,
         )
+
+
+class TestMemorySize:
+    """Tests for ``ExprValue.memory_size()``.
+
+    The method mirrors ``ExprValue::memory_size`` in the underlying Rust
+    crate (size of the inline enum plus heap allocations). Callers
+    should treat the result as opaque bytes for memory-limit accounting,
+    not a portable measurement.
+    """
+
+    def test_returns_positive_int(self) -> None:
+        for v in [
+            ExprValue(0),
+            ExprValue(False),
+            ExprValue(""),
+            ExprValue(None),
+            ExprValue([]),
+        ]:
+            assert v.memory_size() > 0
+            assert isinstance(v.memory_size(), int)
+
+    def test_string_grows_with_payload(self) -> None:
+        small = ExprValue("a")
+        large = ExprValue("a" * 1000)
+        assert large.memory_size() > small.memory_size()
+
+    def test_list_grows_with_payload(self) -> None:
+        small = ExprValue([1])
+        large = ExprValue(list(range(1000)))
+        assert large.memory_size() > small.memory_size()
+
+
+class TestDecimalConversion:
+    """Tests that ExprValue accepts ``decimal.Decimal`` and any subclass via
+    proper ``isinstance`` dispatch (rather than a string type-name compare)."""
+
+    def test_decimal_subclass_accepted(self) -> None:
+        class MyDecimal(Decimal):
+            pass
+
+        v = ExprValue(MyDecimal("3.14"))
+        assert str(v) == "3.14"
+
+    def test_unrelated_class_named_decimal_rejected(self) -> None:
+        """A user-defined class named ``Decimal`` that is not a real
+        ``decimal.Decimal`` falls through to the generic ``TypeError``
+        rather than being silently coerced."""
+
+        class Decimal:  # noqa: F811 — intentional shadow to defeat type-name compare
+            def __float__(self) -> float:
+                return 0.0
+
+            def __str__(self) -> str:
+                return "fake"
+
+        with pytest.raises(TypeError, match="Cannot convert"):
+            ExprValue(Decimal())
+
+
+class TestI64OverflowMapping:
+    """Out-of-range integers are reported as ``ExpressionError``, not
+    PyO3's default ``OverflowError``, matching the pure-Python
+    reference's ``Integer overflow ...`` contract."""
+
+    def test_int_above_i64_max(self) -> None:
+        from openjd.expr import ExpressionError
+
+        with pytest.raises(ExpressionError, match="Integer overflow"):
+            ExprValue(2**63)
+
+    def test_int_below_i64_min(self) -> None:
+        from openjd.expr import ExpressionError
+
+        with pytest.raises(ExpressionError, match="Integer overflow"):
+            ExprValue(-(2**63) - 1)
+
+    def test_i64_max_accepted(self) -> None:
+        v = ExprValue(2**63 - 1)
+        assert v.item() == 2**63 - 1
+
+    def test_i64_min_accepted(self) -> None:
+        v = ExprValue(-(2**63))
+        assert v.item() == -(2**63)

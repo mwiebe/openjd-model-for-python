@@ -35,15 +35,16 @@ replacement**:
    Will pass on the next bindings build.
 
 In addition, several documented-in-spec details are missed:
-`escape_format_string` produces output that
+~~`escape_format_string` produces output that
 differs from the literal example in the spec (the round-trip works, but the
-exact text doesn't match); ~~`PathFormat` and `PathMappingRule` are not
+exact text doesn't match)~~ (resolved — see Rec #7);
+~~`PathFormat` and `PathMappingRule` are not
 pickleable while their reference counterparts are~~ (resolved — see Rec #6);
 ~~`RangeExpr` is not
 hashable~~ (resolved — see Rec #5);
-`SymbolTable.__repr__` falls back to the default object repr; and
-the reference exposes `RangeExpr.start` / `.end` and `RangeExpr.from_list`
-which the binding omits. Two reference test files
+~~`SymbolTable.__repr__` falls back to the default object repr~~ (resolved — see Rec #10);
+~~the reference exposes `RangeExpr.start` / `.end` and `RangeExpr.from_list`
+which the binding omits~~ (resolved — see Rec #8). Two reference test files
 (`test_target_type_propagation.py`, `test_uri_paths.py`) have no analog in
 the bindings repo.
 
@@ -392,11 +393,11 @@ coverage into `cargo tarpaulin`.
 | `parse_expression(expr) -> ParsedExpression` | full impl | full impl | ✓ |
 | `evaluate_let_bindings(bindings, symtab, library?)` | not in reference (added in expr branch) | full impl | ✓ |
 | `get_default_library()` | returns `FunctionLibrary` | returns `PyFunctionLibrary` wrapper | ✓ |
-| `escape_format_string(s)` | returns `'use {{ "{" + "{" }}braces{{ "}" + "}" }}'` | returns `'use {{ "{{" }}braces{{ "}" + "}" }}'` | ⚠ different output, both round-trip OK |
+| ~~`escape_format_string(s)`~~ | returns `'use {{ "{{" }}braces{{ "}" + "}" }}'` | returns `'use {{ "{{" }}braces{{ "}" + "}" }}'` | ✓ resolved (Rec #7) — spec example was stale |
 | `ExprType(arg, params=None)` | full impl with normalization | full impl with normalization | ✓ |
-| `ExprType.NULLTYPE`/`.INT`/`.LIST_INT` etc. (class constants) | present | **absent** | ❌ |
+| ~~`ExprType.NULLTYPE`/`.INT`/`.LIST_INT` etc. (class constants)~~ | present | **absent** | ✓ resolved (Rec #9) — string form is canonical, no shortcut constants |
 | `ExprType.list(elem)` / `.union(types)` | static methods | static methods | ✓ |
-| `ExprType.match(concrete)` | name `match` | binding renames to `match_type` to avoid Python `match` keyword | ⚠ name mismatch with reference |
+| ~~`ExprType.match(concrete)`~~ | name `match` | binding renames to `match_type` to mirror the underlying Rust API (`match` is a Rust keyword too) | ✓ resolved (Rec #15) — naming aligned with Rust crate |
 | `ExprType.substitute(bindings)` | full impl | full impl | ✓ |
 | `ExprType.is_concrete()` / `.is_symbolic()` / `.nullable()` / `.is_nullable()` | full impl | full impl | ✓ |
 | `TypeCode.NULLTYPE` … `TYPEVAR_T3` (16 members) | `IntEnum` | `pyclass enum`, no integer values | ⚠ different enum kind |
@@ -406,13 +407,13 @@ coverage into `cargo tarpaulin`.
 | `ExprValue.item()` | full impl | full impl | ✓ |
 | `ExprValue.__eq__`, `__bool__`, `__str__`, `__repr__`, `__len__`, `__getitem__`, `__iter__` | full impl | full impl | ✓ |
 | `ExprValue.__getitem__(slice)` | not supported by reference | not supported by binding | ✓ (parity match, both lack) |
-| `ExprValue.memory_size()` | exposed | not exposed | ⚠ missing |
+| ~~`ExprValue.memory_size()`~~ | exposed | exposed (mirrors Rust `ExprValue::memory_size`) | ✓ resolved (Rec #11) |
 | `SymbolTable(init=None, *, source=None)` | accepts dict or SymbolTable | accepts dict or SymbolTable | ✓ |
 | ~~`SymbolTable.keys` (property)~~ | ~~`set[str]`~~ | ~~`list[str]`~~ | ✓ resolved (Rec #4) |
-| `SymbolTable.symbols` | not in reference | `set[str]` | ⚠ extra |
-| `SymbolTable.union(*others)` | not in reference | new method | ⚠ extra |
+| ~~`SymbolTable.symbols`~~ | model-v0 reference exposes it | `set[str]` | ✓ resolved (Rec #16) — promoted to spec |
+| ~~`SymbolTable.union(*others)`~~ | model-v0 reference exposes it | new method | ✓ resolved (Rec #16) — promoted to spec |
 | `SymbolTable.__contains__`, `__getitem__`, `__setitem__`, `get` | full impl | full impl | ✓ |
-| `SymbolTable.__repr__` | `SymbolTable({...})` | default object repr | ⚠ debugging UX |
+| ~~`SymbolTable.__repr__`~~ | `SymbolTable({...})` | mirrors reference | ✓ resolved (Rec #10) |
 | `FunctionLibrary()` / `.with_host_context()` / `.with_unresolved_host_context()` / `.host_context_enabled` | full impl | full impl, `with_host_context(path_mapping_rules)` extra | ✓ + extra |
 | `FunctionSignature` | exported in reference `__all__` | not exported | ❌ |
 | `ParsedExpression.expr / accessed_symbols / called_functions / local_bindings` | full impl | full impl | ✓ |
@@ -426,8 +427,8 @@ coverage into `cargo tarpaulin`.
 | `PathMappingRule.to_dict / from_dict` | full impl, rejects extra fields | full impl, accepts extra fields silently | ⚠ different validation |
 | ~~`PathMappingRule` pickle~~ | ~~works~~ | ~~fails~~ | ✓ resolved (Rec #6) |
 | `RangeExpr(s)` / `from_str(s)` / `__len__` / `__contains__` / `__iter__` / `__getitem__` / `ranges()` | full impl | full impl | ✓ |
-| `RangeExpr.start` / `.end` (properties) | exposed | not exposed | ❌ |
-| `RangeExpr.from_list(values)` | exposed | not exposed | ❌ |
+| ~~`RangeExpr.start` / `.end` (properties)~~ | exposed | exposed | ✓ resolved (Rec #8) |
+| ~~`RangeExpr.from_list(values)`~~ | exposed | exposed | ✓ resolved (Rec #8) |
 | ~~`RangeExpr.__hash__`~~ | ~~not exposed (plain class, hashable via id)~~ | hashable, defers to Rust `Hash` impl | ✓ resolved (Rec #5) |
 | `RangeExpr` pickle | TypeError (no `__reduce__`) | TypeError | ✓ |
 | `FormatString(input)` / `.raw / .is_literal / .has_complex_expressions / .expression_names` | not in reference (move from openjd.model) | full impl | n/a |
@@ -682,59 +683,123 @@ fixes, 10+ are hygiene/UX.
    `test/openjd/expr/test_pickle.py`; the two xfails in
    `test_known_gaps.py` are now passing regression tests.
 
-7. **Align `escape_format_string` output with the spec example or update
+7. ~~**Align `escape_format_string` output with the spec example or update
    the spec.** File: `rust-bindings/src/expr/format_string.rs:128` (and
    the underlying `openjd_expr::format_string::escape_format_string`).
    Either change the implementation to emit `"{" + "{"` for opening
    braces or update `specs/python-expr-interface.md` line ~80 to show
    the actual `"{{" }}` output. Pick whichever makes more semantic
-   sense.
+   sense.~~
+   **Resolved.** The Rust crate's `escape_format_string` already
+   matches the pure-Python reference exactly:
+   `escape_format_string("use {{braces}}")` →
+   `'use {{ "{{" }}braces{{ "}" + "}" }}'`. The spec example was
+   stale (showing `"{" + "{"` for opening braces); updated to the
+   canonical output.
 
-8. **Add the missing `RangeExpr.start`, `RangeExpr.end`, and
+8. ~~**Add the missing `RangeExpr.start`, `RangeExpr.end`, and
    `RangeExpr.from_list` to the bindings** to match the reference.
    File: `rust-bindings/src/expr/range_expr.rs`. Update spec to list
-   them.
+   them.~~
+   **Resolved.** `PyRangeExpr` now exposes `start` (smallest value),
+   `end` (largest value), and `static fn from_list(values)` which
+   accepts an iterable of ints, numeric strings, or a mix. Rejects an
+   empty list with `ValueError` matching the reference. Internally
+   delegates to `openjd_expr::RangeExpr::from_values`. Spec section
+   updated with usage examples; new tests in
+   `test/openjd/expr/test_range_expr.py::TestRangeExpr`.
 
-9. **Add `ExprType` class constants** (`NULLTYPE`, `BOOL`, `INT`,
+9. ~~**Add `ExprType` class constants** (`NULLTYPE`, `BOOL`, `INT`,
    `FLOAT`, `STRING`, `PATH`, `RANGE_EXPR`, `NORETURN`,
    `LIST_INT`, `LIST_FLOAT`, `LIST_STRING`, `LIST_PATH`, `LIST_BOOL`,
    `LIST_LIST_INT`, `EMPTY_LIST`) on `PyExprType`. File:
-   `rust-bindings/src/expr/expr_type.rs`. Update spec to list them.
+   `rust-bindings/src/expr/expr_type.rs`. Update spec to list them.~~
+   **Resolved (no constants added).** Decision: the spec-form string
+   (`ExprType("bool")`, `ExprType("list[int]")`,
+   `ExprType("int | string")`) is the single canonical way to refer
+   to a type, and round-trips through `str(t)` / `ExprType(str(t))`.
+   Class-level shortcut constants would be a parallel API surface to
+   maintain. The spec now states this explicitly so consumers know
+   not to expect `ExprType.BOOL` etc.
 
-10. **Add `SymbolTable.__repr__`** that mirrors the reference's
+10. ~~**Add `SymbolTable.__repr__`** that mirrors the reference's
     `SymbolTable({...})` for debugging UX. File:
-    `rust-bindings/src/expr/symbol_table.rs`.
+    `rust-bindings/src/expr/symbol_table.rs`.~~
+    **Resolved.** `__repr__` builds a Python `dict` mapping each
+    top-level key (sorted, for determinism) to either an `ExprValue`
+    (leaf) or a nested `SymbolTable` (subtable), then formats as
+    `SymbolTable({...})`. Recursion through subtables happens
+    naturally via Python's `dict.__repr__`. New test:
+    `test/openjd/expr/test_symbol_table.py::TestSymbolTable::test_repr_matches_reference_format`.
 
-11. **Add `ExprValue.memory_size()`** to match the reference. File:
+11. ~~**Add `ExprValue.memory_size()`** to match the reference. File:
     `rust-bindings/src/expr/expr_value.rs`. Useful for
     memory-limit-aware code that wants to introspect intermediate
-    values.
+    values.~~
+    **Resolved.** The Rust crate already exposes
+    `ExprValue::memory_size(&self) -> usize`
+    (`size_of::<ExprValue>()` plus heap allocations); the binding
+    method delegates to it. The pure-Python reference's
+    `memory_size` used `sys.getsizeof`, which is Python-specific
+    accounting; the binding mirrors the Rust API instead, since
+    that's what `DEFAULT_MEMORY_LIMIT` enforces during evaluation.
+    Spec and report parity table updated. New tests:
+    `test/openjd/expr/test_expression_value.py::TestMemorySize`.
 
-12. **Replace `obj.get_type().name()? == "Decimal"` in
+12. ~~**Replace `obj.get_type().name()? == "Decimal"` in
     `py_to_expr_value`** with `obj.is_instance_of(decimal_type)?` to
     avoid silent-fall-through on `Decimal` subclasses. File:
-    `rust-bindings/src/expr/expr_value.rs:30`.
+    `rust-bindings/src/expr/expr_value.rs:30`.~~
+    **Resolved.** Now uses `obj.is_instance(&decimal.Decimal)` so
+    user-defined `Decimal` subclasses are accepted, and unrelated
+    classes that happen to be named `"Decimal"` are not silently
+    coerced. New tests:
+    `test/openjd/expr/test_expression_value.py::TestDecimalConversion`.
 
-13. **Replace `_ => PyTypeCode::ANY`** fallback in
+13. ~~**Replace `_ => PyTypeCode::ANY`** fallback in
     `From<TypeCode> for PyTypeCode` with `unreachable!()` (or a
     `PyTypeCode::Other` if forward-compat is needed). File:
     `rust-bindings/src/expr/expr_type.rs:62`. Currently any future
-    crate-side variant silently maps to `ANY`.
+    crate-side variant silently maps to `ANY`.~~
+    **Resolved.** The wildcard arm now `unreachable!()`s with a
+    developer-facing message that points at the file and explains
+    that any new `TypeCode` variant added crate-side must be
+    mirrored on the Python side. The explicit
+    `Signature → NORETURN` mapping is preserved.
 
-14. **Map `OverflowError` from `i64` extraction to `ExpressionError`** in
+14. ~~**Map `OverflowError` from `i64` extraction to `ExpressionError`** in
     `py_to_expr_value`. File: `rust-bindings/src/expr/expr_value.rs:18`.
     Reference raises `ExpressionError("Integer overflow ...")` for
-    out-of-range integers; binding raises `OverflowError`.
+    out-of-range integers; binding raises `OverflowError`.~~
+    **Resolved.** `py_to_expr_value` catches PyO3's `OverflowError`
+    on the `i64` extraction step and re-raises as `ExpressionError`
+    with an `"Integer overflow ..."` message, matching the reference.
+    New tests:
+    `test/openjd/expr/test_expression_value.py::TestI64OverflowMapping`.
 
-15. **Rename `ExprType.match_type` back to `match` in the binding** to
+15. ~~**Rename `ExprType.match_type` back to `match` in the binding** to
     match the reference, accepting the Python keyword conflict. PyO3
     accepts arbitrary method names; the user-facing name is what
     matters. Or update the spec to canonicalize on `match_type`. File:
-    `rust-bindings/src/expr/expr_type.rs:147`.
+    `rust-bindings/src/expr/expr_type.rs:147`.~~
+    **Resolved by alignment.** The Rust crate calls this
+    `match_type` (because `match` is a Rust keyword). The binding
+    matches Rust, which the pure-Python v0 reference did not. Spec
+    updated with a note explaining the naming choice and that v0
+    callers must rename their call site.
 
-16. **Promote `SymbolTable.symbols` and `SymbolTable.union(*)` to the
+16. ~~**Promote `SymbolTable.symbols` and `SymbolTable.union(*)` to the
     spec** (or remove them from the binding). They're already in use
-    by tests; users will discover them.
+    by tests; users will discover them.~~
+    **Resolved.** Both promoted to the spec. Reasoning: they are
+    part of the v0 Python contract (model-v0
+    `_symbol_table.py` exposes both), tests in both v0 and v1
+    exercise them, and the v1 binding has been preserving the v0
+    contract. The spec now documents both, with a brief note that
+    `union` is the immutable equivalent of Rust's mutating
+    `SymbolTable::merge_from`. New tests:
+    `test/openjd/expr/test_symbol_table.py::TestSymbolTable::test_symbols_*`
+    and `::test_union_*`.
 
 17. **Reject extra fields in `PathMappingRule.from_dict`** to match the
     reference. File: `rust-bindings/src/expr/path_mapping.rs:138`.

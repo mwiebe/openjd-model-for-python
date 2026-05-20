@@ -88,7 +88,7 @@ Escape `{{` and `}}` in a string for use as a literal in a format string.
 ```python
 from openjd.expr import escape_format_string
 
-escape_format_string("use {{braces}}")  # "use {{ \"{\" + \"{\" }}braces{{ \"}\" + \"}\" }}"
+escape_format_string("use {{braces}}")  # 'use {{ "{{" }}braces{{ "}" + "}" }}'
 ```
 
 ## Types
@@ -99,6 +99,15 @@ Represents a type in the expression language. The type system includes
 primitives (`int`, `float`, `string`, `bool`, `path`), compound types
 (`list[T]`, `range_expr`), unions (`int | string`), nullable (`int?`),
 and type variables (`T`, `T1`, `T2`, `T3`) for generic function signatures.
+
+`ExprType` instances are constructed from the spec-form string
+(`ExprType("bool")`, `ExprType("list[int]")`, `ExprType("int | string")`)
+or from a `(TypeCode, type_params)` tuple
+(`ExprType(TypeCode.LIST, [ExprType("int")])`). The binding deliberately
+**does not** expose class-level shortcut constants such as
+`ExprType.BOOL` or `ExprType.LIST_INT`; the string form is the single
+canonical way to refer to a type and round-trips through
+`str(t)` / `ExprType(str(t))`.
 
 ```python
 from openjd.expr import ExprType, TypeCode
@@ -129,7 +138,11 @@ ExprType("T").is_symbolic()               # True
 ExprType.list(ExprType("int"))            # list[int]
 ExprType.union([ExprType("int"), ExprType("string")])  # int | string
 
-# Generic type matching (for function signature dispatch)
+# Generic type matching (for function signature dispatch).
+# Named `match_type` rather than `match` to mirror the underlying
+# Rust API (where `match` is a reserved keyword). The pure-Python
+# v0 reference called this `match`; consumers porting from v0 must
+# rename their call site.
 generic = ExprType(TypeCode.LIST, [ExprType("T")])
 concrete = ExprType("list[int]")
 bindings = generic.match_type(concrete)   # {TypeCode.TYPEVAR_T: ExprType("int")}
@@ -184,6 +197,7 @@ v.type                                    # ExprType("int")
 v.type.type_code                          # TypeCode.INT
 v.is_null                                 # False
 v.item()                                  # 42 (native Python value)
+v.memory_size()                           # bytes used (Rust ExprValue + heap)
 str(v)                                    # "42"
 bool(v)                                   # True
 
@@ -213,14 +227,30 @@ st = SymbolTable(source=other_symtab)             # copy
 st["Param.Frame"].item()                          # 42
 st["Param"]                                       # SymbolTable (subtable)
 st.get("Missing")                                 # None
-st.keys                                           # {"Param"}
+st.keys                                           # {"Param"} — top-level keys
+st.symbols                                        # {"Param.Frame", "Param.Name"} — every dotted leaf path
+repr(st)                                          # SymbolTable({...})
 
 # Mutation
 st["Task.Index"] = 5
+
+# Combine with other tables / dicts (returns a new table; later
+# arguments win on key collision).
+combined = st.union(other_symtab, {"Extra": 1})
 ```
 
 Auto-converts Python values: `int`, `float`, `str`, `bool`, `None`, `list`,
 `Decimal`, `ExprValue`, `ExprType` (→ unresolved), `RangeExpr`.
+
+`keys` returns the top-level namespaces; `symbols` returns every
+fully-qualified dotted leaf path. Both are sets and are documented
+alongside the Pydantic-based v0 reference whose contract this binding
+preserves.
+
+`union(*others)` mirrors the v0 reference's combine-tables convenience.
+The Rust crate's underlying primitive is `SymbolTable::merge_from`,
+which mutates in place; `union` is the immutable equivalent built on
+top of it for Python ergonomics.
 
 ### `FunctionLibrary`
 
@@ -398,6 +428,8 @@ r[0]            # 1
 r[-1]           # 10
 list(r)         # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 r.ranges()      # [(1, 10, 1)]
+r.start         # 1
+r.end           # 10
 
 r = RangeExpr("1-10:3")
 list(r)         # [1, 4, 7, 10]
@@ -405,7 +437,16 @@ list(r)         # [1, 4, 7, 10]
 r = RangeExpr("1-3,10-12")
 list(r)         # [1, 2, 3, 10, 11, 12]
 r.ranges()      # [(1, 3, 1), (10, 12, 1)]
+
+# Build from a list of values (ints or numeric strings, mixed allowed).
+# Duplicates are removed and the result is sorted ascending.
+RangeExpr.from_list([1, 3, 5, 7, 9])      # 1-9:2
+RangeExpr.from_list([9, 8, 7, 6])         # 6-9
+RangeExpr.from_list(["1", "2", "3"])      # 1-3
 ```
+
+`RangeExpr.from_list([])` raises `ValueError`. Two `RangeExpr` values
+that compare equal also hash equal (suitable as `set` / `dict` keys).
 
 ### `FormatString`
 

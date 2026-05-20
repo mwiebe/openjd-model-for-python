@@ -129,6 +129,60 @@ class TestRangeExpr:
         # surprising).
         assert hash(a) != hash(c)
 
+    def test_start(self) -> None:
+        assert RangeExpr("1-10").start == 1
+        assert RangeExpr("1,5,10-20").start == 1
+        # Multiple ranges are sorted ascending by the parser, so start is
+        # always the smallest value.
+        assert RangeExpr("10-20,1-5").start == 1
+
+    def test_end(self) -> None:
+        assert RangeExpr("1-10").end == 10
+        assert RangeExpr("1,5,10-20").end == 20
+
+    def test_start_end_single_value(self) -> None:
+        r = RangeExpr("42")
+        assert r.start == 42
+        assert r.end == 42
+
+    def test_from_list_contiguous(self) -> None:
+        assert str(RangeExpr.from_list([1, 2, 3])) == "1-3"
+
+    def test_from_list_non_contiguous(self) -> None:
+        # Rust's RangeExpr::from_values packs an arithmetic-progression
+        # subsequence into a single stride range when possible; [1,3,5]
+        # therefore renders as "1-5:2", not three separate values.
+        assert str(RangeExpr.from_list([1, 3, 5])) == "1-5:2"
+        assert list(RangeExpr.from_list([1, 3, 5, 10])) == [1, 3, 5, 10]
+
+    def test_from_list_duplicates(self) -> None:
+        assert str(RangeExpr.from_list([1, 1, 1])) == "1"
+
+    def test_from_list_reverse(self) -> None:
+        """Values are sorted ascending before packing, so a descending
+        input still produces an ascending range."""
+        assert str(RangeExpr.from_list([9, 8, 7, 6])) == "6-9"
+
+    def test_from_list_strings(self) -> None:
+        """Numeric strings are accepted and parsed as ints."""
+        assert str(RangeExpr.from_list(["1", "2", "3"])) == "1-3"
+
+    def test_from_list_mixed(self) -> None:
+        """Ints and strings can be mixed in a single call."""
+        assert str(RangeExpr.from_list([1, "2", 3])) == "1-3"
+
+    def test_from_list_empty_raises(self) -> None:
+        with pytest.raises(ValueError, match="cannot be empty"):
+            RangeExpr.from_list([])
+
+    def test_from_list_invalid_string_raises(self) -> None:
+        with pytest.raises(ValueError, match="not a valid integer"):
+            RangeExpr.from_list(["abc"])
+
+    def test_from_list_invalid_type_raises(self) -> None:
+        with pytest.raises(TypeError, match="must be int or str"):
+            RangeExpr.from_list([1.5])
+
 
 class TestExprValueRangeExprProtocols:
     """Test len, indexing, and iteration on ExprValue with range_expr type."""

@@ -10,6 +10,7 @@ use openjd_expr::path_mapping::PathFormat;
 use openjd_expr::types::ExprType;
 use openjd_expr::value::ExprValue;
 
+use crate::expr::errors::PyExpressionError;
 use crate::expr::expr_type::{extract_expr_type, PyExprType};
 use crate::expr::path_format::PyPathFormat;
 use crate::expr::range_expr::PyRangeExpr;
@@ -34,7 +35,20 @@ pub(crate) fn py_to_expr_value(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<ExprVal
         return Ok(ExprValue::Bool(b.is_true()));
     }
     if let Ok(i) = obj.cast::<PyInt>() {
-        return Ok(ExprValue::Int(i.extract::<i64>()?));
+        // Map PyO3's `OverflowError` for out-of-range integers to
+        // `ExpressionError` so error class identity matches the
+        // pure-Python reference (which raises `ExpressionError` for
+        // integers outside the i64 range).
+        return i.extract::<i64>().map(ExprValue::Int).map_err(|err| {
+            let py = i.py();
+            if err.is_instance_of::<pyo3::exceptions::PyOverflowError>(py) {
+                PyExpressionError::new_err(format!(
+                    "Integer overflow: value does not fit in i64 ({err})"
+                ))
+            } else {
+                err
+            }
+        });
     }
     if let Ok(f) = obj.cast::<PyFloat>() {
         let float = openjd_expr::value::Float64::new(f.extract::<f64>()?)
@@ -44,8 +58,12 @@ pub(crate) fn py_to_expr_value(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<ExprVal
     if let Ok(s) = obj.cast::<PyString>() {
         return Ok(ExprValue::String(s.to_cow()?.to_string()));
     }
-    // Handle decimal.Decimal: extract float value + original string representation
-    if obj.get_type().name()? == "Decimal" {
+    // Handle `decimal.Decimal` via a real `isinstance` check so that
+    // user-defined `Decimal` subclasses are accepted and unrelated
+    // classes that happen to be named `"Decimal"` are not.
+    let py = obj.py();
+    let decimal_cls = py.import("decimal")?.getattr("Decimal")?;
+    if obj.is_instance(&decimal_cls)? {
         let f: f64 = obj.call_method0("__float__")?.extract()?;
         let s: String = obj.call_method0("__str__")?.extract()?;
         let float = openjd_expr::value::Float64::with_str(f, s)
@@ -168,6 +186,16 @@ impl PyExprValue {
     #[getter]
     fn is_null(&self) -> bool {
         matches!(self.inner, ExprValue::Null)
+    }
+
+    /// Memory footprint of this value in bytes, including the inline
+    /// struct and heap-allocated payload. Mirrors
+    /// ``ExprValue::memory_size`` in the underlying Rust crate; values
+    /// are sized in Rust terms, not Python ones, and are intended for
+    /// memory-limit-aware code (the same accounting that
+    /// ``DEFAULT_MEMORY_LIMIT`` enforces during evaluation).
+    fn memory_size(&self) -> usize {
+        self.inner.memory_size()
     }
 
 

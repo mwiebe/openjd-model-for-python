@@ -34,6 +34,63 @@ impl PyRangeExpr {
             .map_err(|e| PyRangeExprError::new_err(e.to_string()))
     }
 
+    /// Build a `RangeExpr` from a list of values. Values may be ints,
+    /// strs (parsed as ints), or a mix. Duplicates are removed and the
+    /// final range is sorted ascending.
+    ///
+    /// Raises ``ValueError`` if the list is empty (matching the
+    /// pure-Python reference).
+    #[staticmethod]
+    fn from_list(values: &Bound<'_, pyo3::PyAny>) -> PyResult<Self> {
+        let mut ints: Vec<i64> = Vec::new();
+        for item in values.try_iter()? {
+            let item = item?;
+            if let Ok(i) = item.extract::<i64>() {
+                ints.push(i);
+            } else if let Ok(s) = item.extract::<String>() {
+                let parsed: i64 = s.trim().parse().map_err(|_| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Range value {s:?} is not a valid integer"
+                    ))
+                })?;
+                ints.push(parsed);
+            } else {
+                return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                    "Range value must be int or str, got {}",
+                    item.get_type().name()?
+                )));
+            }
+        }
+        if ints.is_empty() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Range expression cannot be empty",
+            ));
+        }
+        Ok(PyRangeExpr {
+            inner: RangeExpr::from_values(ints),
+        })
+    }
+
+    /// Smallest value in the range expression.
+    #[getter]
+    fn start(&self) -> PyResult<i64> {
+        self.inner
+            .ranges()
+            .first()
+            .map(|r| r.start)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Range expression is empty"))
+    }
+
+    /// Largest value in the range expression.
+    #[getter]
+    fn end(&self) -> PyResult<i64> {
+        self.inner
+            .ranges()
+            .last()
+            .map(|r| r.end)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Range expression is empty"))
+    }
+
     fn __len__(&self) -> usize {
         self.inner.len()
     }
