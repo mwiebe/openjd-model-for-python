@@ -93,7 +93,7 @@ impl PySymbolTable {
     }
 
     #[getter]
-    fn keys(&self) -> Vec<String> {
+    fn keys(&self) -> std::collections::HashSet<String> {
         self.inner.keys().map(|s| s.to_string()).collect()
     }
 

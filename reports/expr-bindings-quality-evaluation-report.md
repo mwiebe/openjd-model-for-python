@@ -34,13 +34,14 @@ replacement**:
    **Resolved** crate-side in `openjd-rs`; see recommendation 3 below.
    Will pass on the next bindings build.
 
-In addition, several documented-in-spec details are missed: `SymbolTable.keys`
-returns `list` instead of `set`; `escape_format_string` produces output that
+In addition, several documented-in-spec details are missed:
+`escape_format_string` produces output that
 differs from the literal example in the spec (the round-trip works, but the
 exact text doesn't match); ~~`PathFormat` and `PathMappingRule` are not
 pickleable while their reference counterparts are~~ (resolved — see Rec #6);
-`RangeExpr` is not
-hashable; `SymbolTable.__repr__` falls back to the default object repr; and
+~~`RangeExpr` is not
+hashable~~ (resolved — see Rec #5);
+`SymbolTable.__repr__` falls back to the default object repr; and
 the reference exposes `RangeExpr.start` / `.end` and `RangeExpr.from_list`
 which the binding omits. Two reference test files
 (`test_target_type_propagation.py`, `test_uri_paths.py`) have no analog in
@@ -74,10 +75,11 @@ All of `evaluate_expression`, `parse_expression`, `evaluate_let_bindings`,
 
 ### Spec ↔ binding gaps
 
-- **`SymbolTable.keys`** — Spec snippet `st.keys                 # {"Param"}`
+- ~~**`SymbolTable.keys`** — Spec snippet `st.keys                 # {"Param"}`
   shows it as a `set`. Implementation returns a `list` (sorted by insertion
   order). See [`rust-bindings/src/expr/symbol_table.rs`](#) line ~95
-  (`fn keys(&self) -> Vec<String>`).
+  (`fn keys(&self) -> Vec<String>`).~~ **Resolved (Rec #4)** —
+  `keys` now returns `HashSet<String>`.
 - **`escape_format_string`** — Spec snippet:
 
   ```python
@@ -210,8 +212,8 @@ appears here too.
 ### `symbol_table.rs` (140 lines)
 `PySymbolTable` is `#[pyclass(from_py_object)] #[derive(Clone)]`.
 `__getitem__`, `__setitem__`, `__contains__`, and `get` cover the spec
-operations. `keys` getter returns `Vec<String>` (should be `HashSet<String>`
-per spec). `symbols` getter (not in spec) returns `HashSet<String>` of
+operations. `keys` getter returns `HashSet<String>` (matches spec).
+`symbols` getter (not in spec) returns `HashSet<String>` of
 all dotted paths — useful but undocumented.
 
 `union(*others)` accepts `SymbolTable` or `dict` and produces a fresh
@@ -406,7 +408,7 @@ coverage into `cargo tarpaulin`.
 | `ExprValue.__getitem__(slice)` | not supported by reference | not supported by binding | ✓ (parity match, both lack) |
 | `ExprValue.memory_size()` | exposed | not exposed | ⚠ missing |
 | `SymbolTable(init=None, *, source=None)` | accepts dict or SymbolTable | accepts dict or SymbolTable | ✓ |
-| `SymbolTable.keys` (property) | `set[str]` | `list[str]` | ❌ |
+| ~~`SymbolTable.keys` (property)~~ | ~~`set[str]`~~ | ~~`list[str]`~~ | ✓ resolved (Rec #4) |
 | `SymbolTable.symbols` | not in reference | `set[str]` | ⚠ extra |
 | `SymbolTable.union(*others)` | not in reference | new method | ⚠ extra |
 | `SymbolTable.__contains__`, `__getitem__`, `__setitem__`, `get` | full impl | full impl | ✓ |
@@ -426,7 +428,7 @@ coverage into `cargo tarpaulin`.
 | `RangeExpr(s)` / `from_str(s)` / `__len__` / `__contains__` / `__iter__` / `__getitem__` / `ranges()` | full impl | full impl | ✓ |
 | `RangeExpr.start` / `.end` (properties) | exposed | not exposed | ❌ |
 | `RangeExpr.from_list(values)` | exposed | not exposed | ❌ |
-| `RangeExpr.__hash__` | not exposed (plain class, hashable via id) | not exposed (`unhashable`) | ⚠ |
+| ~~`RangeExpr.__hash__`~~ | ~~not exposed (plain class, hashable via id)~~ | hashable, defers to Rust `Hash` impl | ✓ resolved (Rec #5) |
 | `RangeExpr` pickle | TypeError (no `__reduce__`) | TypeError | ✓ |
 | `FormatString(input)` / `.raw / .is_literal / .has_complex_expressions / .expression_names` | not in reference (move from openjd.model) | full impl | n/a |
 | `FormatString.resolve_string / .resolve` accept `path_mapping_rules` | n/a | accepts but **discards silently** | ❌ |
@@ -521,8 +523,8 @@ test_format_string_resolve_string_applies_path_mapping_rules   XFAIL
 test_format_string_resolve_applies_path_mapping_rules          XFAIL
 test_target_type_union_picks_matching_string                   XFAIL
 test_arithmetic_with_string_target_propagates_unconstrained    XFAIL
-test_symbol_table_keys_is_set                                  XFAIL
-test_range_expr_is_hashable                                    XFAIL
+test_symbol_table_keys_is_set                                  PASS  (was XFAIL — resolved by Rec #4)
+test_range_expr_is_hashable                                    PASS  (was XFAIL — resolved by Rec #5)
 test_path_format_is_pickleable                                 PASS  (was XFAIL — resolved by Rec #6)
 test_path_mapping_rule_is_pickleable                           PASS  (was XFAIL — resolved by Rec #6)
 ```
@@ -632,18 +634,32 @@ fixes, 10+ are hygiene/UX.
    `rust-bindings/src/expr/evaluate.rs` already forwards `target_type`
    to `EvalBuilder::with_target_type`.
 
-4. **Make `SymbolTable.keys` return a `set[str]`** to match
+4. ~~**Make `SymbolTable.keys` return a `set[str]`** to match
    `specs/python-expr-interface.md`. File:
    `rust-bindings/src/expr/symbol_table.rs:96`. Change `Vec<String>`
    to `HashSet<String>` and update the docstring/spec/test
    accordingly. Test `test_symbol_table_keys_is_set` in
-   `test/openjd/expr/test_known_gaps.py`.
+   `test/openjd/expr/test_known_gaps.py`.~~
+   **Resolved.** `PySymbolTable::keys` now returns
+   `HashSet<String>`, which PyO3 maps to a Python `set`. The new
+   regression tests live at
+   `test/openjd/expr/test_symbol_table.py::TestSymbolTable::test_keys_returns_set_of_top_level_names`
+   (and an empty-table case). The existing
+   `test/openjd/expr/test_copy_used_symtab.py` cases that asserted
+   `dest.keys == []` were updated to `dest.keys == set()`.
 
-5. **Add `__hash__` to `RangeExpr`** to match reference parity. File:
+5. ~~**Add `__hash__` to `RangeExpr`** to match reference parity. File:
    `rust-bindings/src/expr/range_expr.rs`. Hash a stable tuple like
    `(start, end, step)` for each range. Test
    `test_range_expr_is_hashable` in
-   `test/openjd/expr/test_known_gaps.py`.
+   `test/openjd/expr/test_known_gaps.py`.~~
+   **Resolved.** `PyRangeExpr.__hash__` defers to the existing
+   manual `impl std::hash::Hash for RangeExpr` in
+   `openjd_expr::range_expr` (which hashes the underlying
+   `Vec<IntRange>`), so equal `RangeExpr` values hash equal without
+   the binding having to invent a tuple-shaped hash. Regression
+   test:
+   `test/openjd/expr/test_range_expr.py::TestRangeExpr::test_range_expr_is_hashable`.
 
 6. ~~**Implement `__reduce__` (pickle support) on `PathFormat` and
    `PathMappingRule`** to match the reference. Files:

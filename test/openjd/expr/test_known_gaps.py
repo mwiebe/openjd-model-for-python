@@ -10,23 +10,10 @@ to the appropriate home in this directory (e.g. pickle tests to
 ``test_pickle.py``, path-mapping tests to ``test_path_mapping.py``);
 this file is being driven to zero.
 
+There are no known gaps in ``openjd.expr`` at the moment. New
+xfail-style regression tests for newly discovered gaps belong here
+until they are resolved.
+
 Cross-reference:
     reports/expr-bindings-quality-evaluation-report.md
 """
-
-import pytest
-
-from openjd.expr import RangeExpr, SymbolTable
-
-
-@pytest.mark.xfail(reason="Bindings SymbolTable.keys returns a list; spec advertises a set")
-def test_symbol_table_keys_is_set():
-    """`SymbolTable.keys` is documented as `set` of top-level keys (spec)."""
-    st = SymbolTable({"a": 1, "b": 2})
-    assert isinstance(st.keys, set)
-
-
-@pytest.mark.xfail(reason="Bindings RangeExpr is not hashable; reference is")
-def test_range_expr_is_hashable():
-    r = RangeExpr("1-10")
-    {r}  # raises if unhashable

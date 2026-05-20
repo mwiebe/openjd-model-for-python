@@ -110,6 +110,25 @@ class TestRangeExpr:
         assert evaluate_expression("min(Frames)", values=symtab).item() == 10
         assert evaluate_expression("max(Frames)", values=symtab).item() == 50
 
+    def test_range_expr_is_hashable(self) -> None:
+        """``RangeExpr`` is hashable. The hash defers to the Rust crate's
+        manual ``Hash`` impl on ``RangeExpr`` (which hashes the
+        underlying ranges), so two values that compare equal also hash
+        equal."""
+        a = RangeExpr("1-10")
+        b = RangeExpr("1-10")
+        c = RangeExpr("1-10:2")
+
+        # Usable as a set element.
+        assert len({a, b, c}) == 2
+        # Equal values produce equal hashes.
+        assert hash(a) == hash(b)
+        # Distinct shapes produce distinct hashes (overwhelmingly likely
+        # for the default hasher; the contract is only that equal values
+        # hash equal, but a collision here would still indicate something
+        # surprising).
+        assert hash(a) != hash(c)
+
 
 class TestExprValueRangeExprProtocols:
     """Test len, indexing, and iteration on ExprValue with range_expr type."""

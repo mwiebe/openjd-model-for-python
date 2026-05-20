@@ -148,6 +148,18 @@ class TestSymbolTable:
         with pytest.raises(TypeError, match="Cannot convert"):
             SymbolTable({"Param.Dir": output_dir})
 
+    def test_keys_returns_set_of_top_level_names(self) -> None:
+        """``SymbolTable.keys`` returns a ``set`` of top-level symbol names,
+        as documented in ``specs/python-expr-interface.md``. Nested keys
+        roll up under their root namespace."""
+        symtab = SymbolTable({"Param.Frame": 1, "Param.Name": "x", "Task.Index": 0})
+
+        assert symtab.keys == {"Param", "Task"}
+        assert isinstance(symtab.keys, set)
+
+    def test_keys_empty_table(self) -> None:
+        assert SymbolTable().keys == set()
+
 
 class TestDottedPathLookup:
     """Test dotted path lookup in __getitem__, __contains__, and get."""

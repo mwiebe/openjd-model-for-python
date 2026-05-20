@@ -735,6 +735,14 @@ class RangeExpr:
     def __str__(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
     def ranges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.int]]: ...
+    def __hash__(self) -> builtins.int:
+        r"""
+        Hash defers to the Rust `RangeExpr` impl (which hashes the
+        underlying `Vec<IntRange>`), so two `RangeExpr` instances
+        that compare equal hash equal. Like all PyO3-derived hashes,
+        the value is interpreter-session-local and not stable across
+        processes.
+        """
     def __reduce__(self) -> tuple[type, tuple[builtins.str]]:
         r"""
         Pickle support — round-trips through the canonical string
@@ -922,7 +930,7 @@ class StepScript:
 @typing.final
 class SymbolTable:
     @property
-    def keys(self) -> builtins.list[builtins.str]: ...
+    def keys(self) -> builtins.set[builtins.str]: ...
     @property
     def symbols(self) -> builtins.set[builtins.str]: ...
     def __new__(cls, init: typing.Optional[typing.Any] = None, *, source: typing.Optional[typing.Any] = None) -> SymbolTable: ...

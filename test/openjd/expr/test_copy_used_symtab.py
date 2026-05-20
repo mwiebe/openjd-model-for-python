@@ -36,7 +36,7 @@ class TestCopyUsedSymtabValues:
         dest = SymbolTable()
         FormatString("{{Param.Missing + Task.Param.Also.Missing}}").copy_used_symtab_values(src, dest)
 
-        assert dest.keys == []
+        assert dest.keys == set()
 
     def test_partial_missing(self):
         src = SymbolTable({"Param": {"Frame": 1}})
@@ -61,7 +61,7 @@ class TestCopyUsedSymtabValues:
         dest = SymbolTable()
         FormatString("just a literal").copy_used_symtab_values(src, dest)
 
-        assert dest.keys == []
+        assert dest.keys == set()
 
     def test_expression_with_multiple_refs(self):
         src = SymbolTable({"Param": {"Start": 1, "End": 10, "Other": 99}})

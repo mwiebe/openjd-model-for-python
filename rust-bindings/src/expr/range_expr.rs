@@ -71,6 +71,18 @@ impl PyRangeExpr {
         self.inner.ranges().iter().map(|r| (r.start, r.end, r.step)).collect()
     }
 
+    /// Hash defers to the Rust `RangeExpr` impl (which hashes the
+    /// underlying `Vec<IntRange>`), so two `RangeExpr` instances
+    /// that compare equal hash equal. Like all PyO3-derived hashes,
+    /// the value is interpreter-session-local and not stable across
+    /// processes.
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        self.inner.hash(&mut h);
+        h.finish()
+    }
+
     /// Pickle support — round-trips through the canonical string
     /// representation (e.g. `"1-10"`, `"1-10:2,20-30"`).
     fn __reduce__<'py>(

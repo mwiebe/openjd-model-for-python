@@ -21,7 +21,7 @@ fi
 PYTHON_LIB=$(python3 -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
 
 # Build the stub_gen binary (without extension-module so it can link against libpython)
-LIBRARY_PATH="$PYTHON_LIB" cargo build --manifest-path rust-bindings/Cargo.toml --bin stub_gen
+LIBRARY_PATH="$PYTHON_LIB" cargo build --manifest-path rust-bindings/Cargo.toml --features stub-gen --bin stub_gen
 
 # Create a temporary pyproject.toml symlink for pyo3-stub-gen
 ln -sf ../pyproject.toml rust-bindings/pyproject.toml
