@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyType};
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
@@ -32,6 +33,37 @@ impl From<SessionState> for PySessionState {
             SessionState::ReadyEnding => Self::READY_ENDING,
             SessionState::Ended => Self::ENDED,
         }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PySessionState {
+    /// Variant name as a string (e.g. `"READY"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::READY => "READY",
+            Self::RUNNING => "RUNNING",
+            Self::CANCELING => "CANCELING",
+            Self::READY_ENDING => "READY_ENDING",
+            Self::ENDED => "ENDED",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("SessionState.{}", self.name())
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -72,6 +104,17 @@ impl PyActionState {
             Self::CANCELED => "CANCELED",
             Self::TIMEOUT => "TIMEOUT",
         }
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -125,6 +168,39 @@ impl From<ScriptRunnerState> for PyScriptRunnerState {
             ScriptRunnerState::Failed => Self::FAILED,
             ScriptRunnerState::Success => Self::SUCCESS,
         }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyScriptRunnerState {
+    /// Variant name as a string (e.g. `"READY"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::READY => "READY",
+            Self::RUNNING => "RUNNING",
+            Self::CANCELING => "CANCELING",
+            Self::CANCELED => "CANCELED",
+            Self::TIMEOUT => "TIMEOUT",
+            Self::FAILED => "FAILED",
+            Self::SUCCESS => "SUCCESS",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ScriptRunnerState.{}", self.name())
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -207,6 +283,76 @@ impl PyActionStatus {
             self.inner.state, self.inner.exit_code
         )
     }
+
+    /// Internal classmethod used by pickle to reconstruct an
+    /// `ActionStatus` with its full state including `started_at` and
+    /// `ended_at`. Not intended for normal user code; use
+    /// `ActionStatus(*, state, ...)` for ordinary construction.
+    #[classmethod]
+    #[pyo3(signature = (
+        *,
+        state,
+        progress=None,
+        status_message=None,
+        fail_message=None,
+        exit_code=None,
+        started_at=None,
+        ended_at=None,
+    ))]
+    fn _from_state<'py>(
+        _cls: &Bound<'py, PyType>,
+        py: Python<'py>,
+        state: PyActionState,
+        progress: Option<f64>,
+        status_message: Option<String>,
+        fail_message: Option<String>,
+        exit_code: Option<i32>,
+        started_at: Option<Bound<'py, PyAny>>,
+        ended_at: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: ActionStatus {
+                state: state.into(),
+                progress,
+                status_message,
+                fail_message,
+                exit_code,
+                started_at: py_datetime_to_system_time(py, started_at)?,
+                ended_at: py_datetime_to_system_time(py, ended_at)?,
+            },
+        })
+    }
+
+    /// Pickle support — round-trips through `_from_state` which can
+    /// carry the otherwise-internal `started_at` and `ended_at`
+    /// timestamps.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let from_state = cls.getattr("_from_state")?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("state", PyActionState::from(self.inner.state))?;
+        kwargs.set_item("progress", self.inner.progress)?;
+        kwargs.set_item("status_message", self.inner.status_message.clone())?;
+        kwargs.set_item("fail_message", self.inner.fail_message.clone())?;
+        kwargs.set_item("exit_code", self.inner.exit_code)?;
+        kwargs.set_item(
+            "started_at",
+            system_time_to_py_datetime(py, self.inner.started_at)?,
+        )?;
+        kwargs.set_item(
+            "ended_at",
+            system_time_to_py_datetime(py, self.inner.ended_at)?,
+        )?;
+        let args = PyTuple::new(py, [from_state.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
+    }
 }
 
 /// Convert a Rust `Option<SystemTime>` to a Python tz-aware UTC datetime.
@@ -231,6 +377,36 @@ fn system_time_to_py_datetime<'py>(
     Ok(Some(dt))
 }
 
+/// Convert a Python tz-aware datetime to a Rust `SystemTime`.
+///
+/// Inverse of [`system_time_to_py_datetime`]. Used by
+/// `PyActionStatus._from_state` (the pickle reconstructor) to round-trip
+/// the otherwise-internal `started_at` and `ended_at` timestamps.
+fn py_datetime_to_system_time<'py>(
+    _py: Python<'py>,
+    dt: Option<Bound<'py, PyAny>>,
+) -> PyResult<Option<std::time::SystemTime>> {
+    let Some(dt) = dt else { return Ok(None); };
+    if dt.is_none() {
+        return Ok(None);
+    }
+    let secs: f64 = dt.call_method0("timestamp")?.extract()?;
+    if secs.is_nan() || !secs.is_finite() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "datetime.timestamp() must produce a finite value",
+        ));
+    }
+    if secs >= 0.0 {
+        Ok(Some(
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs_f64(secs),
+        ))
+    } else {
+        Ok(Some(
+            std::time::UNIX_EPOCH - std::time::Duration::from_secs_f64(-secs),
+        ))
+    }
+}
+
 impl From<ActionStatus> for PyActionStatus {
     fn from(s: ActionStatus) -> Self {
         Self { inner: s }
@@ -239,6 +415,12 @@ impl From<ActionStatus> for PyActionStatus {
 
 // ── ActionResult ──
 
+/// The result of running an action: terminal state, exit code, and a
+/// captured snippet of stdout (if any).
+///
+/// `ActionResult` is normally produced by the binding when an action
+/// completes; user code can also construct one directly, e.g. for
+/// tests. All three fields are exposed as read-only attributes.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.sessions._v1", name = "ActionResult", frozen)]
 #[derive(Clone)]
@@ -249,6 +431,50 @@ pub(crate) struct PyActionResult {
     exit_code: Option<i32>,
     #[pyo3(get)]
     stdout: String,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyActionResult {
+    #[new]
+    #[pyo3(signature = (*, state, exit_code=None, stdout=String::new()))]
+    fn new(state: PyActionState, exit_code: Option<i32>, stdout: String) -> Self {
+        Self { state, exit_code, stdout }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ActionResult(state={}, exit_code={:?}, stdout={:?})",
+            self.state.name(),
+            self.exit_code,
+            self.stdout,
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.state == other.state
+            && self.exit_code == other.exit_code
+            && self.stdout == other.stdout
+    }
+
+    /// Pickle support — round-trips through `__init__(*, state,
+    /// exit_code=..., stdout=...)`.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("state", self.state)?;
+        kwargs.set_item("exit_code", self.exit_code)?;
+        kwargs.set_item("stdout", &self.stdout)?;
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
+    }
 }
 
 impl PyActionResult {

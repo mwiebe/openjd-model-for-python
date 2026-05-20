@@ -28,7 +28,7 @@ The Rust-backed `openjd.sessions` bindings under evaluation are **not yet a fait
 * **`run_subprocess()` validation is gone.** Reference rejects `timeout=0`, negative timeouts, and empty `command` with `ValueError`. Bindings silently accept all three; negative timeouts panic the background thread (`Duration::from_secs_f64(-5.0)`), leaving the action wedged at `state=RUNNING` with `action_status=None` forever.
 * **State enums lost their string surface.** `SessionState` and `ActionState` no longer expose `.value`. The new `bindings-rs` v1 scenario tests rely on `session.state.value not in ("ready", "ended", "ready_ending")` and fail at runtime — the test suite *as written* does not actually pass.
 * **Several spec entries are absent.** The spec's `Session(callback=…)`, `Session(job_template=…)`, `Session(environment_templates=…)`, and `Session.session_id` property all exist in the spec but not on the binding (or the wrapper). The spec table also documents `state.value` semantics that no longer exist.
-* **No public `Session` symbol is pickleable** (Session, ActionStatus, ActionState, PosixSessionUser, SessionError) — every reference counterpart is.
+* ~~**No public `Session` symbol is pickleable** (Session, ActionStatus, ActionState, PosixSessionUser, SessionError) — every reference counterpart is.~~ **Resolved (Rec #7/#9)** — every value type now pickles. `Session` itself remains intentionally not pickleable.
 * **The Python wrapper drifts from the binding signature.** Wrapper `exit_environment(keep_session_running=True)` flips the reference default (`False`); wrapper `run_subprocess(timeout=0)` becomes `None`; wrapper accepts `revision_extensions` but never forwards it to the binding.
 * **Test coverage collapsed from ~11 500 lines (mainline) to ~341 lines (bindings-rs).** The single integration test file (`test_session_scenarios.py`) is itself broken (assumes `state.value`); only 6 of 22 scenarios pass.
 
@@ -325,7 +325,7 @@ counted as test-suite failures.
 
 ### 4.4 No test for binding-specific surface
 
-* Pickle round-trip for `ActionState` / `ActionStatus` / `PosixSessionUser` / `SessionError` — the reference test suite has none either, but new bindings should have them now that `pickle` is silently broken.
+* ~~Pickle round-trip for `ActionState` / `ActionStatus` / `PosixSessionUser` / `SessionError` — the reference test suite has none either, but new bindings should have them now that `pickle` is silently broken.~~ **Resolved (Rec #9)** — `~/openjd-sessions-for-python/test/openjd/sessions-v1/test_pickle.py` covers all of these.
 * Exception class `__module__` and `__name__` — no test that `SessionError.__module__ == "openjd.sessions._v1"` (so a regression to `_openjd_rs.PySessionError` would slip through).
 * Threading — no test that `Session` is safely usable from multiple Python threads (it currently is, modulo `cancel_action`).
 * `extend_path_mapping_rules` — no test.
@@ -342,8 +342,8 @@ counted as test-suite failures.
 | `SessionState` | `(str, Enum)`; `.value == "ready"` etc. | pyo3 enum, `eq_int`, no `.value` | ⚠ behavior change |
 | `ActionState` | `(str, Enum)`; `.value == "running"` etc. | pyo3 enum, `eq_int`, no `.value`; has `.name` only | ⚠ behavior change |
 | `ScriptRunnerState` | `(str, Enum)` | pyo3 enum, no `.value`, no `.name` | ⚠ behavior change |
-| `ActionStatus` | `@dataclass(frozen=True)`; pickleable, equality, hashable | `#[pyclass(frozen)]`; not pickleable, eq+hash work, repr leaks Rust | ⚠ behavior change |
-| `ActionResult` | not in reference | new pyclass, **not Python-constructible** | ❌ new but unusable |
+| `ActionStatus` | `@dataclass(frozen=True)`; pickleable, equality, hashable | `#[pyclass(frozen)]`; pickleable, eq+hash work, repr leaks Rust | ✓ pickle resolved (Rec #9), repr still leaks |
+| `ActionResult` | not in reference | new pyclass, Python-constructible via `#[new]`, pickleable | ✓ resolved (Rec #11) |
 | `Session.__init__(callback=...)` | accepted | accepted only by wrapper, NOT by binding | ⚠ binding gap |
 | `Session.__init__(revision_extensions=...)` | accepted, used | accepted by wrapper, **not forwarded** | ❌ silent regression |
 | `Session.cancel_action()` | cancels a running action | raises `RuntimeError("session is busy")` while running | ❌ correctness regression |
@@ -357,7 +357,7 @@ counted as test-suite failures.
 | `Session.environments_entered` (property) | `tuple[str, ...]` | binding returns `list[str]`; wrapper returns `tuple` | ✓ wrapper matches |
 | `Session.working_directory` | `Path` | binding returns `str`; wrapper returns `Path` | ✓ wrapper matches |
 | `SessionUser` | `ABC` with `is_process_user()` | `typing.Union[PosixSessionUser, WindowsSessionUser]` | ⚠ ABC removed (isinstance still works for Union via runtime checks but inheritance-based checks break) |
-| `PosixSessionUser` | dataclass with `__slots__`; pickleable | pyo3 pyclass; not pickleable, no `__slots__` attribute | ⚠ value-type regression |
+| `PosixSessionUser` | dataclass with `__slots__`; pickleable | pyo3 pyclass; pickleable via `__reduce__`, no `__slots__` attribute | ✓ pickle resolved (Rec #9) |
 | `WindowsSessionUser` | dataclass with `__slots__`; importable on linux, raises on construct | pyo3 pyclass; same import/construct semantics; password/logon_token cached for getter | ✓ matches |
 | `BadCredentialsException` | plain Python `Exception` subclass | pyo3 exception; module renamed correctly | ✓ matches |
 | `LOG`, `LogContent` | Python logging | unchanged Python module | ✓ |
@@ -504,9 +504,9 @@ All 17 are reproducible failures of the binding/wrapper.
 
 6. **`ActionStatus.__repr__` leaks Rust internals.** `repr(ActionStatus(state=ActionState.SUCCESS, exit_code=0))` → `"ActionStatus(state=Success, exit_code=Some(0))"`. Reference reports `"ActionStatus(state=<ActionState.SUCCESS: 'success'>, ...)"`. Visible in tracebacks and worker-agent log lines.
 
-7. **None of the new pyclasses are pickleable.** `ActionState`, `ActionStatus`, `PosixSessionUser`, `Session`, `SessionError` all `TypeError: cannot pickle 'openjd.sessions._v1.X' object` on `pickle.dumps`. Reference is fully pickleable for the dataclasses / `(str, Enum)`s. Pickle is used by the Deadline Cloud worker-agent IPC layer; this regression breaks that path.
+7. ~~**None of the new pyclasses are pickleable.** `ActionState`, `ActionStatus`, `PosixSessionUser`, `Session`, `SessionError` all `TypeError: cannot pickle 'openjd.sessions._v1.X' object` on `pickle.dumps`. Reference is fully pickleable for the dataclasses / `(str, Enum)`s. Pickle is used by the Deadline Cloud worker-agent IPC layer; this regression breaks that path.~~ **Resolved (Rec #9).** All value types (`SessionState`, `ActionState`, `ScriptRunnerState`, `ActionStatus`, `ActionResult`, `PosixSessionUser`, `WindowsSessionUser`) and `SessionError` / `BadCredentialsException` round-trip through pickle. `Session` itself remains intentionally not pickleable — it owns live OS resources. New tests live in `~/openjd-sessions-for-python/test/openjd/sessions-v1/test_pickle.py`.
 
-8. **`ActionResult` cannot be constructed from Python.** No `#[new]` impl; only via the dead-code `from_rust(...)` helper that nothing calls. The spec's pseudo-Python `class ActionResult: state, exit_code, stdout` is misleading — instances are unobtainable.
+8. ~~**`ActionResult` cannot be constructed from Python.** No `#[new]` impl; only via the dead-code `from_rust(...)` helper that nothing calls. The spec's pseudo-Python `class ActionResult: state, exit_code, stdout` is misleading — instances are unobtainable.~~ **Resolved (Rec #11).** `PyActionResult` now has a `#[new]` accepting `(*, state, exit_code=None, stdout="")` plus `__repr__`, `__eq__`, and `__reduce__` for pickle round-trip.
 
 9. **`SessionUser` is a `typing.Union`, not an ABC.** Reference has an ABC with `is_process_user()` abstract method. Binding-side `SessionUser` is an alias; `isinstance(u, SessionUser)` works only because `typing.Union` triggers a special isinstance dispatch, but `class MyUser(SessionUser)` no longer works. Downstream fakers / mocks that subclassed `SessionUser` have to switch to `Mock(spec=PosixSessionUser)`.
 
@@ -584,22 +584,31 @@ Numbered for the report-driven workflow in `~/openjd-rs/AGENTS.md`. Strike throu
 8. Add a `session_id` property to the wrapper `Session` class. Trivial.
    Reference test: `test_known_gaps::test_wrapper_session_id_property`.
 
-9. Make `ActionState` / `ActionStatus` / `PosixSessionUser` /
+9. ~~Make `ActionState` / `ActionStatus` / `PosixSessionUser` /
    `WindowsSessionUser` / `Session` (where applicable) pickleable by
    implementing `__reduce__` in PyO3. Especially for value types like
    `ActionState` and `ActionStatus`, which are frequently sent across IPC in
    the Deadline Cloud worker agent. Reference tests:
    `test_known_gaps::test_action_state_is_pickleable`,
-   `test_action_status_is_pickleable`, `test_posix_session_user_is_pickleable`.
+   `test_action_status_is_pickleable`, `test_posix_session_user_is_pickleable`.~~
+   **Resolved.** Implemented for all the value types listed above.
+   `Session` is intentionally **not** pickleable (it owns live OS
+   resources). `ActionStatus` round-trips its `started_at` and
+   `ended_at` timestamps via a private `_from_state` classmethod
+   that converts to and from Python `datetime`. New tests live in
+   `~/openjd-sessions-for-python/test/openjd/sessions-v1/test_pickle.py`.
 
 10. Fix `ActionStatus.__repr__` to use Python-friendly enum names instead of
     the Rust `Debug` format. File: `rust-bindings/src/sessions/types.rs:189`.
     Reference test: `test_known_gaps::test_action_status_repr_is_python_friendly`.
 
-11. Either make `ActionResult` Python-constructible (add `#[new]`) or remove
+11. ~~Either make `ActionResult` Python-constructible (add `#[new]`) or remove
     it from the spec. Currently it's exposed but unobtainable. File:
     `rust-bindings/src/sessions/types.rs:243`. Reference test:
-    `test_known_gaps::test_action_result_constructible_from_python`.
+    `test_known_gaps::test_action_result_constructible_from_python`.~~
+    **Resolved.** Added `#[new]` with signature
+    `(*, state, exit_code=None, stdout="")` plus `__repr__`, `__eq__`,
+    and `__reduce__`.
 
 12. Fix `Session.__del__` to defend against half-constructed objects: guard
     `self._rust_session.cleanup()` with `if hasattr(self, '_rust_session') and self._rust_session is not None`.

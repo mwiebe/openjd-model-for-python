@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
@@ -65,6 +66,28 @@ impl PyPosixSessionUser {
             self.inner.user(),
             self.inner.group()
         )
+    }
+
+    /// Pickle support — round-trips through `__init__(user, *, group=...)`.
+    ///
+    /// Note that on non-POSIX hosts the resulting object cannot be
+    /// loaded (the constructor raises `RuntimeError`). This matches
+    /// the reference Python class, which is also platform-restricted
+    /// at construction time.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("user", self.inner.user())?;
+        kwargs.set_item("group", self.inner.group())?;
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
     }
 }
 
@@ -284,5 +307,42 @@ impl PyWindowsSessionUser {
 
     fn __repr__(&self) -> String {
         format!("WindowsSessionUser(user={:?})", self.inner.user())
+    }
+
+    /// Pickle support — round-trips through `__init__(user, *,
+    /// password=..., logon_token=...)`.
+    ///
+    /// **Caveats:**
+    ///
+    /// 1. Pickling a Windows password is sensitive — it is stored
+    ///    plaintext in the pickle output. Avoid pickling
+    ///    `WindowsSessionUser` to disk or over an untrusted channel.
+    ///    This matches the reference Python `dataclass` which also
+    ///    stored `password` as a plain field.
+    /// 2. `logon_token` is a process-local Win32 HANDLE. The integer
+    ///    value pickles correctly but does not refer to a valid handle
+    ///    in another process; unpickling on a different process will
+    ///    fail at `LogonUser` validation.
+    /// 3. Unpickling on a non-Windows host raises `RuntimeError`,
+    ///    matching the reference class.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("user", self.inner.user())?;
+        if let Some(pw) = &self.password {
+            kwargs.set_item("password", pw)?;
+        }
+        if let Some(tok) = self.logon_token {
+            kwargs.set_item("logon_token", tok)?;
+        }
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
     }
 }

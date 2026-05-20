@@ -335,3 +335,39 @@ Breaking changes:
   like `state == "running"` breaks, must use `state == ActionState.RUNNING`
 - Internal types (`ScriptRunnerState`, `ActionMonitoringFilter`) are no
   longer importable from sessions submodules
+
+## Pickle Support
+
+Pickle is used by the Deadline Cloud worker-agent IPC layer, so all
+value types that flow across that boundary are pickleable. The
+``Session`` class itself is not — it owns live OS resources (subprocess,
+working directory, file handles) that are not meaningful to serialize.
+
+| Type | Reduces through |
+|---|---|
+| ``SessionState`` | variant name (``READY``, ``RUNNING``, ``ENDED``, …) |
+| ``ActionState`` | variant name (``RUNNING``, ``SUCCESS``, ``FAILED``, …) |
+| ``ScriptRunnerState`` | variant name |
+| ``ActionStatus`` | private ``_from_state`` classmethod that round-trips ``state``, ``progress``, ``status_message``, ``fail_message``, ``exit_code``, ``started_at``, ``ended_at`` |
+| ``ActionResult`` | constructor arguments (``state``, ``exit_code``, ``stdout``) |
+| ``PosixSessionUser`` | constructor arguments (``user``, ``group``) |
+| ``WindowsSessionUser`` | constructor arguments (``user``, ``password``, ``logon_token``) — see caveats below |
+| ``SessionError``, ``BadCredentialsException`` | standard exception pickle, under their canonical ``openjd.sessions._v1`` module path |
+
+``WindowsSessionUser`` pickle caveats:
+
+1. The password is stored plaintext in the pickle output. Avoid pickling
+   ``WindowsSessionUser`` to disk or over an untrusted channel. This
+   matches the legacy Python ``dataclass`` which also stored ``password``
+   as a plain field.
+2. ``logon_token`` is a process-local Win32 ``HANDLE``. The integer
+   value pickles correctly but does not refer to a valid handle in
+   another process; unpickling on a different process will fail at
+   ``LogonUser`` validation.
+3. Unpickling on a non-Windows host raises ``RuntimeError``, matching
+   the construction-time behavior.
+
+``Session`` is intentionally not pickleable — pickling a live session
+object would silently produce a stub that cannot run anything. Take a
+checkpoint of the inputs (``Session.__init__`` arguments and current
+``ActionStatus``) instead.
