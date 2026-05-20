@@ -399,3 +399,49 @@ class TestFromDictValidation:
             }
         )
         assert rule.source_path == "/mnt/shared"
+
+
+class TestPathMappingViaProfile:
+    """Tests that path-mapping rules registered on an :class:`ExprProfile`
+    via :meth:`HostContext.with_rules` flow through every evaluation entry
+    point.
+
+    These exercise the canonical wiring for path mapping: a caller builds
+    an :class:`ExprProfile` with rules attached and passes it as
+    ``profile=`` rather than using a per-call ``path_mapping_rules=``
+    kwarg. The profile-based plumbing is shared across
+    :func:`evaluate_expression`, :meth:`ParsedExpression.evaluate`,
+    :meth:`FormatString.resolve_string`, and :meth:`FormatString.resolve`.
+    """
+
+    @staticmethod
+    def _profile_with_rule() -> "ExprProfile":  # noqa: F821
+        from openjd.expr import ExprProfile, HostContext
+
+        rule = PathMappingRule(
+            source_path_format=PathFormat.POSIX,
+            source_path="/mnt/shared",
+            destination_path="/local/cache",
+        )
+        return ExprProfile().with_host_context(HostContext.with_rules([rule]))
+
+    def test_parsed_expression_evaluate_applies_rules(self) -> None:
+        from openjd.expr import parse_expression
+
+        parsed = parse_expression("apply_path_mapping('/mnt/shared/file.exr')")
+        result = parsed.evaluate(profile=self._profile_with_rule())
+        assert result.item() == "/local/cache/file.exr"
+
+    def test_format_string_resolve_string_applies_rules(self) -> None:
+        from openjd.expr import FormatString, SymbolTable
+
+        fs = FormatString("{{apply_path_mapping('/mnt/shared/file.exr')}}")
+        result = fs.resolve_string(SymbolTable({}), profile=self._profile_with_rule())
+        assert result == "/local/cache/file.exr"
+
+    def test_format_string_resolve_applies_rules(self) -> None:
+        from openjd.expr import FormatString, SymbolTable
+
+        fs = FormatString("{{apply_path_mapping('/mnt/shared/file.exr')}}")
+        result = fs.resolve(SymbolTable({}), profile=self._profile_with_rule())
+        assert result.item() == "/local/cache/file.exr"

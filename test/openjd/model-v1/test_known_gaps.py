@@ -1,15 +1,18 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
-Regression tests demonstrating known parity gaps between the openjd.model._v1
-Rust-backed bindings and the pure-Python reference implementation.
+Failing tests demonstrating known parity gaps between the
+``openjd.model._v1`` Rust-backed bindings and the pure-Python reference
+implementation.
 
-Each test should *fail* against the current bindings — they document the
-gaps. Mark them xfail so CI is honest about the gap until the underlying
-bug is fixed.
+Every test here is expected to *fail* against the current bindings and is
+marked ``xfail``. As gaps are resolved the corresponding tests are moved
+to the appropriate home in this directory (e.g. pickle tests to
+``test_pickle.py``, parser shape tests to ``test_parse.py``); this file
+is being driven to zero.
 
 Cross-reference:
-- /home/markw/openjd-model-for-python/reports/model-bindings-quality-evaluation-report.md
+    reports/model-bindings-quality-evaluation-report.md
 """
 
 import pickle
@@ -54,17 +57,6 @@ def test_job_template_pickleable():
     data = pickle.dumps(t)
     rt = pickle.loads(data)
     assert rt.name == t.name
-
-
-def test_task_parameter_type_hashable():
-    """Resolved by adding ``frozen, hash`` to the ``#[pyclass]`` attribute
-    on ``PyTaskParameterType``. (Pickle support for the enum landed in
-    the same change set; both follow from giving the enum a stable
-    discriminant identity.)"""
-    from openjd.model._v1 import TaskParameterType
-
-    s = {TaskParameterType.INT, TaskParameterType.STRING}
-    assert TaskParameterType.INT in s
 
 
 @pytest.mark.xfail(
