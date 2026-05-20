@@ -38,4 +38,11 @@ rm rust-bindings/pyproject.toml
 sed -i 's/r#type/type/g' src/openjd/_openjd_rs.pyi
 sed -i '/"PyExprValueIter"/d; /"PyRangeExprIter"/d; /"PyStepParamSpaceIter"/d' src/openjd/_openjd_rs.pyi
 
+# Suppress F821 false positives. pyo3-stub-gen emits forward references
+# in default-value expressions (e.g. `revision: SpecificationRevision =
+# SpecificationRevision.V2023_09`) which ruff flags as undefined names
+# even though they resolve at runtime. Add F821 to the existing noqa
+# comment so the generated stub passes lint cleanly.
+sed -i 's|^# ruff: noqa: E501, F401, F403, F405$|# ruff: noqa: E501, F401, F403, F405, F821|' src/openjd/_openjd_rs.pyi
+
 echo "Generated src/openjd/_openjd_rs.pyi"
