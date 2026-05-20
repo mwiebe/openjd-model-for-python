@@ -37,8 +37,9 @@ replacement**:
 In addition, several documented-in-spec details are missed: `SymbolTable.keys`
 returns `list` instead of `set`; `escape_format_string` produces output that
 differs from the literal example in the spec (the round-trip works, but the
-exact text doesn't match); `PathFormat` and `PathMappingRule` are not
-pickleable while their reference counterparts are; `RangeExpr` is not
+exact text doesn't match); ~~`PathFormat` and `PathMappingRule` are not
+pickleable while their reference counterparts are~~ (resolved — see Rec #6);
+`RangeExpr` is not
 hashable; `SymbolTable.__repr__` falls back to the default object repr; and
 the reference exposes `RangeExpr.start` / `.end` and `RangeExpr.from_list`
 which the binding omits. Two reference test files
@@ -421,7 +422,7 @@ coverage into `cargo tarpaulin`.
 | `PathMappingRule(source_path_format, source_path, destination_path)` | full impl, accepts `PurePath` typed `source_path` | full impl | ✓ |
 | `PathMappingRule.apply(*, path) -> (bool, str)` | full impl | full impl, additionally accepts `output_format` | ✓ + extra |
 | `PathMappingRule.to_dict / from_dict` | full impl, rejects extra fields | full impl, accepts extra fields silently | ⚠ different validation |
-| `PathMappingRule` pickle | works | fails | ❌ |
+| ~~`PathMappingRule` pickle~~ | ~~works~~ | ~~fails~~ | ✓ resolved (Rec #6) |
 | `RangeExpr(s)` / `from_str(s)` / `__len__` / `__contains__` / `__iter__` / `__getitem__` / `ranges()` | full impl | full impl | ✓ |
 | `RangeExpr.start` / `.end` (properties) | exposed | not exposed | ❌ |
 | `RangeExpr.from_list(values)` | exposed | not exposed | ❌ |
@@ -522,8 +523,8 @@ test_target_type_union_picks_matching_string                   XFAIL
 test_arithmetic_with_string_target_propagates_unconstrained    XFAIL
 test_symbol_table_keys_is_set                                  XFAIL
 test_range_expr_is_hashable                                    XFAIL
-test_path_format_is_pickleable                                 XFAIL
-test_path_mapping_rule_is_pickleable                           XFAIL
+test_path_format_is_pickleable                                 PASS  (was XFAIL — resolved by Rec #6)
+test_path_mapping_rule_is_pickleable                           PASS  (was XFAIL — resolved by Rec #6)
 ```
 
 (Exploratory probes lived in `/tmp/expr_probe*.py` while drafting; the
@@ -644,7 +645,7 @@ fixes, 10+ are hygiene/UX.
    `test_range_expr_is_hashable` in
    `test/openjd/expr/test_known_gaps.py`.
 
-6. **Implement `__reduce__` (pickle support) on `PathFormat` and
+6. ~~**Implement `__reduce__` (pickle support) on `PathFormat` and
    `PathMappingRule`** to match the reference. Files:
    `rust-bindings/src/expr/path_format.rs`,
    `rust-bindings/src/expr/path_mapping.rs`. Tests
@@ -653,7 +654,17 @@ fixes, 10+ are hygiene/UX.
    `test/openjd/expr/test_known_gaps.py`. (Optional but consistent: do
    the same for `ExprType`, `ExprValue`, `RangeExpr`, `FormatString`
    — these are unpickleable in the reference too, but Python users
-   tend to expect pickle support on serializable value types.)
+   tend to expect pickle support on serializable value types.)~~
+   **Resolved.** All eleven `openjd.expr` value types now pickle:
+   `PathFormat`, `TypeCode`, `ExprRevision`, `ExprType`, `ExprValue`,
+   `RangeExpr`, `FormatString`, `SymbolTable`, `PathMappingRule`,
+   `HostContext`, `ExprProfile`. `ExprType` and `RangeExpr` reduce
+   through their canonical string form per the agreed strategy in
+   the categorization plan. Reducers route through two shared
+   helpers (`_reconstruct_enum`, `_reconstruct_kwargs`) registered
+   in `rust-bindings/src/pickle_helpers.rs`. New tests live in
+   `test/openjd/expr/test_pickle.py`; the two xfails in
+   `test_known_gaps.py` are now passing regression tests.
 
 7. **Align `escape_format_string` output with the spec example or update
    the spec.** File: `rust-bindings/src/expr/format_string.rs:128` (and

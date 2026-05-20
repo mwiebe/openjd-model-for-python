@@ -14,6 +14,18 @@ use crate::expr::expr_type::{extract_expr_type, PyExprType};
 use crate::expr::path_format::PyPathFormat;
 use crate::expr::range_expr::PyRangeExpr;
 
+/// Return the path format associated with a `Path` or `ListPath` value,
+/// or `None` for any other variant. Mirrors the upstream `find_path_format`.
+fn find_path_format(v: &ExprValue) -> Option<PathFormat> {
+    match v {
+        ExprValue::Path { format, .. } => Some(*format),
+        v if v.is_list() => v
+            .list_elements()
+            .and_then(|elems| elems.iter().find_map(find_path_format)),
+        _ => None,
+    }
+}
+
 pub(crate) fn py_to_expr_value(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<ExprValue> {
     if obj.is_none() {
         return Ok(ExprValue::Null);
@@ -224,6 +236,83 @@ impl PyExprValue {
     fn __eq__(&self, other: &PyExprValue) -> bool {
         self.inner.equals(&other.inner)
     }
+
+    /// Pickle support — round-trips through `__init__` (or
+    /// `unresolved` for `Unresolved` values).
+    ///
+    /// The reducer encodes:
+    /// - the native Python value (`item()`)
+    /// - the type name (e.g. `"int"`, `"list[path]"`)
+    /// - for path / list-of-path values, the path format
+    ///
+    /// For `Unresolved(t)` values we use `ExprValue.unresolved(t)` instead.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::IntoPyObjectExt;
+        use pyo3::types::{PyTuple, PyType};
+        let cls: Bound<'py, PyType> = py.get_type::<Self>();
+        // Unresolved values have no payload — only a type. Reconstruct
+        // via `ExprValue.unresolved(type_str)`.
+        if let ExprValue::Unresolved(t) = &self.inner {
+            let unresolved = cls.getattr("unresolved")?;
+            let args = PyTuple::new(py, [t.to_string().into_py_any(py)?])?;
+            return Ok((unresolved, args.into()));
+        }
+        // Use a private module-level helper so older pickles can still load.
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_expr_value")?;
+        let item = expr_value_to_py(py, &self.inner);
+        let type_str = self.inner.expr_type().to_string();
+        let path_format: Option<&str> = find_path_format(&self.inner).map(|f| match f {
+            PathFormat::Posix => "POSIX",
+            PathFormat::Windows => "WINDOWS",
+            PathFormat::Uri => "URI",
+        });
+        let args = PyTuple::new(
+            py,
+            [
+                item,
+                type_str.into_py_any(py)?,
+                match path_format {
+                    Some(s) => s.into_py_any(py)?,
+                    None => py.None(),
+                },
+            ],
+        )?;
+        Ok((helper, args.into()))
+    }
+}
+
+/// Pickle helper: reconstruct an `ExprValue` from `(item, type_str,
+/// path_format_name)`. Module-level so it has a stable import path
+/// for pickled bytes from older interpreter sessions.
+#[pyfunction]
+pub(crate) fn _reconstruct_expr_value<'py>(
+    py: Python<'py>,
+    item: &Bound<'py, PyAny>,
+    type_str: Option<&str>,
+    path_format: Option<&str>,
+) -> PyResult<PyExprValue> {
+    use pyo3::types::{PyDict, PyTuple};
+    let cls = py.get_type::<PyExprValue>();
+    let kwargs = PyDict::new(py);
+    if let Some(t) = type_str {
+        kwargs.set_item("type", t)?;
+    }
+    if let Some(pf) = path_format {
+        let pf_enum = py
+            .import("openjd.expr")?
+            .getattr("PathFormat")?
+            .getattr(pf)?;
+        kwargs.set_item("path_format", pf_enum)?;
+    }
+    let args = PyTuple::new(py, [item.clone()])?;
+    let result = cls.call(args, Some(&kwargs))?;
+    let value = result.extract::<PyExprValue>()?;
+    Ok(value)
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]

@@ -154,4 +154,14 @@ impl PyPathMappingRule {
             },
         })
     }
+
+    /// Pickle support — round-trips through `to_dict` / `from_dict`.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (std::collections::HashMap<String, String>,))> {
+        let cls = py.get_type::<Self>();
+        let from_dict = cls.getattr("from_dict")?;
+        Ok((from_dict, (self.to_dict(),)))
+    }
 }

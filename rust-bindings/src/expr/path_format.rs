@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use pyo3::prelude::*;
+use pyo3::types::PyType;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 use openjd_expr::path_mapping::PathFormat;
@@ -25,6 +26,18 @@ impl PyPathFormat {
             PyPathFormat::WINDOWS => "WINDOWS",
             PyPathFormat::URI => "URI",
         }
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        let cls = py.get_type::<Self>();
+        Ok((helper, (cls, self.name())))
     }
 }
 

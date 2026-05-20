@@ -99,15 +99,21 @@ def test_range_expr_is_hashable():
     {r}  # raises if unhashable
 
 
-@pytest.mark.xfail(reason="Bindings PathFormat is not pickleable; reference is")
+# ── Resolved: PathFormat / PathMappingRule pickle ─────────────────
+
+
 def test_path_format_is_pickleable():
+    """Resolved by adding `__reduce__` on the Rust enum."""
     import pickle
 
-    pickle.dumps(PathFormat.POSIX)
+    loaded = pickle.loads(pickle.dumps(PathFormat.POSIX))
+    assert loaded == PathFormat.POSIX
 
 
-@pytest.mark.xfail(reason="Bindings PathMappingRule is not pickleable; reference is")
 def test_path_mapping_rule_is_pickleable():
+    """Resolved by adding `__reduce__` on the Rust struct, round-tripping
+    through `to_dict` / `from_dict`."""
     import pickle
 
-    pickle.dumps(PATH_RULE)
+    loaded = pickle.loads(pickle.dumps(PATH_RULE))
+    assert loaded.to_dict() == PATH_RULE.to_dict()

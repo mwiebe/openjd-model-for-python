@@ -18,7 +18,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use pyo3::prelude::*;
-use pyo3::types::PyType;
+use pyo3::types::{PyDict, PyType};
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
@@ -60,6 +60,25 @@ impl PyExprRevision {
         match self {
             PyExprRevision::V2026_02 => "2026-02",
         }
+    }
+
+    /// Variant name as a string (e.g. `"V2026_02"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            PyExprRevision::V2026_02 => "V2026_02",
+        }
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -225,6 +244,36 @@ impl PyHostContext {
             }
         }
     }
+
+    /// Pickle support — round-trips through one of the three
+    /// classmethod constructors (`none`, `unresolved`, `with_rules`).
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let cls = py.get_type::<Self>();
+        match &self.inner {
+            HostContext::None => {
+                let f = cls.getattr("none")?;
+                Ok((f, PyTuple::empty(py).into()))
+            }
+            HostContext::Unresolved => {
+                let f = cls.getattr("unresolved")?;
+                Ok((f, PyTuple::empty(py).into()))
+            }
+            HostContext::WithRules(rules) => {
+                let f = cls.getattr("with_rules")?;
+                let py_rules: Vec<PyPathMappingRule> = rules
+                    .iter()
+                    .cloned()
+                    .map(|inner| PyPathMappingRule { inner })
+                    .collect();
+                let args = (py_rules,).into_pyobject(py)?;
+                Ok((f, args.into()))
+            }
+        }
+    }
 }
 
 // ── ExprProfile ────────────────────────────────────────────────────
@@ -349,6 +398,35 @@ impl PyExprProfile {
             self.inner.extensions().len(),
             host,
         )
+    }
+
+    /// Pickle support — round-trips through `__init__(revision,
+    /// extensions=..., host_context=...)`.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Py<pyo3::types::PyTuple>)> {
+        use pyo3::types::PyTuple;
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let cls = py.get_type::<Self>();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("revision", PyExprRevision::from(self.inner.revision()))?;
+        let exts: Vec<PyExprExtension> = self
+            .inner
+            .extensions()
+            .iter()
+            .copied()
+            .map(Into::into)
+            .collect();
+        kwargs.set_item("extensions", exts)?;
+        kwargs.set_item(
+            "host_context",
+            PyHostContext { inner: self.inner.host_context().clone() },
+        )?;
+        let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
+        Ok((helper, args.into()))
     }
 }
 

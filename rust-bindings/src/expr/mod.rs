@@ -18,6 +18,7 @@ pub(crate) use errors::{expr_err_to_py, PyExpressionError, PyExpressionTypeError
 pub(crate) use path_format::PyPathFormat;
 pub(crate) use expr_type::{PyExprType, PyTypeCode};
 pub(crate) use expr_value::PyExprValue;
+pub(crate) use expr_value::_reconstruct_expr_value;
 pub(crate) use symbol_table::{PySymbolTable, extract_symtab};
 pub(crate) use profile::{PyExprExtension, PyExprProfile, PyExprRevision, PyHostContext};
 pub(crate) use function_library::{PyFunctionLibrary, get_default_library};

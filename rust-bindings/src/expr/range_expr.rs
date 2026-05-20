@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use pyo3::prelude::*;
+use pyo3::types::PyType;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
@@ -68,6 +69,15 @@ impl PyRangeExpr {
 
     fn ranges(&self) -> Vec<(i64, i64, i64)> {
         self.inner.ranges().iter().map(|r| (r.start, r.end, r.step)).collect()
+    }
+
+    /// Pickle support — round-trips through the canonical string
+    /// representation (e.g. `"1-10"`, `"1-10:2,20-30"`).
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyType>, (String,))> {
+        Ok((py.get_type::<Self>(), (self.inner.to_string(),)))
     }
 }
 

@@ -478,3 +478,29 @@ from openjd.expr import DEFAULT_MEMORY_LIMIT, DEFAULT_OPERATION_LIMIT
 DEFAULT_MEMORY_LIMIT      # 100_000_000 (100 MB)
 DEFAULT_OPERATION_LIMIT   # 10_000_000 (10 million)
 ```
+
+## Pickle Support
+
+The following value types are pickleable. Pickled state round-trips
+through ``pickle.dumps`` / ``pickle.loads`` and compares equal to the
+original.
+
+| Type | Reduces through |
+|---|---|
+| ``PathFormat`` | variant name (``POSIX`` / ``WINDOWS`` / ``URI``) |
+| ``TypeCode`` | variant name (``INT``, ``LIST``, ``RANGE_EXPR``, …) |
+| ``ExprRevision`` | variant name (e.g. ``V2026_02``) |
+| ``ExprType`` | spec-form string (``str(t)``) |
+| ``ExprValue`` | constructor arguments (``item``, ``type``, ``path_format``) |
+| ``RangeExpr`` | spec-form string (``str(r)``) |
+| ``FormatString`` | raw input string (``fs.raw()``) |
+| ``SymbolTable`` | flat ``dict[str, ExprValue]`` of all dotted leaf paths |
+| ``PathMappingRule`` | ``to_dict()`` / ``from_dict()`` |
+| ``HostContext`` | one of three classmethods (``none``, ``unresolved``, ``with_rules``) |
+| ``ExprProfile`` | constructor arguments (``revision``, ``extensions``, ``host_context``) |
+| ``ExpressionError``, ``ExpressionTypeError``, ``RangeExprError``, ``FormatStringValidationError`` | standard exception pickle, under their canonical ``openjd.expr`` module path |
+
+The runtime types ``ParsedExpression`` and ``FunctionLibrary`` are not
+pickleable — they hold transient evaluation state that is not meaningful
+to serialize. Re-construct them via ``parse_expression`` /
+``get_default_library`` after loading the inputs.

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use pyo3::prelude::*;
+use pyo3::types::PyType;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 use std::collections::HashMap;
@@ -77,6 +78,44 @@ impl From<PyTypeCode> for TypeCode {
             PyTypeCode::TYPEVAR_T2 => TypeCode::TypeVarT2,
             PyTypeCode::TYPEVAR_T3 => TypeCode::TypeVarT3,
         }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyTypeCode {
+    /// Variant name as a string (e.g. `"INT"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            PyTypeCode::NULLTYPE => "NULLTYPE",
+            PyTypeCode::BOOL => "BOOL",
+            PyTypeCode::INT => "INT",
+            PyTypeCode::FLOAT => "FLOAT",
+            PyTypeCode::STRING => "STRING",
+            PyTypeCode::PATH => "PATH",
+            PyTypeCode::LIST => "LIST",
+            PyTypeCode::RANGE_EXPR => "RANGE_EXPR",
+            PyTypeCode::ANY => "ANY",
+            PyTypeCode::UNION => "UNION",
+            PyTypeCode::NORETURN => "NORETURN",
+            PyTypeCode::UNRESOLVED => "UNRESOLVED",
+            PyTypeCode::TYPEVAR_T => "TYPEVAR_T",
+            PyTypeCode::TYPEVAR_T1 => "TYPEVAR_T1",
+            PyTypeCode::TYPEVAR_T2 => "TYPEVAR_T2",
+            PyTypeCode::TYPEVAR_T3 => "TYPEVAR_T3",
+        }
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -220,5 +259,14 @@ impl PyExprType {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         self.inner.hash(&mut h);
         h.finish()
+    }
+
+    /// Pickle support — round-trips through the spec-form string
+    /// representation (e.g. `"int"`, `"list[int]"`).
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyType>, (String,))> {
+        Ok((py.get_type::<Self>(), (self.inner.to_string(),)))
     }
 }

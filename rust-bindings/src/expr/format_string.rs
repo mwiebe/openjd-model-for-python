@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use pyo3::prelude::*;
+use pyo3::types::PyType;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
@@ -98,6 +99,14 @@ impl PyFormatString {
 
     fn __repr__(&self) -> String {
         format!("FormatString(\"{}\")", self.inner.raw())
+    }
+
+    /// Pickle support — round-trips through the raw input string.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyType>, (String,))> {
+        Ok((py.get_type::<Self>(), (self.inner.raw().to_string(),)))
     }
 }
 

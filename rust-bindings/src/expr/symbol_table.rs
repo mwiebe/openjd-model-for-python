@@ -119,4 +119,22 @@ impl PySymbolTable {
         }
         Ok(PySymbolTable { inner: result })
     }
+
+    /// Pickle support — round-trips through a flat
+    /// `dict[str, ExprValue]` of all dotted leaf paths.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, pyo3::types::PyType>, (Bound<'py, PyDict>,))> {
+        use pyo3::IntoPyObjectExt;
+        let dict = PyDict::new(py);
+        for path in self.inner.all_paths("") {
+            if let Some(openjd_expr::symbol_table::SymbolTableEntry::Value(v)) =
+                self.inner.get(&path)
+            {
+                dict.set_item(path, PyExprValue { inner: v.clone() }.into_py_any(py)?)?;
+            }
+        }
+        Ok((py.get_type::<Self>(), (dict,)))
+    }
 }
