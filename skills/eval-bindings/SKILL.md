@@ -106,7 +106,8 @@ Follow these steps in order:
     - Unicode/path edge cases that differ between Python `str` and Rust `String`.
     - Concurrent calls into the bindings from multiple Python threads.
     - The full set of error messages from the reference: do bindings raise the same exception class with the same message format?
-   Write failing tests that demonstrate any issues. Include them in the report.
+
+   Write failing tests that demonstrate any issues. Land them in `test/openjd/<component>/test_known_gaps.py` (or `~/openjd-sessions-for-python/test/openjd/sessions-v1/test_known_gaps.py` for `sessions`) marked `pytest.mark.xfail` with the reason. **Every test in `test_known_gaps.py` MUST be `xfail`** — when a gap is resolved, the test moves to its proper home alongside the rest of the regular tests for that surface, not stays in `test_known_gaps.py` as a passing regression. Reference each new xfail in the report's Recommendations section so the report-driven workflow can resolve it precisely.
 9. **Write the report** to `reports/<component>-bindings-quality-evaluation-report.md`.
 
 ### Report Structure
