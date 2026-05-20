@@ -3,6 +3,7 @@
 
 mod expr;
 mod model;
+mod pickle_helpers;
 mod sessions;
 
 use pyo3::prelude::*;
@@ -191,6 +192,15 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "BadCredentialsException",
         "openjd.sessions._v1",
     )?;
+
+    // ── Pickle reconstruction helpers ──
+    //
+    // Module-level functions referenced by the `__reduce__` methods on
+    // pyclasses across all three components. Names are part of the
+    // pickle wire format (older pickled bytes may reference them) — do
+    // not rename without a deprecation cycle.
+    m.add_function(wrap_pyfunction!(pickle_helpers::_reconstruct_enum, m)?)?;
+    m.add_function(wrap_pyfunction!(pickle_helpers::_reconstruct_kwargs, m)?)?;
 
     Ok(())
 }
