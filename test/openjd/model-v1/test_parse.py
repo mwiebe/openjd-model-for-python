@@ -9,14 +9,18 @@ import pytest
 import yaml
 
 from openjd.model._v1 import (
-    DecodeValidationError,
-    ModelValidationError,
-    DocumentType,
     OpenJDModel,
     decode_environment_template,
     decode_job_template,
     document_string_to_object,
     model_to_object,
+)
+from openjd.model._v1.types import (
+    DocumentType,
+)
+from openjd.model._v1.errors import (
+    DecodeValidationError,
+    ModelValidationError,
 )
 import openjd
 from openjd.model._v1.v2023_09 import JobTemplate as JobTemplate_2023_09

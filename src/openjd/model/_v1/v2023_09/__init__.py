@@ -1,24 +1,29 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Backward compatibility shim — re-exports from openjd.model._v1."""
 
 from openjd.model._v1 import (
-    Action,
-    EmbeddedFile as EmbeddedFileText,
-    Environment,
-    EnvironmentTemplate,
-    EnvironmentScript,
     FormatString,
-    Job,
-    JobTemplate,
-    Step,
-    StepScript,
-    StepActions,
-    StepParameterSpace,
-    StepParameterSpaceIterator,
-    STANDARD_AMOUNT_CAPABILITIES,
-    STANDARD_ATTRIBUTE_CAPABILITIES,
+    STANDARD_AMOUNT_CAPABILITIES,  # noqa: F401
+    STANDARD_ATTRIBUTE_CAPABILITIES,  # noqa: F401
+)
+from openjd.model._v1.template import (
+    EnvironmentTemplate,  # noqa: F401
+    JobTemplate,  # noqa: F401
+)
+from openjd.model._v1.job import (
+    Action,  # noqa: F401
+    EmbeddedFile as EmbeddedFileText,  # noqa: F401
+    Environment,  # noqa: F401
+    EnvironmentScript,  # noqa: F401
+    Job,  # noqa: F401
+    Step,  # noqa: F401
+    StepActions,  # noqa: F401
+    StepParameterSpace,  # noqa: F401
+    StepParameterSpaceIterator,  # noqa: F401
+    StepScript,  # noqa: F401
 )
 
 RangeExpressionTaskParameterDefinition = dict

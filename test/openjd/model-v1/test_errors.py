@@ -1,9 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 from openjd.model._v1 import (
-    DecodeValidationError,
     ExpressionError,
     TokenError,
+)
+from openjd.model._v1.errors import (
+    DecodeValidationError,
     UnsupportedSchema,
 )
 

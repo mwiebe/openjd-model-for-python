@@ -4,11 +4,13 @@ from typing import Any, Optional
 import random
 import pytest
 
-from openjd.model._v1 import (  # StepDependencyGraphNode,; ,
-    StepDependencyGraph,
+from openjd.model._v1 import (
     StepDependencyGraphStepToStepEdge,
     create_job,
     parse_model,
+)
+from openjd.model._v1.job import (
+    StepDependencyGraph,
 )
 from openjd.model._v1.v2023_09 import JobTemplate as JobTemplate_2023_09
 

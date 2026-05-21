@@ -3,15 +3,15 @@
 
 """Verify every Rust-backed PyO3 class advertises the module where it is
 conceptually exposed (e.g. `openjd.expr.FormatString`,
-`openjd.model._v1.Job`, `openjd.sessions._v1.Session`) rather than the
-default `builtins`.
+`openjd.model._v1.job.Job`, `openjd.sessions._v1.Session`) rather than
+the default `builtins`.
 
 The module string is compiled into the class by the `#[pyclass(module = ...)]`
 attribute on the Rust side, and surfaces via:
 
 * ``cls.__module__``
-* ``repr(cls)``            (`<class 'openjd.model._v1.Job'>`)
-* ``pickle`` / error messages (`TypeError: cannot create 'openjd.model._v1.X'`)
+* ``repr(cls)``            (`<class 'openjd.model._v1.job.Job'>`)
+* ``pickle`` / error messages (`TypeError: cannot create 'openjd.model._v1.job.X'`)
 
 A class reporting `builtins` is a bug — it breaks pickling, makes error
 messages unhelpful, and fools tools (Sphinx, IDEs) into looking for the
@@ -52,43 +52,47 @@ EXPECTED_MODULES: dict[str, str] = {
     "RangeExpr": "openjd.expr",
     "SymbolTable": "openjd.expr",
     "TypeCode": "openjd.expr",
-    # openjd.model._v1
-    "Action": "openjd.model._v1",
-    "CallerLimits": "openjd.model._v1",
-    "CancelationMode": "openjd.model._v1",
-    "DocumentType": "openjd.model._v1",
-    "EmbeddedFile": "openjd.model._v1",
-    "Environment": "openjd.model._v1",
-    "EnvironmentActions": "openjd.model._v1",
-    "EnvironmentScript": "openjd.model._v1",
-    "EnvironmentTemplate": "openjd.model._v1",
-    "Job": "openjd.model._v1",
-    "JobParameter": "openjd.model._v1",
-    "JobParameterType": "openjd.model._v1",
-    "JobParameterValue": "openjd.model._v1",
-    "JobTemplate": "openjd.model._v1",
-    "ModelExtension": "openjd.model._v1",
-    "ModelProfile": "openjd.model._v1",
+    # openjd.model._v1.template
+    "EnvironmentTemplate": "openjd.model._v1.template",
+    "JobTemplate": "openjd.model._v1.template",
+    # openjd.model._v1.job
+    "Action": "openjd.model._v1.job",
+    "CancelationMode": "openjd.model._v1.job",
+    "ChunkIntTaskParameter": "openjd.model._v1.job",
+    "EmbeddedFile": "openjd.model._v1.job",
+    "Environment": "openjd.model._v1.job",
+    "EnvironmentActions": "openjd.model._v1.job",
+    "EnvironmentScript": "openjd.model._v1.job",
+    "FloatTaskParameter": "openjd.model._v1.job",
+    "IntTaskParameter": "openjd.model._v1.job",
+    "Job": "openjd.model._v1.job",
+    "JobParameter": "openjd.model._v1.job",
+    "PathTaskParameter": "openjd.model._v1.job",
+    "Step": "openjd.model._v1.job",
+    "StepActions": "openjd.model._v1.job",
+    "StepDependency": "openjd.model._v1.job",
+    "StepDependencyEdge": "openjd.model._v1.job",
+    "StepDependencyGraph": "openjd.model._v1.job",
+    "StepDependencyNode": "openjd.model._v1.job",
+    "StepParameterSpace": "openjd.model._v1.job",
+    "StepParameterSpaceIterator": "openjd.model._v1.job",
+    "StepScript": "openjd.model._v1.job",
+    "StringTaskParameter": "openjd.model._v1.job",
+    "TaskChunksDefinition": "openjd.model._v1.job",
+    # openjd.model._v1.types
+    "CallerLimits": "openjd.model._v1.types",
+    "DocumentType": "openjd.model._v1.types",
+    "JobParameterType": "openjd.model._v1.types",
+    "JobParameterValue": "openjd.model._v1.types",
+    "ModelExtension": "openjd.model._v1.types",
+    "ModelProfile": "openjd.model._v1.types",
+    "TaskParameterType": "openjd.model._v1.types",
+    "TaskParameterValue": "openjd.model._v1.types",
+    "ValidationContext": "openjd.model._v1.types",
+    # Cross-component (low-level pyclasses; the v1 wrapper module shadows
+    # them with Python str-Enum shims of the same name).
     "SpecificationRevision": "openjd._openjd_rs",
-    "Step": "openjd.model._v1",
-    "StepActions": "openjd.model._v1",
-    "StepDependency": "openjd.model._v1",
-    "StepDependencyEdge": "openjd.model._v1",
-    "StepDependencyGraph": "openjd.model._v1",
-    "StepDependencyNode": "openjd.model._v1",
-    "StepParameterSpace": "openjd.model._v1",
-    "StepParameterSpaceIterator": "openjd.model._v1",
-    "StepScript": "openjd.model._v1",
-    "TaskChunksDefinition": "openjd.model._v1",
-    "IntTaskParameter": "openjd.model._v1",
-    "FloatTaskParameter": "openjd.model._v1",
-    "StringTaskParameter": "openjd.model._v1",
-    "PathTaskParameter": "openjd.model._v1",
-    "ChunkIntTaskParameter": "openjd.model._v1",
-    "TaskParameterType": "openjd.model._v1",
-    "TaskParameterValue": "openjd.model._v1",
     "TemplateSpecificationVersion": "openjd._openjd_rs",
-    "ValidationContext": "openjd.model._v1",
     # openjd.sessions._v1
     "ActionResult": "openjd.sessions._v1",
     "ActionState": "openjd.sessions._v1",
@@ -113,10 +117,10 @@ EXPECTED_EXCEPTION_MODULES: dict[str, str] = {
     "ExpressionTypeError": "openjd.expr",
     "FormatStringValidationError": "openjd.expr",
     "RangeExprError": "openjd.expr",
-    # openjd.model._v1
-    "DecodeValidationError": "openjd.model._v1",
-    "ModelValidationError": "openjd.model._v1",
-    "UnsupportedSchema": "openjd.model._v1",
+    # openjd.model._v1.errors
+    "DecodeValidationError": "openjd.model._v1.errors",
+    "ModelValidationError": "openjd.model._v1.errors",
+    "UnsupportedSchema": "openjd.model._v1.errors",
     # openjd.sessions._v1
     "SessionError": "openjd.sessions._v1",
     "BadCredentialsException": "openjd.sessions._v1",
@@ -198,7 +202,7 @@ class TestPyClassModules:
         # The macro bakes a `Py` prefix into the class's __name__, e.g.
         # `PyDecodeValidationError`. The Rust module init's
         # `register_renamed_exception` helper strips it so tracebacks show
-        # `openjd.model._v1.DecodeValidationError: ...` rather than
+        # `openjd.model._v1.errors.DecodeValidationError: ...` rather than
         # `_openjd_rs.PyDecodeValidationError: ...`.
         cls = getattr(_openjd_rs, class_name)
         # THEN __name__ should match the user-facing class name (no Py prefix)

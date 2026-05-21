@@ -4,8 +4,8 @@ import pytest
 from typing import Any, Optional
 
 from openjd.model._v1 import (
-    decode_job_template,
     decode_environment_template,
+    decode_job_template,
     merge_job_parameter_definitions,
 )
 from openjd.model._v1.v2023_09 import (

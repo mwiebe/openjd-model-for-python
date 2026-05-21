@@ -7,16 +7,20 @@ from pathlib import Path
 from typing import Any
 
 from openjd.model._v1 import (
-    DecodeValidationError,
     JobParameterInputValues,
-    JobParameterType,
     ParameterValue,
     ParameterValueType,
     create_job,
+    decode_environment_template,
+    decode_job_template,
     parse_model,
     preprocess_job_parameters,
-    decode_job_template,
-    decode_environment_template,
+)
+from openjd.model._v1.types import (
+    JobParameterType,
+)
+from openjd.model._v1.errors import (
+    DecodeValidationError,
 )
 from openjd.model._v1.v2023_09 import (
     Job as Job_2023_09,

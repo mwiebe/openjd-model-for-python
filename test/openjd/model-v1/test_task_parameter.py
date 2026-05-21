@@ -29,15 +29,19 @@ import pytest
 
 from openjd.expr import RangeExpr
 from openjd.model._v1 import (
+    create_job,
+    decode_job_template,
+)
+from openjd.model._v1.job import (
     ChunkIntTaskParameter,
     FloatTaskParameter,
     IntTaskParameter,
     PathTaskParameter,
     StringTaskParameter,
     TaskChunksDefinition,
+)
+from openjd.model._v1.types import (
     TaskParameterType,
-    create_job,
-    decode_job_template,
 )
 
 

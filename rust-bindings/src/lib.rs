@@ -171,19 +171,19 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m,
         m.py().get_type::<PyDecodeValidationError>(),
         "DecodeValidationError",
-        "openjd.model._v1",
+        "openjd.model._v1.errors",
     )?;
     register_renamed_exception(
         m,
         m.py().get_type::<PyModelValidationError>(),
         "ModelValidationError",
-        "openjd.model._v1",
+        "openjd.model._v1.errors",
     )?;
     register_renamed_exception(
         m,
         m.py().get_type::<PyUnsupportedSchema>(),
         "UnsupportedSchema",
-        "openjd.model._v1",
+        "openjd.model._v1.errors",
     )?;
 
     // ── Sessions types ──

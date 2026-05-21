@@ -12,7 +12,7 @@ use super::profile::PyModelProfile;
 use super::types::PyTemplateSpecificationVersion;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "JobTemplate", from_py_object)]
+#[pyclass(module = "openjd.model._v1.template", name = "JobTemplate", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyJobTemplate {
     pub(crate) inner: JobTemplate,
@@ -63,7 +63,7 @@ impl PyJobTemplate {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "EnvironmentTemplate", from_py_object)]
+#[pyclass(module = "openjd.model._v1.template", name = "EnvironmentTemplate", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyEnvironmentTemplate {
     pub(crate) inner: EnvironmentTemplate,

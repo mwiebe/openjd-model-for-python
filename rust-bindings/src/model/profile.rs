@@ -102,7 +102,7 @@ impl From<SpecificationRevision> for PySpecificationRevision {
 /// template YAML/JSON). The Python enum is `eq, eq_int` so that
 /// `ModelExtension.EXPR == ModelExtension.EXPR` works in sets.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "ModelExtension", eq, eq_int, hash, frozen, from_py_object)]
+#[pyclass(module = "openjd.model._v1.types", name = "ModelExtension", eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(non_camel_case_types)] // Python-side UPPER_SNAKE_CASE naming convention
 pub(crate) enum PyModelExtension {
@@ -192,7 +192,7 @@ impl From<ModelExtension> for PyModelExtension {
 /// Use [`to_expr_profile(host_context)`](Self::to_expr_profile) to
 /// derive a matching `ExprProfile` for the expression engine.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "ModelProfile", frozen, from_py_object)]
+#[pyclass(module = "openjd.model._v1.types", name = "ModelProfile", frozen, from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyModelProfile {
     pub(crate) inner: ModelProfile,
@@ -347,7 +347,7 @@ impl PyModelProfile {
 ///
 /// Mirrors `openjd_model::CallerLimits`.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "CallerLimits", frozen, from_py_object)]
+#[pyclass(module = "openjd.model._v1.types", name = "CallerLimits", frozen, from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyCallerLimits {
     pub(crate) inner: CallerLimits,
@@ -450,7 +450,7 @@ impl Default for PyCallerLimits {
 ///
 /// Mirrors `openjd_model::types::ValidationContext`.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "ValidationContext", frozen, from_py_object)]
+#[pyclass(module = "openjd.model._v1.types", name = "ValidationContext", frozen, from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyValidationContext {
     pub(crate) inner: ValidationContext,

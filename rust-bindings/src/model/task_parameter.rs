@@ -57,7 +57,7 @@ use crate::model::types::PyTaskParameterType;
 /// `"CONTIGUOUS"` or `"NONCONTIGUOUS"`.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
-    module = "openjd.model._v1",
+    module = "openjd.model._v1.job",
     name = "TaskChunksDefinition",
     frozen,
     from_py_object
@@ -193,7 +193,7 @@ fn int_range_from_py(value: &Bound<'_, PyAny>) -> PyResult<TaskParamRange<i64>> 
 /// `RangeExpr`) and no chunks.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
-    module = "openjd.model._v1",
+    module = "openjd.model._v1.job",
     name = "IntTaskParameter",
     frozen,
     from_py_object
@@ -260,7 +260,7 @@ impl PyIntTaskParameter {
 /// Resolved FLOAT task parameter: a list of floats.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
-    module = "openjd.model._v1",
+    module = "openjd.model._v1.job",
     name = "FloatTaskParameter",
     frozen,
     from_py_object
@@ -321,7 +321,7 @@ impl PyFloatTaskParameter {
 /// Resolved STRING task parameter: a list of strings.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
-    module = "openjd.model._v1",
+    module = "openjd.model._v1.job",
     name = "StringTaskParameter",
     frozen,
     from_py_object
@@ -382,7 +382,7 @@ impl PyStringTaskParameter {
 /// Resolved PATH task parameter: a list of path strings.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
-    module = "openjd.model._v1",
+    module = "openjd.model._v1.job",
     name = "PathTaskParameter",
     frozen,
     from_py_object
@@ -445,7 +445,7 @@ impl PyPathTaskParameter {
 /// Available only when the ``TASK_CHUNKING`` extension is enabled.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
-    module = "openjd.model._v1",
+    module = "openjd.model._v1.job",
     name = "ChunkIntTaskParameter",
     frozen,
     from_py_object

@@ -8,9 +8,11 @@ from openjd.model._v1 import (
     IntRangeExpr,
     ParameterValue,
     ParameterValueType,
-    StepParameterSpaceIterator,
     create_job,
     parse_model,
+)
+from openjd.model._v1.job import (
+    StepParameterSpaceIterator,
 )
 
 from openjd.model._v1.v2023_09 import (

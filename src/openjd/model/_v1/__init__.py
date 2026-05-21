@@ -1,105 +1,86 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Open Job Description Model — backed by Rust bindings."""
+"""Open Job Description Model — backed by Rust bindings.
+
+This package mirrors the structure of the underlying ``openjd_model`` Rust
+crate:
+
+* ``openjd.model._v1.template`` — template-time types (``JobTemplate``,
+  ``EnvironmentTemplate``, etc.). Returned by ``decode_*_template``.
+* ``openjd.model._v1.job`` — job-time types (``Job``, ``Step``, ``Action``,
+  ``Environment``, ``StepParameterSpace``, the typed task-parameter
+  pyclasses, etc.). Returned by ``create_job``.
+* ``openjd.model._v1.types`` — cross-cutting types (``JobParameterType``,
+  ``TaskParameterType``, ``ModelProfile``, ``CallerLimits``,
+  ``ValidationContext``, ``DocumentType``, etc.).
+* ``openjd.model._v1.errors`` — exception classes raised by
+  ``decode_*`` and ``create_job``.
+
+This top-level module re-exports the package's *entry points* — the
+decode/create functions, the Python-only compatibility classes (e.g.
+``ParameterValue``, ``RevisionExtensions``), and the str-Enum shims for
+``SpecificationRevision`` and ``TemplateSpecificationVersion`` — but
+does *not* re-export the structural pyclasses. Those live in their
+respective submodules. Update imports at call sites, e.g.::
+
+    # Before
+    from openjd.model._v1 import Job, Step, JobTemplate, JobParameterType
+
+    # After
+    from openjd.model._v1.template import JobTemplate
+    from openjd.model._v1.job import Job, Step
+    from openjd.model._v1.types import JobParameterType
+"""
 
 from enum import Enum
 from typing import Any, Optional
 
 
-# ── Re-exports from Rust native module ──
+# ── Entry-point functions and a few cross-cutting types ──
+#
+# Top-level convenience: decode/create functions live here (they're not
+# template-or-job-specific). ``CallerLimits`` is convenient at top-level
+# because it's an argument to ``decode_job_template``. ``DocumentType``
+# is referenced by ``document_string_to_object`` below.
 
 from openjd._openjd_rs import (
     # Decode functions (raw)
-    decode_job_template_str,
     decode_job_template_dict,
-    decode_environment_template_str,
     decode_environment_template_dict,
     # Job creation
     create_job,
     preprocess_job_parameters,
     merge_job_parameter_definitions,
-    # Output types
-    Job,
-    Step,
-    StepScript,
-    StepActions,
-    Action,
-    Environment,
-    EnvironmentScript,
-    EnvironmentActions,
-    EmbeddedFile,
-    JobParameter,
-    StepParameterSpace,
-    StepDependency,
-    CancelationMode,
-    # Task parameter pyclasses (output types from create_job; one per
-    # `TaskParameter` runtime variant in the underlying Rust crate).
-    IntTaskParameter,
-    FloatTaskParameter,
-    StringTaskParameter,
-    PathTaskParameter,
-    ChunkIntTaskParameter,
-    TaskChunksDefinition,
-    # Iteration
-    StepParameterSpaceIterator,
-    StepDependencyGraph,
-    StepDependencyNode as _RustStepDependencyNode,
-    StepDependencyEdge as _RustStepDependencyEdge,
-    # Template types
-    JobTemplate,
-    EnvironmentTemplate,
-    # Enums
+    # Used by document_string_to_object below
     DocumentType,
-    JobParameterType,
-    TaskParameterType,
-    TaskParameterValue,
-    JobParameterValue,
-    # Profile types — the canonical inputs to decode_*_template and create_job.
-    # Mirror openjd_model::types::{ModelProfile, ModelExtension,
-    # SpecificationRevision, CallerLimits, ValidationContext}.
-    ModelProfile,
-    ModelExtension,
-    SpecificationRevision as _RsSpecificationRevision,
+    # Used by decode_job_template signature
     CallerLimits,
-    ValidationContext,
-    # Errors
-    DecodeValidationError,
-    ModelValidationError,
-    UnsupportedSchema,
-    # Expr types used by model consumers
-    SymbolTable,
-    FormatString,
-    ExpressionError,
-    FormatStringValidationError as FormatStringError,
-    RangeExpr,
+    # Used by RevisionExtensions / _to_rust_revision below
+    ModelProfile,
+    SpecificationRevision as _RsSpecificationRevision,
 )
-from openjd._openjd_rs import TemplateSpecificationVersion as _RustTSV
 
+# Errors used in compat-shim function bodies below (e.g.
+# ``document_string_to_object`` re-raises as ``DecodeValidationError``)
+from openjd._openjd_rs import DecodeValidationError
 
-# Note: the `__module__` / `__name__` / `__qualname__` of the Rust-backed
-# exceptions are set by the `_openjd_rs` module init in Rust to their
-# canonical user-facing values (e.g. `openjd.model._v1.ModelValidationError`).
-# No Python-side fix-up needed.
+# Types/template/job submodules — re-export so users can do:
+#   from openjd.model._v1 import template, job, types, errors
+from . import errors, job, template, types  # noqa: F401
 
 
 # ── SpecificationRevision (Python str-Enum for backward-compatibility) ──
 #
-# The Rust binding exposes its `SpecificationRevision` pyclass under the
-# private name `_RsSpecificationRevision` above. Existing consumers
-# (openjd-sessions, openjd-cli, deadline-cloud-worker-agent) reference
-# `SpecificationRevision.v2023_09` (lowercase `v`) — a Python `str`-Enum
-# member name. We keep that surface here as the primary import; new code
-# can reach for the Rust pyclass via `_RsSpecificationRevision` if it
-# wants the Rust naming.
-#
-# Conversion happens in `_to_rust_revision`/`_from_rust_revision` below.
+# Existing consumers (openjd-sessions, openjd-cli, deadline-cloud-worker-agent)
+# reference ``SpecificationRevision.v2023_09`` (lowercase ``v``) — a Python
+# ``str``-Enum member name. We keep that surface here as the primary export.
 
 
 class SpecificationRevision(str, Enum):
     """Specification revision identifier.
 
-    Currently the only revision is `v2023_09` (= `"2023-09"`).
+    Currently the only revision is ``v2023_09`` (= ``"2023-09"``).
     """
 
     v2023_09 = "2023-09"
@@ -127,7 +108,7 @@ def _from_rust_revision(rev: _RsSpecificationRevision) -> SpecificationRevision:
 # ── Python-only types ──
 
 # Backward compatibility alias
-ParameterValueType = JobParameterType
+ParameterValueType = types.JobParameterType
 
 
 class ParameterValue:
@@ -173,15 +154,15 @@ class TemplateSpecificationVersion(str, Enum):
 class RevisionExtensions:
     """Tracks which extensions are active for a specification revision.
 
-    Thin compat wrapper around `ModelProfile` for callers that still pass
-    `RevisionExtensions(spec_rev=..., supported_extensions=[...])`. New
-    code should construct a `ModelProfile` directly.
+    Thin compat wrapper around ``ModelProfile`` for callers that still pass
+    ``RevisionExtensions(spec_rev=..., supported_extensions=[...])``. New
+    code should construct a ``ModelProfile`` directly.
     """
 
     def __init__(
         self,
-        spec_rev: SpecificationRevision = None,
-        revision: SpecificationRevision = None,
+        spec_rev: "SpecificationRevision | None" = None,
+        revision: "SpecificationRevision | None" = None,
         supported_extensions: Optional[list] = None,
         extensions: Optional[set] = None,
     ):
@@ -192,166 +173,19 @@ class RevisionExtensions:
             self.extensions = extensions or set()
 
     def to_profile(self) -> "ModelProfile":
-        """Build the matching `ModelProfile`."""
+        """Build the matching ``ModelProfile``."""
         return ModelProfile.from_strings(
             _to_rust_revision(self.revision),
             sorted(str(e) for e in self.extensions),
         )
 
 
-# Type aliases
+# Type aliases (Python-only, opaque dict shapes used by openjd-sessions)
 JobParameterValues = dict  # dict[str, ParameterValue] or dict[str, dict]
 JobParameterInputValues = dict  # dict[str, str]
 TaskParameterSet = dict  # dict[str, Any]
-JobParameterDefinition = Any  # opaque from Rust
+JobParameterDefinition = Any  # opaque from Rust (JobTemplate.parameter_definitions)
 OpenJDModel = Any  # base class no longer needed
-
-
-# ── Compatibility aliases ──
-
-IntRangeExpr = RangeExpr
-
-
-# ── Types needed by sessions ──
-
-CommandString = FormatString
-ArgString = FormatString
-
-
-class ValueReferenceConstants(str, Enum):
-    """String constants for symbol table key prefixes."""
-
-    JOB_PARAMETER_PREFIX = "Param"
-    JOB_PARAMETER_RAWPREFIX = "RawParam"
-    TASK_PARAMETER_PREFIX = "Task.Param"
-    TASK_PARAMETER_RAWPREFIX = "Task.RawParam"
-    ENV_FILE_PREFIX = "Env.File"
-    TASK_FILE_PREFIX = "Task.File"
-    WORKING_DIRECTORY = "Session.WorkingDirectory"
-    HAS_PATH_MAPPING_RULES = "Session.HasPathMappingRules"
-    PATH_MAPPING_RULES_FILE = "Session.PathMappingRulesFile"
-
-
-class CancelationMethodTerminate:
-    def __init__(self, mode=None):
-        self.mode = mode or "TERMINATE"
-
-
-class CancelationMethodNotifyThenTerminate:
-    def __init__(self, mode=None, notify_period_in_seconds: int = 120):
-        self.mode = mode or "NOTIFY_THEN_TERMINATE"
-        self.notify_period_in_seconds = notify_period_in_seconds
-
-
-EmbeddedFileText = EmbeddedFile
-EmbeddedFiles = list
-
-
-class CompatibilityError(Exception):
-    pass
-
-
-class TokenError(Exception):
-    def __init__(self, source: str, token: str, position: int):
-        self.source = source
-        self.token = token
-        self.position = position
-        super().__init__(f"Unexpected '{token}' in '{source}' after '{source[:position]}'")
-
-
-# ── Python functions ──
-
-try:
-    from yaml import CSafeLoader as _YamlLoader
-except ImportError:
-    from yaml import SafeLoader as _YamlLoader  # type: ignore[assignment]
-
-
-def document_string_to_object(*, document: str, document_type: "DocumentType" = None) -> dict[str, Any]:
-    """Parse a YAML or JSON document string into a Python dict."""
-    import json as _json
-    import yaml as _yaml
-
-    try:
-        if document_type == DocumentType.JSON:
-            result = _json.loads(document)
-        else:
-            result = _yaml.load(document, Loader=_YamlLoader)
-    except Exception as e:
-        raise DecodeValidationError(str(e)) from e
-    if not isinstance(result, dict):
-        raise DecodeValidationError(
-            f"Template must be a mapping/object, got {type(result).__name__}"
-        )
-    return result
-
-
-def decode_job_template(
-    *,
-    template: dict[str, Any],
-    supported_extensions: Optional[list[str]] = None,
-    caller_limits: Optional[CallerLimits] = None,
-) -> JobTemplate:
-    """Decode and validate a job template from a Python dict.
-
-    Args:
-        template: The decoded template mapping.
-        supported_extensions: The caller's allowlist of OpenJD extension
-            names. The template's `extensions:` field is validated
-            against this list — any name in the template that is not
-            both a recognized `ModelExtension` AND in this list is
-            rejected with `Unsupported extension names: ...`. Pass
-            `None` (the default) for an empty allowlist (i.e., reject
-            every extension the template requests).
-        caller_limits: Optional `CallerLimits` to tighten spec-defined
-            limits.
-
-    Returns:
-        The parsed `JobTemplate`. Use `template.profile` to access the
-        `ModelProfile` describing the template's declared revision and
-        extensions (a subset of `supported_extensions`).
-    """
-    return decode_job_template_dict(
-        template,
-        supported_extensions=list(supported_extensions) if supported_extensions is not None else None,
-        caller_limits=caller_limits,
-    )
-
-
-def decode_environment_template(
-    *,
-    template: dict[str, Any],
-    supported_extensions: Optional[list[str]] = None,
-) -> EnvironmentTemplate:
-    """Decode and validate an environment template from a Python dict.
-
-    See `decode_job_template` for `supported_extensions` semantics.
-    Environment templates do not accept caller limits.
-    """
-    return decode_environment_template_dict(
-        template,
-        supported_extensions=list(supported_extensions) if supported_extensions is not None else None,
-    )
-
-
-def parse_model(*, model: Any = None, obj: dict[str, Any]) -> Any:
-    """Decode a template from a dict, auto-detecting the type.
-
-    The `model` parameter is accepted for backward compatibility but
-    ignored — the template type is determined from `specificationVersion`
-    in the dict.
-    """
-    spec = obj.get("specificationVersion", "")
-    if "environment" in spec:
-        return decode_environment_template_dict(obj)
-    return decode_job_template_dict(obj)
-
-
-def model_to_object(*, model: Any) -> dict[str, Any]:
-    """Serialize a model object to a dict. Limited support with Rust types."""
-    if hasattr(model, "to_dict"):
-        return model.to_dict()
-    raise NotImplementedError("model_to_object is not supported for this type")
 
 
 # ── Capability validation (Python side) ──
@@ -427,15 +261,187 @@ STANDARD_ATTRIBUTE_CAPABILITIES: dict[str, dict] = {
 }
 
 
-StepDependencyGraphNode = _RustStepDependencyNode
-StepDependencyGraphStepToStepEdge = _RustStepDependencyEdge
+# ── Functions ──
+
+try:
+    from yaml import CSafeLoader as _YamlLoader
+except ImportError:
+    from yaml import SafeLoader as _YamlLoader  # type: ignore[assignment]
+
+
+def document_string_to_object(*, document: str, document_type: "DocumentType | None" = None) -> dict[str, Any]:
+    """Parse a YAML or JSON document string into a Python dict."""
+    import json as _json
+
+    import yaml as _yaml
+
+    try:
+        if document_type == DocumentType.JSON:
+            result = _json.loads(document)
+        else:
+            result = _yaml.load(document, Loader=_YamlLoader)
+    except Exception as e:
+        raise DecodeValidationError(str(e)) from e
+    if not isinstance(result, dict):
+        raise DecodeValidationError(
+            f"Template must be a mapping/object, got {type(result).__name__}"
+        )
+    return result
+
+
+def decode_job_template(
+    *,
+    template: dict[str, Any],
+    supported_extensions: Optional[list[str]] = None,
+    caller_limits: "Optional[CallerLimits]" = None,
+) -> "template.JobTemplate":
+    """Decode and validate a job template from a Python dict.
+
+    Args:
+        template: The decoded template mapping.
+        supported_extensions: The caller's allowlist of OpenJD extension
+            names. The template's ``extensions:`` field is validated
+            against this list — any name in the template that is not
+            both a recognized ``ModelExtension`` AND in this list is
+            rejected with ``Unsupported extension names: ...``. Pass
+            ``None`` (the default) for an empty allowlist (i.e., reject
+            every extension the template requests).
+        caller_limits: Optional ``CallerLimits`` to tighten spec-defined
+            limits.
+
+    Returns:
+        The parsed ``openjd.model._v1.template.JobTemplate``. Use
+        ``template.profile`` to access the ``ModelProfile`` describing
+        the template's declared revision and extensions (a subset of
+        ``supported_extensions``).
+    """
+    return decode_job_template_dict(
+        template,
+        supported_extensions=list(supported_extensions) if supported_extensions is not None else None,
+        caller_limits=caller_limits,
+    )
+
+
+def decode_environment_template(
+    *,
+    template: dict[str, Any],
+    supported_extensions: Optional[list[str]] = None,
+) -> "template.EnvironmentTemplate":
+    """Decode and validate an environment template from a Python dict.
+
+    See ``decode_job_template`` for ``supported_extensions`` semantics.
+    Environment templates do not accept caller limits.
+    """
+    return decode_environment_template_dict(
+        template,
+        supported_extensions=list(supported_extensions) if supported_extensions is not None else None,
+    )
+
+
+def parse_model(*, model: Any = None, obj: dict[str, Any]) -> Any:
+    """Decode a template from a dict, auto-detecting the type.
+
+    The ``model`` parameter is accepted for backward compatibility but
+    ignored — the template type is determined from ``specificationVersion``
+    in the dict.
+    """
+    spec = obj.get("specificationVersion", "")
+    if "environment" in spec:
+        return decode_environment_template_dict(obj)
+    return decode_job_template_dict(obj)
+
+
+def model_to_object(*, model: Any) -> dict[str, Any]:
+    """Serialize a model object to a dict. Limited support with Rust types."""
+    if hasattr(model, "to_dict"):
+        return model.to_dict()
+    raise NotImplementedError("model_to_object is not supported for this type")
+
+
+# ── Compatibility shims ──
+#
+# Surface re-exports kept here for downstream callers that still import
+# these names from ``openjd.model._v1``. These are not part of the
+# template/job/types/errors module split — they're either:
+#
+# * ``openjd.expr`` re-exports (FormatString, SymbolTable, RangeExpr,
+#   ExpressionError, FormatStringError) — strictly speaking these
+#   should be imported from ``openjd.expr`` directly, but we re-export
+#   for legacy callers.
+#
+# * Python-only compat classes for the v0 API (CancelationMethodTerminate,
+#   CancelationMethodNotifyThenTerminate, ValueReferenceConstants,
+#   CompatibilityError, TokenError, EmbeddedFileText, EmbeddedFiles).
+#
+# * Aliases (CommandString, ArgString, IntRangeExpr,
+#   StepDependencyGraphNode, StepDependencyGraphStepToStepEdge) for v0
+#   names that map to v1 types.
+
+from openjd._openjd_rs import (  # noqa: E402
+    SymbolTable,
+    FormatString,
+    RangeExpr,
+    ExpressionError,
+    FormatStringValidationError as FormatStringError,
+)
+
+
+CommandString = FormatString
+ArgString = FormatString
+IntRangeExpr = RangeExpr
+EmbeddedFileText = job.EmbeddedFile
+EmbeddedFiles = list
+StepDependencyGraphNode = job.StepDependencyNode
+StepDependencyGraphStepToStepEdge = job.StepDependencyEdge
+
+
+class ValueReferenceConstants(str, Enum):
+    """String constants for symbol table key prefixes."""
+
+    JOB_PARAMETER_PREFIX = "Param"
+    JOB_PARAMETER_RAWPREFIX = "RawParam"
+    TASK_PARAMETER_PREFIX = "Task.Param"
+    TASK_PARAMETER_RAWPREFIX = "Task.RawParam"
+    ENV_FILE_PREFIX = "Env.File"
+    TASK_FILE_PREFIX = "Task.File"
+    WORKING_DIRECTORY = "Session.WorkingDirectory"
+    HAS_PATH_MAPPING_RULES = "Session.HasPathMappingRules"
+    PATH_MAPPING_RULES_FILE = "Session.PathMappingRulesFile"
+
+
+class CancelationMethodTerminate:
+    def __init__(self, mode=None):
+        self.mode = mode or "TERMINATE"
+
+
+class CancelationMethodNotifyThenTerminate:
+    def __init__(self, mode=None, notify_period_in_seconds: int = 120):
+        self.mode = mode or "NOTIFY_THEN_TERMINATE"
+        self.notify_period_in_seconds = notify_period_in_seconds
+
+
+class CompatibilityError(Exception):
+    pass
+
+
+class TokenError(Exception):
+    def __init__(self, source: str, token: str, position: int):
+        self.source = source
+        self.token = token
+        self.position = position
+        super().__init__(f"Unexpected '{token}' in '{source}' after '{source[:position]}'")
 
 
 from .._version import version  # noqa: E402
 
 
 __all__ = (
-    # Decode + create
+    # Submodules
+    "errors",
+    "job",
+    "template",
+    "types",
+    # Decode + create entry points
     "create_job",
     "decode_environment_template",
     "decode_job_template",
@@ -444,69 +450,49 @@ __all__ = (
     "model_to_object",
     "parse_model",
     "preprocess_job_parameters",
-    # Capability validation
+    # Capability validation (Python-only)
     "validate_amount_capability_name",
     "validate_attribute_capability_name",
     "STANDARD_AMOUNT_CAPABILITIES",
     "STANDARD_ATTRIBUTE_CAPABILITIES",
-    # Profile types
-    "ModelProfile",
-    "ModelExtension",
+    # Python str-Enum shims (legacy compat)
     "SpecificationRevision",
-    "CallerLimits",
-    "ValidationContext",
-    "RevisionExtensions",
-    # Errors
-    "CompatibilityError",
-    "DecodeValidationError",
-    "ExpressionError",
-    "FormatStringError",
-    "ModelValidationError",
-    "TokenError",
-    "UnsupportedSchema",
-    # Templates and jobs
-    "DocumentType",
-    "EnvironmentTemplate",
-    "Job",
-    "JobParameter",
-    "JobParameterDefinition",
-    "JobParameterInputValues",
-    "JobParameterType",
-    "JobParameterValues",
-    "JobTemplate",
+    "TemplateSpecificationVersion",
+    # Python-only compat classes
     "ParameterValue",
     "ParameterValueType",
-    "Step",
-    "StepDependency",
-    "StepDependencyGraph",
-    "StepDependencyGraphNode",
-    "StepDependencyGraphStepToStepEdge",
-    "StepParameterSpace",
-    "StepParameterSpaceIterator",
-    "TaskParameterSet",
-    "TaskParameterType",
-    # Task-parameter pyclasses (one per Rust runtime variant).
-    "IntTaskParameter",
-    "FloatTaskParameter",
-    "StringTaskParameter",
-    "PathTaskParameter",
-    "ChunkIntTaskParameter",
-    "TaskChunksDefinition",
-    "TemplateSpecificationVersion",
-    "OpenJDModel",
-    # Expr re-exports
-    "ArgString",
-    "CommandString",
-    "FormatString",
-    "IntRangeExpr",
-    "RangeExpr",
-    "SymbolTable",
-    # Misc
+    "RevisionExtensions",
     "CancelationMethodNotifyThenTerminate",
     "CancelationMethodTerminate",
-    "EmbeddedFile",
+    "CompatibilityError",
+    "TokenError",
+    "ValueReferenceConstants",
+    # Opaque type aliases
+    "JobParameterDefinition",
+    "JobParameterInputValues",
+    "JobParameterValues",
+    "OpenJDModel",
+    "TaskParameterSet",
+    # Used by decode_job_template signature (re-exported from .types)
+    "CallerLimits",
+    "DocumentType",
+    "ModelProfile",
+    # Errors raised by helper functions in this module
+    "DecodeValidationError",
+    # openjd.expr re-exports (legacy compat)
+    "ExpressionError",
+    "FormatString",
+    "FormatStringError",
+    "RangeExpr",
+    "SymbolTable",
+    # Aliases / type renames (legacy compat)
+    "ArgString",
+    "CommandString",
     "EmbeddedFileText",
     "EmbeddedFiles",
-    "ValueReferenceConstants",
+    "IntRangeExpr",
+    "StepDependencyGraphNode",
+    "StepDependencyGraphStepToStepEdge",
+    # Version
     "version",
 )

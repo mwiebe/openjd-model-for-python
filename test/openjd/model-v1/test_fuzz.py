@@ -18,13 +18,17 @@ import traceback
 from typing import Optional
 
 from openjd.model._v1 import (
-    DecodeValidationError,
-    DocumentType,
-    ModelValidationError,
-    UnsupportedSchema,
     decode_environment_template,
     decode_job_template,
     document_string_to_object,
+)
+from openjd.model._v1.types import (
+    DocumentType,
+)
+from openjd.model._v1.errors import (
+    DecodeValidationError,
+    ModelValidationError,
+    UnsupportedSchema,
 )
 
 EXPECTED_EXCEPTIONS = (DecodeValidationError, ModelValidationError, UnsupportedSchema, NotImplementedError)

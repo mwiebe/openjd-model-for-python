@@ -11,7 +11,7 @@ use super::job::{PyJob, PyStep};
 use crate::model::errors::model_err_to_py;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "StepDependencyGraph")]
+#[pyclass(module = "openjd.model._v1.job", name = "StepDependencyGraph")]
 pub(crate) struct PyStepDependencyGraph {
     inner: StepDependencyGraph,
     job_steps: Vec<openjd_model::job::Step>,
@@ -91,7 +91,7 @@ impl PyStepDependencyGraph {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "StepDependencyNode")]
+#[pyclass(module = "openjd.model._v1.job", name = "StepDependencyNode")]
 #[derive(Clone)]
 pub(crate) struct PyStepDependencyNode {
     #[pyo3(get)]
@@ -103,7 +103,7 @@ pub(crate) struct PyStepDependencyNode {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1", name = "StepDependencyEdge")]
+#[pyclass(module = "openjd.model._v1.job", name = "StepDependencyEdge")]
 #[derive(Clone)]
 pub(crate) struct PyStepDependencyEdge {
     origin_step: openjd_model::job::Step,
