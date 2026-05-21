@@ -11,6 +11,8 @@ use openjd_model::TemplateSpecificationVersion;
 use super::profile::PyModelProfile;
 use super::types::PyTemplateSpecificationVersion;
 use super::template_types::{PyEnvironment as PyTemplateEnvironment, PyStepTemplate};
+use super::job_param_defs::job_param_defs_to_py;
+use pyo3::types::PyList;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.model._v1.template", name = "JobTemplate", from_py_object)]
@@ -87,6 +89,28 @@ impl PyJobTemplate {
         self.job_environments()
     }
 
+    /// The list of `JobParameterDefinition`s declared on this job
+    /// template, or ``None`` if the template has no
+    /// `parameterDefinitions:` field. Each element is one of the
+    /// twelve `JobParameterDefinition` variants
+    /// (`JobStringParameterDefinition`, `JobIntParameterDefinition`,
+    /// …, `JobListListIntParameterDefinition`). Mirrors the
+    /// `parameterDefinitions:` field in the YAML/JSON document.
+    #[getter]
+    fn parameter_definitions<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyList>>> {
+        job_param_defs_to_py(py, self.inner.parameter_definitions.as_ref())
+    }
+
+    /// camelCase alias for `parameter_definitions`.
+    #[getter]
+    #[pyo3(name = "parameterDefinitions")]
+    fn parameter_definitions_camel<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyList>>> {
+        self.parameter_definitions(py)
+    }
+
     fn __repr__(&self) -> String {
         format!("JobTemplate(name={:?}, version={:?})", self.inner.name.raw(), self.inner.specification_version)
     }
@@ -131,6 +155,26 @@ impl PyEnvironmentTemplate {
     #[getter]
     fn environment(&self) -> PyTemplateEnvironment {
         PyTemplateEnvironment { inner: self.inner.environment.clone() }
+    }
+
+    /// The list of `JobParameterDefinition`s declared on this
+    /// environment template, or ``None`` if the template has no
+    /// `parameterDefinitions:` field. See
+    /// `JobTemplate.parameter_definitions` for the details of each
+    /// variant.
+    #[getter]
+    fn parameter_definitions<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyList>>> {
+        job_param_defs_to_py(py, self.inner.parameter_definitions.as_ref())
+    }
+
+    /// camelCase alias for `parameter_definitions`.
+    #[getter]
+    #[pyo3(name = "parameterDefinitions")]
+    fn parameter_definitions_camel<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyList>>> {
+        self.parameter_definitions(py)
     }
 
     fn __repr__(&self) -> String {

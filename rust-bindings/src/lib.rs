@@ -170,6 +170,19 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTemplateStepDependency>()?;
     m.add_class::<PyTemplateStepScript>()?;
     m.add_class::<PyStepTemplate>()?;
+    // JobParameterDefinition variants (template-time)
+    m.add_class::<PyJobStringParameterDefinition>()?;
+    m.add_class::<PyJobIntParameterDefinition>()?;
+    m.add_class::<PyJobFloatParameterDefinition>()?;
+    m.add_class::<PyJobPathParameterDefinition>()?;
+    m.add_class::<PyJobBoolParameterDefinition>()?;
+    m.add_class::<PyJobRangeExprParameterDefinition>()?;
+    m.add_class::<PyJobListStringParameterDefinition>()?;
+    m.add_class::<PyJobListPathParameterDefinition>()?;
+    m.add_class::<PyJobListIntParameterDefinition>()?;
+    m.add_class::<PyJobListFloatParameterDefinition>()?;
+    m.add_class::<PyJobListBoolParameterDefinition>()?;
+    m.add_class::<PyJobListListIntParameterDefinition>()?;
 
     m.add_function(wrap_pyfunction!(decode_job_template_str, m)?)?;
     m.add_function(wrap_pyfunction!(decode_job_template_dict, m)?)?;

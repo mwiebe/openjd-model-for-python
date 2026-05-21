@@ -479,8 +479,8 @@ This section lists every public symbol in the **reference**
 | `EmbeddedFile(name, type, filename, data, runnable, endOfLine)` | Pydantic model | Rust struct, both `endOfLine` and `end_of_line` accepted | ✓ |
 | `JobTemplate.name` / `description` / `specification_version` | All getters present | Same | ✓ |
 | ~~`JobTemplate.specificationVersion` (camel) exists~~ | exists | exposed as a camelCase alias for `specification_version` | ✓ resolved (Rec #11 part 1) |
-| `JobTemplate.parameter_definitions` / `steps` / `extensions` | exist | **Not exposed** | ❌ |
-| `EnvironmentTemplate.environment` (the inner `Environment`) | exposed | **Not exposed** | ❌ |
+| ~~`JobTemplate.parameter_definitions` / `steps` / `extensions`~~ | exist | exposed via `template.parameter_definitions` (12 typed variants), `template.steps` (`list[StepTemplate]`), `template.profile.extensions` | ✓ resolved (Rec #11) |
+| ~~`EnvironmentTemplate.environment` (the inner `Environment`)~~ | exposed | exposed at `template.environment`, returning a typed `Environment` pyclass | ✓ resolved (Rec #11) |
 | `RevisionExtensions(spec_rev=, supported_extensions=)` | strict kw | also accepts `revision=` and `extensions=` | ⚠ |
 | `CancelationMethodTerminate(mode=...)` | dataclass with mode | Plain class, default mode `'TERMINATE'` | ✓ |
 | `CancelationMethodNotifyThenTerminate(notify_period_in_seconds=120)` | dataclass | Plain class | ✓ |
@@ -873,41 +873,66 @@ proves the gap so it can be fixed and the proof regenerated.
     `parse_model`. Resolves
     `test/openjd/model-v1/test_known_gaps.py::test_decode_template_re_export`.
 
-11. **Expose `JobTemplate.specificationVersion`, `parameter_definitions`,
+11. ~~**Expose `JobTemplate.specificationVersion`, `parameter_definitions`,
     `steps`, `extensions`, `job_environments`** (and the same for
     `EnvironmentTemplate.environment`, etc.). File:
     `rust-bindings/src/model/template.rs`. The current minimalist
     interface (`name` / `description` / `specification_version`) blocks
     consumers from inspecting templates, forcing them to round-trip
     through `decode_job_template` again. Resolves
-    `test/openjd/model-v1/test_known_gaps.py::test_job_template_specification_version_camelcase`.
+    `test/openjd/model-v1/test_known_gaps.py::test_job_template_specification_version_camelcase`.~~
+    **Resolved.**
 
-    **Partially resolved.** `JobTemplate.profile` exposes the
-    declared revision and extensions list as a typed `ModelProfile`
-    (mirrors `JobTemplate::profile()` in the Rust crate). See
-    `rust-bindings/src/model/template.rs:49`. Read the template's
-    `extensions:` field via `template.profile.extensions`.
-    `specificationVersion` (camelCase accessor) is now exposed
-    on both `JobTemplate` and `EnvironmentTemplate` as an alias
-    for `specification_version`. `JobTemplate.steps`,
-    `JobTemplate.job_environments`/`jobEnvironments`, and
-    `EnvironmentTemplate.environment` are now exposed, returning
-    typed pyclasses (`StepTemplate`, `Environment`, etc.) at
-    `openjd.model._v1.template`. The structural template-time
-    pyclasses (`StepTemplate`, `Environment`, `EnvironmentScript`,
+    `JobTemplate` and `EnvironmentTemplate` now expose the full
+    set of structural accessors:
+
+    - `specification_version` / `specificationVersion`
+    - `description`
+    - `profile` (typed `ModelProfile`, mirrors `JobTemplate::profile()`)
+    - `steps` (`list[StepTemplate]`) — JobTemplate only
+    - `job_environments` / `jobEnvironments` — JobTemplate only
+    - `environment` (the inner `Environment`) — EnvironmentTemplate only
+    - `parameter_definitions` / `parameterDefinitions` — list of
+      typed `JobParameterDefinition` variants
+
+    The structural template-time pyclasses are at
+    `openjd.model._v1.template` and mirror `openjd_model::template::*`
+    1:1: `StepTemplate`, `Environment`, `EnvironmentScript`,
     `EnvironmentActions`, `Action`, `EmbeddedFile`, `StepScript`,
     `StepActions`, `CancelationMode`, `HostRequirements`,
     `AmountRequirement`, `AttributeRequirement`, `StepDependency`,
-    `SimpleAction`) mirror the Rust `template::*` types 1:1.
+    `SimpleAction`. Where names collide with the job-time pyclasses
+    at `openjd.model._v1.job` (`Action`, `Environment`, etc.), the
+    template-time pyclasses are also exposed under
+    `Template`-prefixed aliases (e.g. `TemplateAction`).
 
-    Still missing: `JobTemplate.parameter_definitions` and
-    `EnvironmentTemplate.parameter_definitions` (typed
-    `JobParameterDefinition` 12-variant dispatch), and a typed
-    pyclass for `StepTemplate.parameter_space`
-    (`StepParameterSpaceDefinition`). The follow-up commit will
-    address parameter definitions; the parameter-space definition
-    is deferred (the Rust struct does not impl `Serialize`, and a
-    typed pyclass for it requires deeper analysis).
+    `parameter_definitions` returns one of twelve typed
+    pyclasses per element, dispatching on the
+    `JobParameterDefinition` Rust enum variant:
+    `JobStringParameterDefinition`, `JobIntParameterDefinition`,
+    `JobFloatParameterDefinition`, `JobPathParameterDefinition`
+    (base 4); plus `JobBoolParameterDefinition`,
+    `JobRangeExprParameterDefinition`,
+    `JobListStringParameterDefinition`,
+    `JobListPathParameterDefinition`,
+    `JobListIntParameterDefinition`,
+    `JobListFloatParameterDefinition`,
+    `JobListBoolParameterDefinition`,
+    `JobListListIntParameterDefinition` (eight EXPR-extension
+    types). Each pyclass exposes the core surface (`name`,
+    `description`, `default`, `type`) plus type-specific
+    constraints (`allowed_values`, `min_length`/`max_length`,
+    `min_value`/`max_value`, `object_type`, `data_flow`).
+
+    Two narrow surfaces remain deferred:
+
+    - `StepTemplate.parameter_space` returns `None` for now. The
+      underlying `StepParameterSpaceDefinition` Rust type does
+      not implement `Serialize`, so a typed pyclass for it needs
+      deeper integration. Out of scope; documented in spec.
+    - The `user_interface` field on each `JobParameterDefinition`
+      variant is not yet exposed. The `*UserInterface` Rust types
+      are large enough to warrant a separate commit.
 
 12. **Map `ModelError::FormatStringError` → `FormatStringError`, not
     `ModelValidationError`.** File: `rust-bindings/src/model/errors.rs`.

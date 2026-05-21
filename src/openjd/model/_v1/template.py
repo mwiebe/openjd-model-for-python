@@ -39,6 +39,22 @@ from openjd._openjd_rs import (
     HostRequirements,
     AmountRequirement,
     AttributeRequirement,
+    # JobParameterDefinition — 12 typed variants returned by
+    # ``JobTemplate.parameter_definitions`` and
+    # ``EnvironmentTemplate.parameter_definitions``.
+    JobStringParameterDefinition,
+    JobIntParameterDefinition,
+    JobFloatParameterDefinition,
+    JobPathParameterDefinition,
+    # EXPR-extension job-parameter variants
+    JobBoolParameterDefinition,
+    JobRangeExprParameterDefinition,
+    JobListStringParameterDefinition,
+    JobListPathParameterDefinition,
+    JobListIntParameterDefinition,
+    JobListFloatParameterDefinition,
+    JobListBoolParameterDefinition,
+    JobListListIntParameterDefinition,
 )
 
 
@@ -85,4 +101,17 @@ __all__ = (
     "TemplateStepActions",
     "TemplateStepDependency",
     "TemplateStepScript",
+    # JobParameterDefinition variants
+    "JobBoolParameterDefinition",
+    "JobFloatParameterDefinition",
+    "JobIntParameterDefinition",
+    "JobListBoolParameterDefinition",
+    "JobListFloatParameterDefinition",
+    "JobListIntParameterDefinition",
+    "JobListListIntParameterDefinition",
+    "JobListPathParameterDefinition",
+    "JobListStringParameterDefinition",
+    "JobPathParameterDefinition",
+    "JobRangeExprParameterDefinition",
+    "JobStringParameterDefinition",
 )

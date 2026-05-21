@@ -517,6 +517,64 @@ sa.timeout                      # Optional[FormatString]
 sa.cancelation                  # Optional[CancelationMode]
 ```
 
+### `JobParameterDefinition` (12 typed variants)
+
+`JobTemplate.parameter_definitions` and
+`EnvironmentTemplate.parameter_definitions` return
+`Optional[list[JobParameterDefinition]]`, where each element is one
+of twelve typed pyclasses, mirroring the runtime
+`JobParameterDefinition` Rust enum 1:1:
+
+| Variant | Pyclass | `default` type |
+|---|---|---|
+| `STRING` | `JobStringParameterDefinition` | `Optional[str]` |
+| `INT` | `JobIntParameterDefinition` | `Optional[int]` |
+| `FLOAT` | `JobFloatParameterDefinition` | `Optional[float]` |
+| `PATH` | `JobPathParameterDefinition` | `Optional[str]` |
+| `BOOL` (EXPR) | `JobBoolParameterDefinition` | `Optional[bool]` |
+| `RANGE_EXPR` (EXPR) | `JobRangeExprParameterDefinition` | `Optional[str]` |
+| `LIST[STRING]` (EXPR) | `JobListStringParameterDefinition` | `Optional[list[str]]` |
+| `LIST[PATH]` (EXPR) | `JobListPathParameterDefinition` | `Optional[list[str]]` |
+| `LIST[INT]` (EXPR) | `JobListIntParameterDefinition` | `Optional[list[int]]` |
+| `LIST[FLOAT]` (EXPR) | `JobListFloatParameterDefinition` | `Optional[list[float]]` |
+| `LIST[BOOL]` (EXPR) | `JobListBoolParameterDefinition` | `Optional[list[bool]]` |
+| `LIST[LIST[INT]]` (EXPR) | `JobListListIntParameterDefinition` | `Optional[list[list[int]]]` |
+
+Common attributes:
+
+```python
+d = template.parameter_definitions[0]
+d.type                          # JobParameterType enum
+d.name                          # str
+d.description                   # Optional[str]
+d.default                       # see table above
+```
+
+Type-specific attributes:
+
+```python
+# STRING / PATH variants:
+d.allowed_values                # Optional[list[str]] (alias: allowedValues)
+d.min_length                    # Optional[int]      (alias: minLength)
+d.max_length                    # Optional[int]      (alias: maxLength)
+# PATH only:
+d.object_type                   # Optional["FILE" | "DIRECTORY"]  (alias: objectType)
+d.data_flow                     # Optional["NONE" | "IN" | "OUT" | "INOUT"]  (alias: dataFlow)
+
+# INT / FLOAT variants:
+d.allowed_values                # Optional[list[int|float]]
+d.min_value                     # Optional[int|float]  (alias: minValue)
+d.max_value                     # Optional[int|float]  (alias: maxValue)
+
+# LIST[*] variants (all): min_length / max_length
+# LIST[PATH] variant: also object_type / data_flow
+# RANGE_EXPR variant: min_length / max_length
+# BOOL variant: only the common attributes
+```
+
+The `user_interface` field on each variant is not yet exposed (the
+`*UserInterface` Rust types are large and warrant a follow-up commit).
+
 ## Iteration Types (from Rust)
 
 ### `StepParameterSpaceIterator`

@@ -6,6 +6,7 @@ pub(crate) mod types;
 pub(crate) mod profile;
 pub(crate) mod template;
 pub(crate) mod template_types;
+pub(crate) mod job_param_defs;
 pub(crate) mod decode;
 pub(crate) mod job;
 mod create_job_fns;
@@ -39,4 +40,12 @@ pub(crate) use template_types::{
     PySimpleAction, PyStepActions as PyTemplateStepActions,
     PyStepDependency as PyTemplateStepDependency, PyStepScript as PyTemplateStepScript,
     PyStepTemplate,
+};
+pub(crate) use job_param_defs::{
+    PyJobBoolParameterDefinition, PyJobFloatParameterDefinition,
+    PyJobIntParameterDefinition, PyJobListBoolParameterDefinition,
+    PyJobListFloatParameterDefinition, PyJobListIntParameterDefinition,
+    PyJobListListIntParameterDefinition, PyJobListPathParameterDefinition,
+    PyJobListStringParameterDefinition, PyJobPathParameterDefinition,
+    PyJobRangeExprParameterDefinition, PyJobStringParameterDefinition,
 };

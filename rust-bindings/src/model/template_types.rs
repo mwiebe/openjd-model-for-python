@@ -19,7 +19,7 @@
 //! in the bindings.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyType};
+use pyo3::types::{PyDict, PyList};
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
