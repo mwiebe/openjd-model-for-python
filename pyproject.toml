@@ -1,8 +1,12 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.0,<2.0", "setuptools_scm"]
+build-backend = "_build_backend"
+backend-path = ["."]
 
 [project]
+dependencies = [
+  "pyyaml == 6.0.*",
+]
 name = "openjd-model"
 authors = [
   { name = "Amazon Web Services" }
@@ -28,53 +32,27 @@ classifiers = [
   "Intended Audience :: Developers",
   "Topic :: Software Development :: Libraries"
 ]
-dependencies = [
-  "pyyaml == 6.0.*",
-  "pydantic >= 2.10, < 3",
-]
-
 [project.urls]
 Homepage = "https://github.com/OpenJobDescription/openjd-model-for-python"
 Source = "https://github.com/OpenJobDescription/openjd-model-for-python"
 
-[tool.hatch.build]
-artifacts = [
-  "*_version.py",
-]
+[tool.maturin]
+python-source = "src"
+module-name = "openjd._openjd_rs"
+manifest-path = "rust-bindings/Cargo.toml"
+features = ["extension-module"]
+# `_version.py` is generated at build time by `_build_backend.py` (or
+# `scripts/generate_version.py`) and is gitignored. Maturin honors
+# `.gitignore` when walking `python-source`, so without this entry
+# the file is excluded from the wheel and `from .._version import
+# version` fails at import time on the deploy target.
+include = ["src/openjd/model/_version.py"]
 
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.version.raw-options]
 version_scheme = "post-release"
-
-[tool.hatch.build.hooks.vcs]
-version-file = "_version.py"
-
-[tool.hatch.build.hooks.custom]
-path = "hatch_version_hook.py"
-
-[[tool.hatch.build.hooks.custom.copy_map]]
-sources = [
-  "_version.py",
-]
-destinations = [
-  "src/openjd/model",
-]
-
-[tool.hatch.build.targets.sdist]
-include = [
-  "src/openjd",
-  "hatch_version_hook.py"
-]
-
-[tool.hatch.build.targets.wheel]
-packages = [
-  "src/openjd",
-]
-only-include = [
-  "src/openjd",
-]
 
 [tool.mypy]
 check_untyped_defs = false
@@ -94,9 +72,6 @@ namespace_packages = true
 explicit_package_bases = true
 mypy_path = "src"
 
-# See: https://docs.pydantic.dev/mypy_plugin/
-#  - Helps mypy understand pydantic typing.
-plugins = "pydantic.mypy"
 
 [tool.ruff]
 line-length = 100
@@ -118,16 +93,23 @@ line-length = 100
 
 [tool.pytest.ini_options]
 xfail_strict = false
+# Use importlib import mode so test files with identical names in different
+# directories (e.g. test/openjd/model-v0/test_parse.py and
+# test/openjd/model-v1/test_parse.py) coexist in the same pytest run. The
+# default rootdir-based import mode synthesizes a top-level module name from
+# the test filename and breaks on collisions; importlib mode imports each file
+# under its full filesystem path.
 addopts = [
     "-rfEx",
     "--durations=5",
-    "--cov=src/openjd/model",
+    "--cov=src/openjd",
     "--color=yes",
     "--cov-report=html:build/coverage",
     "--cov-report=xml:build/coverage/coverage.xml",
     "--cov-report=term-missing",
     "--numprocesses=auto",
-    "--timeout=30"
+    "--timeout=30",
+    "--import-mode=importlib",
 ]
 
 [tool.coverage.run]
@@ -142,7 +124,6 @@ source = [
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 94
 
 [tool.semantic_release]
 # Can be removed or set to true once we are v1

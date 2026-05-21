@@ -1,0 +1,46 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+from openjd.model._v1 import (
+    ExpressionError,
+    TokenError,
+)
+from openjd.model._v1.errors import (
+    DecodeValidationError,
+    UnsupportedSchema,
+)
+
+
+class TestUnsupportedSchema:
+    def test_msg(self):
+        # GIVEN
+        error = UnsupportedSchema("Unsupported schema version: version")
+
+        # THEN
+        assert str(error) == "Unsupported schema version: version"
+
+
+class TestDecodeValidationError:
+    def test_msg(self):
+        # GIVEN
+        error = DecodeValidationError("Test message")
+
+        # THEN
+        assert str(error) == "Test message"
+
+
+class TestExpressionError:
+    def test_msg(self):
+        # GIVEN
+        error = ExpressionError("Test message")
+
+        # THEN
+        assert str(error) == "Test message"
+
+
+class TestTokenError:
+    def test_msg(self):
+        # GIVEN
+        error = TokenError("0123456789", "5", 5)
+
+        # THEN
+        assert str(error) == "Unexpected '5' in '0123456789' after '01234'"
