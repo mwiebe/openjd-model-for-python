@@ -156,11 +156,11 @@ impl PyExprValue {
             None => Ok(PyExprValue { inner }),
             Some(target) => {
                 let coerced = match &inner {
-                    ExprValue::String(s) => ExprValue::from_str_coerce(&s, &target, pf),
+                    ExprValue::String(s) => ExprValue::from_str_coerce(s, &target, pf),
                     _ => inner.coerce(&target, pf),
                 };
                 coerced.map(|v| PyExprValue { inner: v })
-                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
+                    .map_err(pyo3::exceptions::PyValueError::new_err)
             }
         }
     }

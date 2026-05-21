@@ -10,6 +10,8 @@ use openjd_expr::path_mapping::PathFormat;
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.expr", name = "PathFormat", eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq)]
+// Variant names follow Python's UPPER_CASE enum convention.
+#[allow(clippy::upper_case_acronyms)]
 pub(crate) enum PyPathFormat {
     POSIX = 0,
     WINDOWS = 1,
@@ -29,6 +31,7 @@ impl PyPathFormat {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,

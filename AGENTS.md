@@ -25,12 +25,12 @@ python scripts/maturin_build.py develop --manifest-path rust-bindings/Cargo.toml
 python scripts/maturin_build.py develop --features stub-gen --manifest-path rust-bindings/Cargo.toml
 scripts/generate_stubs.sh
 
-hatch run test                   # All Python tests (v0, v1, expr)
-hatch run test test/openjd/expr  # One subtree
-hatch run benchmark              # Performance benchmarks (separate from test/)
-hatch run lint                   # ruff + black --check
-hatch run fmt                    # black + lint
-hatch run typing                 # mypy
+hatch run test                          # Full suite — enforces the 94% coverage gate
+hatch run test-subset test/openjd/expr  # One subtree — measures coverage but doesn't enforce the gate
+hatch run benchmark                     # Performance benchmarks (separate from test/)
+hatch run lint                          # ruff + black --check
+hatch run fmt                           # black + lint
+hatch run typing                        # mypy
 
 # Rust-side checks against the bindings crate.
 cargo build  --manifest-path rust-bindings/Cargo.toml --all-targets

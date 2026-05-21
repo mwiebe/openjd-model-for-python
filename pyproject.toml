@@ -102,7 +102,7 @@ xfail_strict = false
 addopts = [
     "-rfEx",
     "--durations=5",
-    "--cov=src/openjd/model",
+    "--cov=src/openjd",
     "--color=yes",
     "--cov-report=html:build/coverage",
     "--cov-report=xml:build/coverage/coverage.xml",
@@ -124,7 +124,6 @@ source = [
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 94
 
 [tool.semantic_release]
 # Can be removed or set to true once we are v1

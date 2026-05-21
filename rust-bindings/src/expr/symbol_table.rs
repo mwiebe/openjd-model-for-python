@@ -22,7 +22,7 @@ pub(crate) fn dict_to_symtab(dict: &Bound<'_, PyDict>) -> PyResult<SymbolTable> 
     for (key, value) in dict.iter() {
         let k: String = key.extract()?;
         if let Ok(sub_dict) = value.cast::<PyDict>() {
-            let sub = dict_to_symtab(&sub_dict)?;
+            let sub = dict_to_symtab(sub_dict)?;
             st.set_table(&k, sub);
         } else if let Ok(sub_st) = value.extract::<PySymbolTable>() {
             st.set_table(&k, sub_st.inner);
@@ -39,7 +39,7 @@ pub(crate) fn extract_symtab(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<SymbolTab
         return Ok(pst.inner);
     }
     if let Ok(dict) = obj.cast::<PyDict>() {
-        return dict_to_symtab(&dict);
+        return dict_to_symtab(dict);
     }
     Err(pyo3::exceptions::PyTypeError::new_err("Expected SymbolTable or dict"))
 }
@@ -109,7 +109,7 @@ impl PySymbolTable {
             let other = if let Ok(st) = item.extract::<PySymbolTable>() {
                 st.inner
             } else if let Ok(dict) = item.cast::<PyDict>() {
-                dict_to_symtab(&dict)?
+                dict_to_symtab(dict)?
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "union() arguments must be SymbolTable or dict",

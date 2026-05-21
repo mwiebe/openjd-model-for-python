@@ -511,6 +511,38 @@ except RangeExprError as e:
 | `RangeExprError` | `ValueError` |
 | `FormatStringValidationError` | `ValueError` |
 
+`ExpressionError` (and its subclass `ExpressionTypeError`) accept
+optional keyword arguments for attaching expression-source context:
+
+```python
+from openjd.expr import ExpressionError
+
+# Construction with context
+err = ExpressionError(
+    "bad value",
+    expr="Param.X + 1",  # outer expression source
+    lineno=1,
+    col_offset=8,
+    node=ast_node,        # opaque tagalong; not used by the binding
+)
+err.expr           # "Param.X + 1"
+err.col_offset     # 8
+
+# Decorate an existing error caught from `evaluate_expression`.
+# Returns a new error if no context is attached, or self if there
+# already is one (innermost wins).
+try:
+    evaluate_expression("Param.X")
+except ExpressionError as inner:
+    raise inner.with_context("outer source", node=outer_node)
+
+# Render the message with a custom prefix on the source line. Useful
+# for let-binding errors where the expression appears as part of
+# `"name = expr"`.
+err.message_with_expr_prefix("x = ")
+# "bad value\n  x = Param.X + 1\n          ^"
+```
+
 ## Constants
 
 ```python

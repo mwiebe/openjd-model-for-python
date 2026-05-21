@@ -132,12 +132,39 @@ impl PyPathMappingRule {
         let get = |key: &str| -> PyResult<String> {
             d.get_item(key)?
                 .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(
-                    format!("Path mapping rule requires the following fields: [source_path_format, source_path, destination_path]")
+                    "Path mapping rule requires the following fields: [source_path_format, source_path, destination_path]",
                 ))?
                 .extract::<String>()
         };
         if d.is_empty() {
             return Err(pyo3::exceptions::PyValueError::new_err("Empty path mapping rule"));
+        }
+        // Reject keys outside the supported set up-front, matching the
+        // pure-Python reference. Build a sorted set so the error
+        // message is deterministic across Python's dict ordering.
+        const SUPPORTED: [&str; 3] = ["source_path_format", "source_path", "destination_path"];
+        let mut unsupported: Vec<String> = Vec::new();
+        for key in d.keys() {
+            let key_str: String = key.extract()?;
+            if !SUPPORTED.contains(&key_str.as_str()) {
+                unsupported.push(key_str);
+            }
+        }
+        if !unsupported.is_empty() {
+            unsupported.sort();
+            // Mirror Python's `set` repr:
+            // `{'extra1', 'extra2'}`.
+            let formatted = format!(
+                "{{{}}}",
+                unsupported
+                    .iter()
+                    .map(|s| format!("'{s}'"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Unsupported fields for constructing path mapping rule: {formatted}"
+            )));
         }
         let fmt_str = get("source_path_format")?;
         let fmt = match fmt_str.to_uppercase().as_str() {
@@ -156,6 +183,7 @@ impl PyPathMappingRule {
     }
 
     /// Pickle support — round-trips through `to_dict` / `from_dict`.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,

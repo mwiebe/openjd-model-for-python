@@ -14,12 +14,12 @@ pub(crate) mod path_mapping;
 pub(crate) mod range_expr;
 pub(crate) mod format_string;
 
-pub(crate) use errors::{expr_err_to_py, PyExpressionError, PyExpressionTypeError, PyRangeExprError, PyFormatStringValidationError};
+pub(crate) use errors::{PyExpressionError, PyExpressionTypeError, PyRangeExprError, PyFormatStringValidationError};
 pub(crate) use path_format::PyPathFormat;
 pub(crate) use expr_type::{PyExprType, PyTypeCode};
 pub(crate) use expr_value::PyExprValue;
 pub(crate) use expr_value::_reconstruct_expr_value;
-pub(crate) use symbol_table::{PySymbolTable, extract_symtab};
+pub(crate) use symbol_table::PySymbolTable;
 pub(crate) use profile::{PyExprExtension, PyExprProfile, PyExprRevision, PyHostContext};
 pub(crate) use function_library::{PyFunctionLibrary, get_default_library};
 pub(crate) use parsed_expression::{PyParsedExpression, parse_expression};

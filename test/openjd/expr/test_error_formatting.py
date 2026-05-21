@@ -528,3 +528,129 @@ class TestImprovedErrorMessages:
             "  ~~~~~~~~~~~~~^~~~~~",
         ]
         assert str(exc_info.value) == "".join(expected)
+
+
+class TestExpressionErrorKeywordArgs:
+    """Tests for the reference-compatible keyword arguments accepted by
+    ``ExpressionError`` at construction time, plus the
+    ``with_context`` and ``message_with_expr_prefix`` decoration
+    methods.
+
+    These let downstream code that catches an evaluation error attach
+    expression-level source / position context after the fact and
+    re-raise with a richer message.
+    """
+
+    def test_construct_with_kwargs(self) -> None:
+        from openjd.expr import ExpressionError
+
+        e = ExpressionError(
+            "bad value",
+            expr="Param.X + 1",
+            lineno=1,
+            col_offset=8,
+        )
+        assert e.expr == "Param.X + 1"
+        assert e.lineno == 1
+        assert e.col_offset == 8
+        assert e.node is None
+        # The raw message round-trips through ``ValueError.__init__``.
+        assert str(e) == "bad value"
+
+    def test_construct_without_kwargs(self) -> None:
+        """All kwargs are optional; without them the error has no
+        attached context but still works as a plain ValueError."""
+        from openjd.expr import ExpressionError
+
+        e = ExpressionError("plain")
+        assert e.expr is None
+        assert e.lineno is None
+        assert e.col_offset is None
+        assert e.node is None
+        assert str(e) == "plain"
+
+    def test_construct_with_node(self) -> None:
+        """``node=`` is stored as a tagalong attribute. The reference
+        relies on Python ``ast`` node objects but the binding accepts
+        any object — formatting from a node is the caller's
+        responsibility."""
+        from openjd.expr import ExpressionError
+
+        sentinel = object()
+        e = ExpressionError("bad", node=sentinel)
+        assert e.node is sentinel
+
+    def test_unknown_kwarg_raises(self) -> None:
+        from openjd.expr import ExpressionError
+
+        # Python's standard "unexpected keyword argument" message —
+        # raised by the regular function-call machinery since the
+        # `__init__` is a real Python function with a typed
+        # signature.
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            ExpressionError("bad", bogus=1)
+
+    def test_with_context_attaches_expr(self) -> None:
+        """``with_context`` returns a NEW error carrying the supplied
+        expression source. The original is not mutated."""
+        from openjd.expr import ExpressionError
+
+        original = ExpressionError("inner")
+        decorated = original.with_context("outer_source")
+
+        assert decorated is not original
+        assert decorated.expr == "outer_source"
+        assert original.expr is None
+        # Class identity is preserved (so isinstance / except clauses
+        # continue to match).
+        assert isinstance(decorated, ExpressionError)
+
+    def test_with_context_preserves_innermost_context(self) -> None:
+        """If an error already has expression context, ``with_context``
+        is a no-op — the innermost context wins."""
+        from openjd.expr import ExpressionError
+
+        original = ExpressionError("inner", expr="param.X")
+        decorated = original.with_context("outer_source")
+        assert decorated is original
+        assert decorated.expr == "param.X"
+
+    def test_with_context_passes_node_through(self) -> None:
+        from openjd.expr import ExpressionError
+
+        sentinel = object()
+        decorated = ExpressionError("inner").with_context("src", node=sentinel)
+        assert decorated.node is sentinel
+
+    def test_with_context_preserves_subclass(self) -> None:
+        """``with_context`` constructs the result via ``type(self)``,
+        so subclasses round-trip correctly."""
+        original = ExpressionTypeError("type mismatch")
+        decorated = original.with_context("src")
+        assert isinstance(decorated, ExpressionTypeError)
+
+    def test_message_with_expr_prefix_basic(self) -> None:
+        """The prefix is inserted before the expression source line and
+        the caret position is shifted accordingly."""
+        from openjd.expr import ExpressionError
+
+        e = ExpressionError("bad value", expr="Param.X", col_offset=6)
+        msg = e.message_with_expr_prefix("x = ")
+        assert msg == "bad value\n  x = Param.X\n            ^"
+
+    def test_message_with_expr_prefix_no_context(self) -> None:
+        """Without expression context, the method falls back to
+        ``str(self)``."""
+        from openjd.expr import ExpressionError
+
+        e = ExpressionError("plain")
+        assert e.message_with_expr_prefix("x = ") == "plain"
+
+    def test_message_with_expr_prefix_multiline_falls_back(self) -> None:
+        """Multi-line expressions are not decorated with a prefix —
+        the caret math only makes sense for single-line input."""
+        from openjd.expr import ExpressionError
+
+        e = ExpressionError("bad", expr="line1\nline2", col_offset=2)
+        # No prefix decoration; full str(self) falls through.
+        assert e.message_with_expr_prefix("p ") == str(e)

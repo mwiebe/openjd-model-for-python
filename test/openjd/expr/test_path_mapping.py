@@ -388,17 +388,36 @@ class TestFormatMismatch:
 class TestFromDictValidation:
     """Tests for from_dict edge cases."""
 
-    def test_from_dict_extra_field_accepted(self) -> None:
-        """Extra fields are silently ignored (Rust serde behavior)."""
-        rule = PathMappingRule.from_dict(
-            {
-                "source_path_format": "POSIX",
-                "source_path": "/mnt/shared",
-                "destination_path": "/local",
-                "extra": "field",
-            }
-        )
-        assert rule.source_path == "/mnt/shared"
+    def test_from_dict_extra_field_rejected(self) -> None:
+        """Extra fields raise ``ValueError`` matching the pure-Python
+        reference's ``Unsupported fields ...`` contract."""
+        with pytest.raises(ValueError, match="Unsupported fields"):
+            PathMappingRule.from_dict(
+                {
+                    "source_path_format": "POSIX",
+                    "source_path": "/mnt/shared",
+                    "destination_path": "/local",
+                    "extra": "field",
+                }
+            )
+
+    def test_from_dict_multiple_extra_fields_in_message(self) -> None:
+        """All offending field names appear in the error message,
+        sorted for determinism."""
+        with pytest.raises(ValueError) as exc_info:
+            PathMappingRule.from_dict(
+                {
+                    "source_path_format": "POSIX",
+                    "source_path": "/mnt/shared",
+                    "destination_path": "/local",
+                    "zeta": 1,
+                    "alpha": 2,
+                }
+            )
+        assert "'alpha'" in str(exc_info.value)
+        assert "'zeta'" in str(exc_info.value)
+        # Sorted: alpha before zeta.
+        assert str(exc_info.value).index("'alpha'") < str(exc_info.value).index("'zeta'")
 
 
 class TestPathMappingViaProfile:

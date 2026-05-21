@@ -39,7 +39,11 @@ from openjd._openjd_rs import (
 # Note: the `__module__` / `__name__` / `__qualname__` of the Rust-backed
 # exceptions (ExpressionError, FormatStringValidationError, etc.) are set by
 # the `_openjd_rs` module init in Rust to their canonical user-facing values
-# (e.g. `openjd.expr.ExpressionError`). No Python-side fix-up needed.
+# (e.g. `openjd.expr.ExpressionError`). The keyword constructor and
+# `with_context` / `message_with_expr_prefix` methods on `ExpressionError`
+# are also installed Rust-side, in `rust-bindings/src/expr/errors.rs`
+# (`attach_expression_error_methods`). No Python-side fix-up needed.
+
 
 __all__ = [
     # Types

@@ -14,6 +14,9 @@ use openjd_expr::types::{ExprType, TypeCode};
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.expr", name = "TypeCode", eq, eq_int, frozen, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+// Variant names are the user-facing Python enum identifiers and follow
+// Python's UPPER_SNAKE_CASE convention rather than Rust's UpperCamelCase.
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(crate) enum PyTypeCode {
     NULLTYPE,
     BOOL,
@@ -117,6 +120,7 @@ impl PyTypeCode {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -146,7 +150,7 @@ pub(crate) fn extract_expr_type(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<ExprTy
         return Ok(t.inner);
     }
     if let Ok(s) = obj.extract::<String>() {
-        return ExprType::parse(&s).map_err(|e| pyo3::exceptions::PyValueError::new_err(e));
+        return ExprType::parse(&s).map_err(pyo3::exceptions::PyValueError::new_err);
     }
     Err(pyo3::exceptions::PyTypeError::new_err("type must be a string or ExprType"))
 }
@@ -181,7 +185,7 @@ impl PyExprType {
             // Single-arg string form: ExprType("list[int]")
             return ExprType::parse(&s)
                 .map(|t| PyExprType { inner: t })
-                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e));
+                .map_err(pyo3::exceptions::PyValueError::new_err);
         }
         Err(pyo3::exceptions::PyTypeError::new_err("ExprType() requires a string or TypeCode"))
     }

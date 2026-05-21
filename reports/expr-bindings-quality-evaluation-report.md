@@ -44,9 +44,10 @@ pickleable while their reference counterparts are~~ (resolved — see Rec #6);
 hashable~~ (resolved — see Rec #5);
 ~~`SymbolTable.__repr__` falls back to the default object repr~~ (resolved — see Rec #10);
 ~~the reference exposes `RangeExpr.start` / `.end` and `RangeExpr.from_list`
-which the binding omits~~ (resolved — see Rec #8). Two reference test files
+which the binding omits~~ (resolved — see Rec #8).
+~~Two reference test files
 (`test_target_type_propagation.py`, `test_uri_paths.py`) have no analog in
-the bindings repo.
+the bindings repo.~~ (resolved — see Rec #19).
 
 The binding source itself is otherwise idiomatic PyO3 with proper
 `register_renamed_exception` calls, but the four `expr` exception classes
@@ -275,8 +276,9 @@ correctly rejects the mismatch. Acceptable but inconsistent.
 `from_dict` work (string POSIX/WINDOWS/URI casing accepted any case).
 **Not pickleable.**
 
-`from_dict` with extra fields — reference rejects extra fields with
-`"Unsupported fields ..."`. Binding accepts extra fields silently.
+~~`from_dict` with extra fields — reference rejects extra fields with
+`"Unsupported fields ..."`. Binding accepts extra fields silently.~~
+**Resolved — see Rec #17.**
 
 ### `range_expr.rs` (97 lines)
 `PyRangeExpr` exposes `__init__(str)`, `from_str`, `__len__`,
@@ -424,7 +426,7 @@ coverage into `cargo tarpaulin`.
 | `PathFormat.POSIX == "POSIX"` | `True` | `False` | ⚠ str-enum behavior loss |
 | `PathMappingRule(source_path_format, source_path, destination_path)` | full impl, accepts `PurePath` typed `source_path` | full impl | ✓ |
 | `PathMappingRule.apply(*, path) -> (bool, str)` | full impl | full impl, additionally accepts `output_format` | ✓ + extra |
-| `PathMappingRule.to_dict / from_dict` | full impl, rejects extra fields | full impl, accepts extra fields silently | ⚠ different validation |
+| ~~`PathMappingRule.to_dict / from_dict`~~ | full impl, rejects extra fields | full impl, rejects extra fields | ✓ resolved (Rec #17) |
 | ~~`PathMappingRule` pickle~~ | ~~works~~ | ~~fails~~ | ✓ resolved (Rec #6) |
 | `RangeExpr(s)` / `from_str(s)` / `__len__` / `__contains__` / `__iter__` / `__getitem__` / `ranges()` | full impl | full impl | ✓ |
 | ~~`RangeExpr.start` / `.end` (properties)~~ | exposed | exposed | ✓ resolved (Rec #8) |
@@ -435,7 +437,7 @@ coverage into `cargo tarpaulin`.
 | `FormatString.resolve_string / .resolve` accept `path_mapping_rules` | n/a | accepts but **discards silently** | ❌ |
 | `FormatString.copy_used_symtab_values(src, dest)` | not in reference | full impl | ⚠ extra |
 | `ExpressionError` constructor accepts `expr=`, `lineno=`, `col_offset=`, `node=` | full impl | binding takes only message string | ⚠ different signature |
-| `ExpressionError.with_context / .message_with_expr_prefix` | exposed | not exposed | ⚠ |
+| ~~`ExpressionError.with_context / .message_with_expr_prefix`~~ | exposed | exposed (Python-side wrapper) | ✓ resolved (Rec #18) |
 | `ExpressionError` pickle | works (Python class) | works (renamed class) | ✓ |
 | `ExpressionError`, `ExpressionTypeError` inheritance | `ValueError`-based | `ValueError`-based | ✓ |
 | `RangeExprError` inheritance | `ValueError` | `ValueError` | ✓ |
@@ -540,9 +542,9 @@ cosmetic):
    from the spec example. Round-trip works.
 2. `SymbolTable.__repr__` is the default Python object repr, not
    the reference's `SymbolTable({...})`.
-3. `ExpressionError("msg", expr="...", node=...)` raises `TypeError`
-   because the binding only accepts a message string.
-4. `RangeExpr` does not expose `.start` / `.end` / `.from_list`.
+3. ~~`ExpressionError("msg", expr="...", node=...)` raises `TypeError`
+   because the binding only accepts a message string.~~ Resolved (Rec #18).
+4. ~~`RangeExpr` does not expose `.start` / `.end` / `.from_list`.~~ Resolved (Rec #8).
 5. `ExprType` does not expose the class constants
    `ExprType.NULLTYPE`, `ExprType.INT`, … `ExprType.LIST_INT`,
    `ExprType.EMPTY_LIST` from the reference.
@@ -801,21 +803,54 @@ fixes, 10+ are hygiene/UX.
     `test/openjd/expr/test_symbol_table.py::TestSymbolTable::test_symbols_*`
     and `::test_union_*`.
 
-17. **Reject extra fields in `PathMappingRule.from_dict`** to match the
+17. ~~**Reject extra fields in `PathMappingRule.from_dict`** to match the
     reference. File: `rust-bindings/src/expr/path_mapping.rs:138`.
     Compare the dict's keys against `["source_path_format",
     "source_path", "destination_path"]` and raise
-    `ValueError("Unsupported fields: {extras}")`.
+    `ValueError("Unsupported fields: {extras}")`.~~
+    **Resolved.** `PathMappingRule.from_dict` now rejects any keys
+    outside the supported set with
+    `ValueError("Unsupported fields for constructing path mapping rule: {sorted set repr}")`,
+    matching the pure-Python reference verbatim. The offending names
+    are sorted before formatting so the error message is
+    deterministic across Python's dict ordering. New tests:
+    `test/openjd/expr/test_path_mapping.py::TestFromDictValidation::test_from_dict_extra_field_rejected`
+    and `::test_from_dict_multiple_extra_fields_in_message`.
 
-18. **Bring back `ExpressionError(message, *, expr=None, lineno=None,
+18. ~~**Bring back `ExpressionError(message, *, expr=None, lineno=None,
     col_offset=None, node=None)` keyword args plus
     `with_context` / `message_with_expr_prefix` methods** for code
     that catches and reformulates errors. File:
     `rust-bindings/src/expr/errors.rs`. The reference exposes these
     so downstream code can decorate error messages with expression
-    context after the fact.
+    context after the fact.~~
+    **Resolved.** `ExpressionError` and `ExpressionTypeError` now
+    accept `expr=` / `lineno=` / `col_offset=` / `node=` keyword
+    arguments and expose `with_context(expr, node=None)` and
+    `message_with_expr_prefix(prefix)` methods.
 
-19. **Port the reference's two missing test files** to the bindings:
+    **Implementation note.** The cleanest model would be
+    `#[pyclass(extends = PyValueError)]` with `#[pymethods]`
+    declaring everything natively. PyO3's exception guide states
+    that subclassing built-in exceptions via `extends` is gated
+    behind Python 3.12 when `abi3` is enabled, and this crate
+    targets `abi3-py39`. So the next-cleanest option was used:
+    keep the `pyo3::create_exception!` declarations and attach the
+    `__init__` / `with_context` / `message_with_expr_prefix`
+    methods at module-init time. The method bodies live as a
+    `&'static str` constant in `rust-bindings/src/expr/errors.rs`
+    (single source of truth), get compiled into real Python
+    `function` objects via `Python::run` so the descriptor
+    protocol binds them correctly, and are installed onto the
+    type via `setattr`. `ExpressionTypeError` inherits the
+    methods through normal Python class inheritance — no separate
+    attachment is needed.
+
+    Spec section updated with usage examples. New tests:
+    `test/openjd/expr/test_error_formatting.py::TestExpressionErrorKeywordArgs`
+    (11 cases).
+
+19. ~~**Port the reference's two missing test files** to the bindings:
 
     | Source | Destination |
     |---|---|
@@ -824,9 +859,18 @@ fixes, 10+ are hygiene/UX.
 
     Once items 2 and 3 are fixed, the first will pass; the second
     drives URI-mode `path` testing that the bindings already partly
-    support.
+    support.~~
+    **Resolved.** `test_target_type_propagation.py` expanded from
+    51 lines to 209 (17 tests across 6 classes). `test_uri_paths.py`
+    created (242 lines, 35 tests across 6 classes covering URI path
+    properties, no-normalization, operators, construction, scheme
+    variety, and symbol-table integration). Both ports use the public
+    `evaluate_expression` API; the reference's tests of private
+    helpers (`uri_parts`, `is_uri`, …) live in the
+    `openjd-rs/crates/openjd-expr/tests/integration/` suite where
+    they belong, not duplicated here.
 
-20. **Clean up the 32 expr-only clippy warnings** so that
+20. ~~**Clean up the 32 expr-only clippy warnings** so that
     `cargo clippy --workspace -- -D warnings` can be enabled in CI.
     Most are `#[allow(non_camel_case_types)]` annotations on
     `PyTypeCode` and `PyPathFormat`, two `#[allow(unused_imports)]`
@@ -834,12 +878,52 @@ fixes, 10+ are hygiene/UX.
     `rust-bindings/src/expr/mod.rs`,
     `rust-bindings/src/expr/expr_type.rs`,
     `rust-bindings/src/expr/path_format.rs`,
-    `rust-bindings/src/expr/format_string.rs:100`.
+    `rust-bindings/src/expr/format_string.rs:100`.~~
+    **Resolved.** Zero expr-only clippy warnings remain.
+    Workspace-wide warning count went from 94 → 58 (the rest are
+    model and sessions clippy work, tracked separately). Specific
+    fixes: removed unused mod-level exports of `expr_err_to_py` and
+    `extract_symtab`; added
+    `#[allow(non_camel_case_types, clippy::upper_case_acronyms)]`
+    on `PyTypeCode` and `PyPathFormat` (variant names follow
+    Python's UPPER_CASE convention); migrated `downcast` → `cast`
+    for the PyO3 0.28 deprecation; replaced redundant
+    `|e| pyo3::exceptions::PyValueError::new_err(e)` closures with
+    the function reference directly; removed needless `&`-borrows
+    on `dict_to_symtab` calls; removed a `format!` without args;
+    cleaned up an unused `PyAnyMethods` import; added
+    `#[allow(clippy::type_complexity)]` to `__reduce__` methods (the
+    tuple shape is the pickle wire format) and
+    `#[allow(clippy::too_many_arguments)]` to
+    `evaluate` / `evaluate_expression` (signatures mirror the
+    documented public Python API).
 
-21. **Disable Python coverage on the `expr` test directory** (or move
+21. ~~**Disable Python coverage on the `expr` test directory** (or move
     coverage to `cargo tarpaulin`). Currently
     `python -m pytest test/openjd/expr` fails the 94% gate because
-    Python sees no source to cover. File: `pyproject.toml` (`tool.coverage`).
+    Python sees no source to cover. File: `pyproject.toml` (`tool.coverage`).~~
+    **Resolved without disabling coverage.** Diagnosis: the
+    `pyproject.toml` `addopts` declared `--cov=src/openjd/model`
+    (excluding `src/openjd/expr/`) **and** the
+    `[tool.coverage.report]` block enforced `fail_under = 94` on
+    every pytest invocation. Running `test/openjd/expr/` in
+    isolation produced 0% coverage of the model tree → gate trip.
+    Three changes restore correct behaviour without skipping
+    coverage:
+    1. `pyproject.toml`: `--cov=src/openjd/model` →
+       `--cov=src/openjd` so coverage tracks both wrapper packages.
+    2. `pyproject.toml`: removed `fail_under = 94` from
+       `[tool.coverage.report]` (it was firing on every invocation,
+       including subset runs).
+    3. `hatch.toml`: split the script. `hatch run test` is the
+       canonical full-suite invocation and applies
+       `--cov-fail-under=94`; `hatch run test-subset <path>` is the
+       new ad-hoc subset variant that still measures coverage but
+       does not enforce the gate. CI keeps calling `hatch run test`
+       (verified at 94.70% post-fix); developers running
+       `hatch run test-subset test/openjd/expr` no longer hit a
+       false-positive failure.
+    `AGENTS.md` updated to document the new subset command.
 
 ## Validation
 

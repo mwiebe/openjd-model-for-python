@@ -87,18 +87,6 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     register_renamed_exception(
         m,
-        m.py().get_type::<PyExpressionError>(),
-        "ExpressionError",
-        "openjd.expr",
-    )?;
-    register_renamed_exception(
-        m,
-        m.py().get_type::<PyExpressionTypeError>(),
-        "ExpressionTypeError",
-        "openjd.expr",
-    )?;
-    register_renamed_exception(
-        m,
         m.py().get_type::<PyRangeExprError>(),
         "RangeExprError",
         "openjd.expr",
@@ -109,6 +97,26 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "FormatStringValidationError",
         "openjd.expr",
     )?;
+    register_renamed_exception(
+        m,
+        m.py().get_type::<PyExpressionError>(),
+        "ExpressionError",
+        "openjd.expr",
+    )?;
+    register_renamed_exception(
+        m,
+        m.py().get_type::<PyExpressionTypeError>(),
+        "ExpressionTypeError",
+        "openjd.expr",
+    )?;
+    // Attach the reference's keyword constructor and decoration
+    // methods (`with_context`, `message_with_expr_prefix`) to
+    // `ExpressionError`. The methods are real `#[pyfunction]`s
+    // installed onto the type via `setattr`; Python's descriptor
+    // protocol exposes them as bound instance methods.
+    // `ExpressionTypeError` inherits them through normal class
+    // inheritance.
+    expr::errors::attach_expression_error_methods(m)?;
 
     // ── Model types ──
     m.add_class::<PyDocumentType>()?;

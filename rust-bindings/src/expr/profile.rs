@@ -71,6 +71,7 @@ impl PyExprRevision {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,

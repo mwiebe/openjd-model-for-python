@@ -54,6 +54,7 @@ impl PyParsedExpression {
     }
 
     #[pyo3(signature = (*, values=None, library=None, profile=None, target_type=None, path_format=None, memory_limit=None, operation_limit=None))]
+    #[allow(clippy::too_many_arguments)] // signature mirrors the documented evaluate() Python API
     fn evaluate(
         &self,
         values: Option<&Bound<'_, pyo3::PyAny>>,

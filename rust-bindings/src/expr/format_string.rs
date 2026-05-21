@@ -86,8 +86,7 @@ impl PyFormatString {
         source: &crate::expr::PySymbolTable,
         dest: &Bound<'_, pyo3::PyAny>,
     ) -> PyResult<()> {
-        use pyo3::types::PyAnyMethods;
-        let cell: &Bound<'_, crate::expr::PySymbolTable> = dest.downcast()?;
+        let cell: &Bound<'_, crate::expr::PySymbolTable> = dest.cast()?;
         let mut guard = cell.borrow_mut();
         self.inner.copy_used_symtab_values(&source.inner, &mut guard.inner);
         Ok(())

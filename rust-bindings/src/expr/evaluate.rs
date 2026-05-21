@@ -47,6 +47,7 @@ pub(crate) fn library_for_call(
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction(module = "openjd._openjd_rs"))]
 #[pyfunction]
 #[pyo3(signature = (expr, *, values=None, library=None, profile=None, target_type=None, memory_limit=None, operation_limit=None, path_format=None))]
+#[allow(clippy::too_many_arguments)] // signature mirrors the documented evaluate_expression Python API
 pub(crate) fn evaluate_expression(
     expr: &str,
     values: Option<&Bound<'_, pyo3::PyAny>>,
