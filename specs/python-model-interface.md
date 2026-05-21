@@ -4,6 +4,54 @@ Rust-backed implementation of the Open Job Description model library.
 Handles template parsing, validation, job creation, and task iteration.
 No Pydantic dependency.
 
+## Architecture
+
+The `openjd.model._v1` namespace mirrors the underlying
+[`openjd-model`][openjd-model] Rust crate's two-layer architecture:
+
+1. **Revision-neutral types** — there is exactly one `JobTemplate`
+   pyclass (under `openjd.model._v1.template.JobTemplate`), one
+   `EnvironmentTemplate`, one `Action`, one `StepTemplate`, and so
+   on. The set of pyclasses does **not** vary by specification
+   revision.
+2. **Revision-specific validation** — the
+   `specificationVersion` field of the decoded template is read at
+   parse time and used to dispatch the correct revision's
+   validation pass on the parsed structure. The validation pass
+   enforces revision-specific constraints (allowed extensions,
+   field shapes, value bounds, etc.) but the resulting Python
+   objects are the same revision-neutral types regardless of
+   revision.
+
+This is a deliberate divergence from the v0 (`openjd.model`)
+architecture, which used Pydantic's discriminated-union machinery
+to produce per-revision class hierarchies (e.g.
+`v2023_09.JobTemplate`, with siblings under
+`OpenJDModel_v2023_09`). v0 has ~85 per-revision classes under
+`openjd.model.v2023_09`; the v1 surface has none. This is **not**
+a regression — it is the v1 architecture by design:
+
+* The Rust crate has no per-revision types either. The revision
+  version is just a string field on the parsed template; the
+  parsed type is identical regardless of revision.
+* Future spec revisions that don't change the Python-level shape
+  of decoded objects need *no* new pyclass at all — only a new
+  validation arm in
+  [`openjd_model::template::validation::validate_job_template`][validate].
+* Future revisions that *do* change shape will be addressed when
+  they ship; the most likely choice is to extend the existing
+  pyclass surface with optional new fields rather than introduce
+  parallel revision-typed classes.
+
+If a v0 caller writes `isinstance(t, v2023_09.JobTemplate)`, the
+v1 equivalent is `isinstance(t, template.JobTemplate)`. To
+discriminate by revision, read
+`t.specification_version` (returns a `TemplateSpecificationVersion`
+enum value).
+
+[openjd-model]: https://github.com/OpenJobDescription/openjd-rs/tree/main/crates/openjd-model
+[validate]: https://github.com/OpenJobDescription/openjd-rs/blob/main/crates/openjd-model/src/template/validation/mod.rs
+
 ## Functions
 
 ### Decode

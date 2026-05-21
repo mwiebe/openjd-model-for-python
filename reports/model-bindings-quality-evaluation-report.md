@@ -83,14 +83,17 @@ for the pure-Python reference**:
    or `ChunkIntTaskParameter` — mirroring the underlying Rust
    `TaskParameter` runtime enum 1:1. Each has `.type`, `.range`, and
    (for `ChunkIntTaskParameter`) `.chunks` attributes.
-7. **18 v2023_09 test files cannot even be collected.** They import legacy
+7. ~~**18 v2023_09 test files cannot even be collected.** They import legacy
    names (`Action`, `EnvironmentTemplate`, `RangeExpressionTaskParameterDefinition`,
    `JobIntParameterDefinition`, `HostRequirements`, etc.) from
    `openjd.model._v1.v2023_09`, but only ~12 of the reference's ~85 names
    are re-exported. Whole categories of behavior (job parameters, host
    requirements, scripts, template variables, embedded files, action
    timeouts, redacted env vars, chunk-int task parameters,
-   feature-bundle 1) are therefore untested.
+   feature-bundle 1) are therefore untested.~~ **Won't fix as
+   stated.** Per-revision class hierarchies are a v0-Pydantic
+   artifact; v1's Rust-backed architecture is revision-neutral.
+   See Rec #7 below for the rationale and migration plan.
 8. **Spec drift.** `specs/python-model-interface.md` is incomplete: it
    omits `parse_model`, `document_string_to_object`, `decode_template`,
    `STANDARD_AMOUNT_CAPABILITIES`, `STANDARD_ATTRIBUTE_CAPABILITIES`,
@@ -364,7 +367,11 @@ EmbeddedFiles = list, EmbeddedFileTypes, ExtensionName,
 
 The reference module exposes ~85 symbols; the binding shim covers ~12.
 **Every test in `test/openjd/model-v1/v2023_09/` fails to collect** because
-the missing names cause `ImportError`. See §4 below.
+the missing names cause `ImportError`. **This is a v0-architecture
+artifact**, however — see Rec #7 for why the v1 surface deliberately
+does not mirror v0's per-revision class hierarchy. The remediation is
+to delete or recast the broken test files, not to add per-revision
+re-exports.
 
 ### `openjd.model.__init__.py` (top-level dispatcher)
 
@@ -569,6 +576,15 @@ FAILED test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpac
 
 Errors (all `ModuleNotFoundError: No module named 'openjd.model._v1._parse'`
 or `ImportError: cannot import name X from openjd.model._v1.v2023_09`):
+
+> **Note:** these collection failures are a consequence of the v0
+> per-revision-typed test layout being ported verbatim. v1's
+> revision-neutral architecture (Rec #7) means the
+> `_v1.v2023_09.<Type>` import paths the test files rely on don't
+> exist by design. The intent of these tests is preserved by tests
+> in the parent `test/openjd/model-v1/` directory written against
+> the revision-neutral surface; these v2023_09 files should be
+> deleted or recast.
 
 ```
 ERROR test/openjd/model-v1/v2023_09/test_action.py
@@ -811,7 +827,7 @@ proves the gap so it can be fixed and the proof regenerated.
    lives at
    `test_task_parameter.py::TestStepParameterSpaceTypedDict::test_dict_value_is_typed_pyclass_not_dict`.
 
-7. **Re-export the ~50 missing names from `openjd.model._v1.v2023_09`.**
+7. ~~**Re-export the ~50 missing names from `openjd.model._v1.v2023_09`.**
    File: `src/openjd/model/_v1/v2023_09/__init__.py`. The 18 v2023_09
    test files cannot be collected. Add at minimum:
    `Action, AmountCapabilityName, AmountRequirement, AmountRequirementTemplate,
@@ -831,7 +847,37 @@ proves the gap so it can be fixed and the proof regenerated.
    UserInterfaceLabelStringValue`
    plus a stub `_parse` submodule with a `_parse_model` entry point so
    the test files import. Without this, the 18 v2023_09 test files in
-   `test/openjd/model-v1/v2023_09/` remain uncollectable.
+   `test/openjd/model-v1/v2023_09/` remain uncollectable.~~
+
+   **Won't fix.** This recommendation is an artifact of the v0
+   Pydantic-based architecture and does not apply to the Rust
+   architecture v1 mirrors.
+
+   The v0 reference uses Pydantic discriminated unions, where each
+   spec revision (currently 2023-09) gets a dedicated class
+   hierarchy under `openjd.model.v2023_09` (~85 classes inheriting
+   `OpenJDModel_v2023_09`). The Rust `openjd-model` crate, which
+   v1 mirrors, takes a different approach: a single
+   *revision-neutral* set of types
+   (`template::JobTemplate`, `template::Environment`,
+   `template::Action`, …) plus revision-specific *validation
+   passes* dispatched on `specificationVersion`. There is no
+   per-revision Rust type, and v1 correctly carries that decision
+   through to Python — there is exactly one `JobTemplate`
+   pyclass at `openjd.model._v1.template.JobTemplate`, used for
+   every revision.
+
+   The 18 v2023_09 test files in `test/openjd/model-v1/v2023_09/`
+   that cannot be collected are tests *ported from the v0 layout*
+   that import per-revision class names. Their intent is preserved
+   in `test/openjd/model-v1/test_*` files written against the
+   revision-neutral surface; the broken-collection v2023_09 files
+   are dead weight and should be deleted (or re-cast to use the
+   revision-neutral types) in a follow-up commit.
+
+   This rationale is documented in
+   `specs/python-model-interface.md` under the **Architecture**
+   section.
 
 8. **Implement pickle support for the Rust-backed pyclasses.** Use PyO3
    `__reduce__` or `__getnewargs_ex__` returning `(reconstructor,

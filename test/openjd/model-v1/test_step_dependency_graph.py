@@ -7,12 +7,11 @@ import pytest
 from openjd.model._v1 import (
     StepDependencyGraphStepToStepEdge,
     create_job,
-    parse_model,
+    decode_job_template,
 )
 from openjd.model._v1.job import (
     StepDependencyGraph,
 )
-from openjd.model._v1.v2023_09 import JobTemplate as JobTemplate_2023_09
 
 
 class TestStepDependencyGraph_2023_09:
@@ -39,7 +38,7 @@ class TestStepDependencyGraph_2023_09:
                 self.create_step_template("Buz"),
             ],
         }
-        job_template = parse_model(model=JobTemplate_2023_09, obj=template_data)
+        job_template = decode_job_template(template=template_data)
         job = create_job(job_template=job_template, job_parameter_values=dict())
 
         # WHEN
@@ -64,7 +63,7 @@ class TestStepDependencyGraph_2023_09:
                 self.create_step_template("Buz"),
             ],
         }
-        job_template = parse_model(model=JobTemplate_2023_09, obj=template_data)
+        job_template = decode_job_template(template=template_data)
         job = create_job(job_template=job_template, job_parameter_values=dict())
 
         # WHEN
@@ -130,7 +129,7 @@ class TestStepDependencyGraph_2023_09:
             template_data["steps"].append(
                 self.create_step_template("".join(random.sample("abcdefghijklmnop", 10)))
             )
-        job_template = parse_model(model=JobTemplate_2023_09, obj=template_data)
+        job_template = decode_job_template(template=template_data)
         job = create_job(job_template=job_template, job_parameter_values=dict())
         graph = StepDependencyGraph(job=job)
 
@@ -156,7 +155,7 @@ class TestStepDependencyGraph_2023_09:
                 self.create_step_template("S7"),
             ],
         }
-        job_template = parse_model(model=JobTemplate_2023_09, obj=template_data)
+        job_template = decode_job_template(template=template_data)
         job = create_job(job_template=job_template, job_parameter_values=dict())
         graph = StepDependencyGraph(job=job)
 
@@ -190,7 +189,7 @@ class TestStepDependencyGraph_2023_09:
                 self.create_step_template("S7"),
             ],
         }
-        job_template = parse_model(model=JobTemplate_2023_09, obj=template_data)
+        job_template = decode_job_template(template=template_data)
         job = create_job(job_template=job_template, job_parameter_values=dict())
         graph = StepDependencyGraph(job=job)
 

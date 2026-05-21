@@ -13,7 +13,6 @@ from openjd.model._v1 import (
     create_job,
     decode_environment_template,
     decode_job_template,
-    parse_model,
     preprocess_job_parameters,
 )
 from openjd.model._v1.types import (
@@ -22,10 +21,6 @@ from openjd.model._v1.types import (
 from openjd.model._v1.errors import (
     DecodeValidationError,
 )
-from openjd.model._v1.v2023_09 import (
-    Job as Job_2023_09,
-)
-
 class _JobParamTypeCompat:
     """Wrapper to give Rust enum members a .value attribute like Python's enum.Enum."""
     def __init__(self, member):
