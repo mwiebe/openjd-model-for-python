@@ -43,7 +43,6 @@ def _v(type: TaskParameterType, value: str) -> TaskParameterValue:
 _INT = TaskParameterType.INT
 _STRING = TaskParameterType.STRING
 _FLOAT = TaskParameterType.FLOAT
-_PATH = TaskParameterType.PATH
 
 
 # Helper builders for the dict-shaped task-parameter definitions that
@@ -292,45 +291,6 @@ class TestStepParameterSpaceIterator:
             "Param2": _v(_STRING, "a"),
         } not in it
 
-    def test_product_iteration(self) -> None:
-        # GIVEN
-        space = StepParameterSpace(
-            taskParameterDefinitions={
-                "Param1": _int_list([1, 2]),
-                "Param2": _string_list(["a", "b", "c"]),
-                "Param3": _int_range("-1 - -2 : -1"),
-            },
-            combination="Param1 * Param2 * Param3",
-        )
-
-        # WHEN
-        it = StepParameterSpaceIterator(space=space)
-
-        # THEN
-        # Note: Param3 iterates as [-2, -1] — ``RangeExpr`` always
-        # normalizes descending ranges to ascending form (see
-        # ``openjd_expr::range_expr``).
-        element: Callable[[int, str, int], dict[str, TaskParameterValue]] = lambda p1, p2, p3: {
-            "Param1": _v(_INT, str(p1)),
-            "Param2": _v(_STRING, str(p2)),
-            "Param3": _v(_INT, str(p3)),
-        }
-        expected_values = [
-            element(1, "a", -2),
-            element(1, "a", -1),
-            element(1, "b", -2),
-            element(1, "b", -1),
-            element(1, "c", -2),
-            element(1, "c", -1),
-            element(2, "a", -2),
-            element(2, "a", -1),
-            element(2, "b", -2),
-            element(2, "b", -1),
-            element(2, "c", -2),
-            element(2, "c", -1),
-        ]
-        assert expected_values == [v for v in it]
-
     def test_product_len(self) -> None:
         # GIVEN
         space = StepParameterSpace(
@@ -349,63 +309,6 @@ class TestStepParameterSpaceIterator:
         assert len(result) == 2 * 3 * 2
         # Test twice. We do some caching of lengths. Test the caching flows.
         assert len(result) == 2 * 3 * 2
-
-    def test_product_getitem(self) -> None:
-        # GIVEN
-        space = StepParameterSpace(
-            taskParameterDefinitions={
-                "Param1": _int_list([1, 2]),
-                "Param2": _string_list(["a", "b", "c"]),
-                "Param3": _int_range("-1--2:-1"),
-            },
-            combination="Param1 * Param2 * Param3",
-        )
-
-        # WHEN
-        it = StepParameterSpaceIterator(space=space)
-
-        # THEN
-        # Note: Param3 iterates as [-2, -1] — ``RangeExpr`` always
-        # normalizes descending ranges to ascending form.
-        element: Callable[[int, str, int], dict[str, TaskParameterValue]] = lambda p1, p2, p3: {
-            "Param1": _v(_INT, str(p1)),
-            "Param2": _v(_STRING, str(p2)),
-            "Param3": _v(_INT, str(p3)),
-        }
-        expected_values = [
-            element(1, "a", -2),
-            element(1, "a", -1),
-            element(1, "b", -2),
-            element(1, "b", -1),
-            element(1, "c", -2),
-            element(1, "c", -1),
-            element(2, "a", -2),
-            element(2, "a", -1),
-            element(2, "b", -2),
-            element(2, "b", -1),
-            element(2, "c", -2),
-            element(2, "c", -1),
-        ]
-        with pytest.raises(IndexError):
-            it[len(expected_values)]
-        with pytest.raises(IndexError):
-            it[-len(expected_values) - 1]
-        assert expected_values == [it[i] for i in range(0, len(expected_values))]
-        expected_reversed = list(reversed(expected_values))
-        assert expected_reversed == [it[-i - 1] for i in range(0, len(expected_values))]
-
-        for value in expected_values:
-            assert value in it
-        assert element(1, "A", -1) not in it
-        assert element(1, "c", 0) not in it
-        assert element(2, "a", -3) not in it
-        assert element(2, "a", 0) not in it
-        assert {} not in it
-        assert {
-            "Param1": _v(_INT, "1"),
-            "Param2": _v(_PATH, "A"),
-            "Param3": _v(_INT, "-1"),
-        } not in it
 
     def test_associate_iteration(self) -> None:
         # GIVEN

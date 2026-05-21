@@ -35,15 +35,27 @@ for the pure-Python reference**:
    yielded value with `in` returns `False` for every one of them. The
    reference returns `True`. This is the same root cause as a frequently-
    used test pattern (`for v in expected_values: assert v in it`).~~
-   **Resolved** — `extract_task_parameter_set` now reads the parameter
-   type via `as_str()` (the Rust pyclass-enum convention used by
-   `PyTaskParameterType` / `PyJobParameterType` and by the Python-side
-   `ParameterValue` shim), then falls back to `.value` (stdlib
+   **Resolved for simple cases** — `extract_task_parameter_set` now reads
+   the parameter type via `as_str()` (the Rust pyclass-enum convention
+   used by `PyTaskParameterType` / `PyJobParameterType` and by the
+   Python-side `ParameterValue` shim), then falls back to `.value` (stdlib
    `enum.Enum`) and `__str__`. Yielded values now round-trip through
-   `__contains__`. As a side-effect this also fixes
+   `__contains__` for non-nested combination expressions. As a side-effect
+   this also fixes
    `test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
    which uses the same `for v in expected_values: assert v in it`
    pattern.
+
+   **Remaining issue (nested combination expressions):** `__contains__`
+   still returns `False` for values yielded by an iterator over a nested
+   combination expression like `A * (B, C * D)`. This is an upstream bug
+   in `openjd_model::job::step_param_space::StepParameterSpaceIterator::
+   contains` (and its delegate `validate_containment`); the recursive
+   traversal misclassifies values from the inner associative grouping.
+   Tracked by
+   `test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator::test_nested_expr_contains`
+   (xfail). The simple-case behavior is verified by
+   `test_contains_self_yielded_values`, which passes.
 3. **`model_to_object` is unimplemented for every Rust-backed model.** The
    wrapper module raises `NotImplementedError`. The reference round-trips
    through `model.model_dump(by_alias=True, exclude_unset=True)` to produce
