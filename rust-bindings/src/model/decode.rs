@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use pyo3::types::PyDict;
 
-use openjd_model::parse::DocumentType;
+use openjd_model::template::parse::DocumentType;
 use openjd_model::CallerLimits;
 
 use super::errors::model_err_to_py;
@@ -17,7 +17,7 @@ use super::template::{PyJobTemplate, PyEnvironmentTemplate};
 /// Parse a raw string into serde_json::Value based on document type.
 fn parse_string(document: &str, format: PyDocumentType) -> PyResult<serde_json::Value> {
     let doc_type: DocumentType = format.into();
-    openjd_model::parse::document_string_to_object(document, doc_type, &CallerLimits::default())
+    openjd_model::template::parse::document_string_to_object(document, doc_type, &CallerLimits::default())
         .map_err(model_err_to_py)
 }
 

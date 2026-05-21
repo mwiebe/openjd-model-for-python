@@ -724,11 +724,13 @@ impl PyStepParameterSpace {
 
     #[getter]
     fn task_parameter_definitions(&self, py: Python<'_>) -> PyResult<Py<pyo3::PyAny>> {
-        let json = serde_json::to_string(&self.inner.task_parameter_definitions)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        let json_mod = py.import("json")?;
-        let result = json_mod.call_method1("loads", (json,))?;
-        Ok(result.unbind())
+        use pyo3::IntoPyObjectExt;
+        let dict = pyo3::types::PyDict::new(py);
+        for (name, tp) in &self.inner.task_parameter_definitions {
+            let value = crate::model::task_parameter::task_parameter_to_py(py, tp)?;
+            dict.set_item(name, value)?;
+        }
+        dict.into_py_any(py)
     }
 
     #[getter]

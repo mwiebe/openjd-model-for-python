@@ -13,6 +13,7 @@ __all__ = [
     "ActionStatus",
     "CallerLimits",
     "CancelationMode",
+    "ChunkIntTaskParameter",
     "DocumentType",
     "EmbeddedFile",
     "Environment",
@@ -24,9 +25,11 @@ __all__ = [
     "ExprRevision",
     "ExprType",
     "ExprValue",
+    "FloatTaskParameter",
     "FormatString",
     "FunctionLibrary",
     "HostContext",
+    "IntTaskParameter",
     "Job",
     "JobParameter",
     "JobParameterType",
@@ -37,6 +40,7 @@ __all__ = [
     "ParsedExpression",
     "PathFormat",
     "PathMappingRule",
+    "PathTaskParameter",
     "PosixSessionUser",
     "RangeExpr",
     "ScriptRunnerState",
@@ -52,7 +56,9 @@ __all__ = [
     "StepParameterSpace",
     "StepParameterSpaceIterator",
     "StepScript",
+    "StringTaskParameter",
     "SymbolTable",
+    "TaskChunksDefinition",
     "TaskParameterType",
     "TaskParameterValue",
     "TemplateSpecificationVersion",
@@ -190,6 +196,36 @@ class CancelationMode:
     def mode(self) -> builtins.str: ...
     @property
     def notify_period_in_seconds(self) -> typing.Optional[builtins.str]: ...
+
+@typing.final
+class ChunkIntTaskParameter:
+    r"""
+    Resolved CHUNK[INT] task parameter: a `range` (list of ints OR
+    a `RangeExpr`) plus a required :class:`TaskChunksDefinition`.
+    Available only when the ``TASK_CHUNKING`` extension is enabled.
+    """
+    @property
+    def type(self) -> TaskParameterType:
+        r"""
+        Always ``TaskParameterType.CHUNK_INT``.
+        """
+    @property
+    def range(self) -> typing.Any:
+        r"""
+        Either a ``list[int]`` or a :class:`openjd.expr.RangeExpr`.
+        """
+    @property
+    def chunks(self) -> TaskChunksDefinition:
+        r"""
+        The chunks definition. Always set on this variant.
+        """
+    def __new__(cls, *, range: typing.Any, chunks: TaskChunksDefinition) -> ChunkIntTaskParameter: ...
+    def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: ChunkIntTaskParameter) -> builtins.bool: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]:
+        r"""
+        Pickle support — round-trips through ``__init__(*, range=, chunks=)``.
+        """
 
 @typing.final
 class EmbeddedFile:
@@ -426,6 +462,26 @@ class ExprValue:
         """
 
 @typing.final
+class FloatTaskParameter:
+    r"""
+    Resolved FLOAT task parameter: a list of floats.
+    """
+    @property
+    def type(self) -> TaskParameterType:
+        r"""
+        Always ``TaskParameterType.FLOAT``.
+        """
+    @property
+    def range(self) -> builtins.list[builtins.float]: ...
+    def __new__(cls, *, range: typing.Sequence[builtins.float]) -> FloatTaskParameter: ...
+    def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: FloatTaskParameter) -> builtins.bool: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]:
+        r"""
+        Pickle support — round-trips through ``__init__(*, range=...)``.
+        """
+
+@typing.final
 class FormatString:
     def __new__(cls, input: builtins.str) -> FormatString: ...
     def resolve_string(self, symtab: typing.Any, *, library: typing.Optional[FunctionLibrary] = None, profile: typing.Optional[ExprProfile] = None) -> builtins.str: ...
@@ -532,6 +588,30 @@ class HostContext:
         r"""
         Pickle support — round-trips through one of the three
         classmethod constructors (`none`, `unresolved`, `with_rules`).
+        """
+
+@typing.final
+class IntTaskParameter:
+    r"""
+    Resolved INT task parameter: a `range` (list of ints OR a
+    `RangeExpr`) and no chunks.
+    """
+    @property
+    def type(self) -> TaskParameterType:
+        r"""
+        Always ``TaskParameterType.INT``.
+        """
+    @property
+    def range(self) -> typing.Any:
+        r"""
+        Either a ``list[int]`` or a :class:`openjd.expr.RangeExpr`.
+        """
+    def __new__(cls, *, range: typing.Any) -> IntTaskParameter: ...
+    def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: IntTaskParameter) -> builtins.bool: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]:
+        r"""
+        Pickle support — round-trips through ``__init__(*, range=...)``.
         """
 
 @typing.final
@@ -699,6 +779,26 @@ class PathMappingRule:
     def __reduce__(self) -> tuple[typing.Any, tuple[builtins.dict[builtins.str, builtins.str]]]:
         r"""
         Pickle support — round-trips through `to_dict` / `from_dict`.
+        """
+
+@typing.final
+class PathTaskParameter:
+    r"""
+    Resolved PATH task parameter: a list of path strings.
+    """
+    @property
+    def type(self) -> TaskParameterType:
+        r"""
+        Always ``TaskParameterType.PATH``.
+        """
+    @property
+    def range(self) -> builtins.list[builtins.str]: ...
+    def __new__(cls, *, range: typing.Sequence[builtins.str]) -> PathTaskParameter: ...
+    def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: PathTaskParameter) -> builtins.bool: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]:
+        r"""
+        Pickle support — round-trips through ``__init__(*, range=...)``.
         """
 
 @typing.final
@@ -957,6 +1057,26 @@ class StepScript:
     def __new__(cls, *, actions: StepActions, embeddedFiles: typing.Optional[typing.Sequence[EmbeddedFile]] = None, let_: typing.Optional[typing.Sequence[builtins.str]] = None) -> StepScript: ...
 
 @typing.final
+class StringTaskParameter:
+    r"""
+    Resolved STRING task parameter: a list of strings.
+    """
+    @property
+    def type(self) -> TaskParameterType:
+        r"""
+        Always ``TaskParameterType.STRING``.
+        """
+    @property
+    def range(self) -> builtins.list[builtins.str]: ...
+    def __new__(cls, *, range: typing.Sequence[builtins.str]) -> StringTaskParameter: ...
+    def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: StringTaskParameter) -> builtins.bool: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]:
+        r"""
+        Pickle support — round-trips through ``__init__(*, range=...)``.
+        """
+
+@typing.final
 class SymbolTable:
     @property
     def keys(self) -> builtins.set[builtins.str]: ...
@@ -979,6 +1099,33 @@ class SymbolTable:
         The dict shows each top-level key mapped to either an
         ``ExprValue`` (leaf) or a nested ``SymbolTable`` (subtable),
         recursing through nested subtables for free via Python's repr.
+        """
+
+@typing.final
+class TaskChunksDefinition:
+    r"""
+    Resolved chunks payload attached to a `ChunkIntTaskParameter`.
+    
+    Mirrors `openjd_model::job::ResolvedChunks` — the post-
+    format-string-resolution form. `target_runtime_seconds` is
+    optional; `range_constraint` is one of the strings
+    `"CONTIGUOUS"` or `"NONCONTIGUOUS"`.
+    """
+    @property
+    def default_task_count(self) -> builtins.int: ...
+    @property
+    def target_runtime_seconds(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def range_constraint(self) -> builtins.str:
+        r"""
+        Either ``"CONTIGUOUS"`` or ``"NONCONTIGUOUS"``.
+        """
+    def __new__(cls, *, default_task_count: builtins.int, target_runtime_seconds: typing.Optional[builtins.int] = None, range_constraint: builtins.str) -> TaskChunksDefinition: ...
+    def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: TaskChunksDefinition) -> builtins.bool: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]:
+        r"""
+        Pickle support — round-trips through ``__init__``.
         """
 
 @typing.final

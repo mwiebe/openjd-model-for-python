@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
-use openjd_model::{JobTemplate, EnvironmentTemplate};
+use openjd_model::template::{JobTemplate, EnvironmentTemplate};
 use openjd_model::TemplateSpecificationVersion;
 
 use super::profile::PyModelProfile;

@@ -6,7 +6,7 @@ use pyo3::types::{PyDict, PyType};
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
-use openjd_model::parse::DocumentType;
+use openjd_model::template::parse::DocumentType;
 use openjd_model::TemplateSpecificationVersion;
 use openjd_model::JobParameterType;
 

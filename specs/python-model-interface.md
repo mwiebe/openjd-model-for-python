@@ -290,9 +290,62 @@ param.value.item()          # 5
 
 ```python
 space = step.parameterSpace
-space.taskParameterDefinitions  # dict
+space.taskParameterDefinitions  # dict[str, IntTaskParameter | FloatTaskParameter |
+                                #            StringTaskParameter | PathTaskParameter |
+                                #            ChunkIntTaskParameter]
 space.combination               # Optional[str]
 ```
+
+Each value in `taskParameterDefinitions` is one of five typed
+pyclasses, mirroring the underlying Rust `TaskParameter` runtime enum
+1:1. Discriminate by `isinstance` or by the `type` getter.
+
+### `IntTaskParameter` / `FloatTaskParameter` / `StringTaskParameter` / `PathTaskParameter`
+
+```python
+F = step.parameterSpace.taskParameterDefinitions["F"]
+isinstance(F, IntTaskParameter)         # True for INT
+F.type                                  # TaskParameterType.INT
+F.range                                 # list[int] | RangeExpr  (INT only)
+                                        # list[float]            (FLOAT)
+                                        # list[str]              (STRING / PATH)
+```
+
+| Class | `type` | `range` element type |
+|---|---|---|
+| `IntTaskParameter` | `TaskParameterType.INT` | `list[int]` or `RangeExpr` |
+| `FloatTaskParameter` | `TaskParameterType.FLOAT` | `list[float]` |
+| `StringTaskParameter` | `TaskParameterType.STRING` | `list[str]` |
+| `PathTaskParameter` | `TaskParameterType.PATH` | `list[str]` |
+
+None of these four carry a `chunks` field — only `ChunkIntTaskParameter`
+does. (The underlying Rust struct has `chunks: Option<ResolvedChunks>`
+on the `Int` variant for shape reasons, but no resolver path ever
+populates it; the binding mirrors the runtime *behaviour*.)
+
+### `ChunkIntTaskParameter`
+
+Available only when the `TASK_CHUNKING` extension is enabled.
+
+```python
+F = step.parameterSpace.taskParameterDefinitions["F"]
+F.type                                  # TaskParameterType.CHUNK_INT
+F.range                                 # list[int] | RangeExpr
+F.chunks                                # TaskChunksDefinition (always set)
+```
+
+### `TaskChunksDefinition`
+
+```python
+chunks = chunk_int_param.chunks
+chunks.default_task_count               # int
+chunks.target_runtime_seconds           # Optional[int]
+chunks.range_constraint                 # "CONTIGUOUS" or "NONCONTIGUOUS"
+```
+
+`range_constraint` is exposed as a string rather than a separate enum
+class because it has only two values; future revisions may promote it
+to a typed enum if a third variant is added.
 
 ### `StepDependency`
 
@@ -595,6 +648,12 @@ original.
 | ``ValidationContext`` | constructor arguments (``profile``, ``caller_limits``) |
 | ``JobParameterValue`` | constructor arguments (``type``, ``value``) |
 | ``TaskParameterValue`` | constructor arguments (``type``, ``value``) |
+| ``IntTaskParameter`` | constructor argument (``range``) |
+| ``FloatTaskParameter`` | constructor argument (``range``) |
+| ``StringTaskParameter`` | constructor argument (``range``) |
+| ``PathTaskParameter`` | constructor argument (``range``) |
+| ``ChunkIntTaskParameter`` | constructor arguments (``range``, ``chunks``) |
+| ``TaskChunksDefinition`` | constructor arguments (three fields) |
 | ``DecodeValidationError``, ``ModelValidationError``, ``UnsupportedSchema`` | standard exception pickle, under their canonical ``openjd.model._v1`` module path |
 
 ``SpecificationRevision`` and ``TemplateSpecificationVersion`` pickle

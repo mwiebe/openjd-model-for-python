@@ -149,6 +149,12 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyStepDependencyGraph>()?;
     m.add_class::<PyStepDependencyNode>()?;
     m.add_class::<PyStepDependencyEdge>()?;
+    m.add_class::<PyTaskChunksDefinition>()?;
+    m.add_class::<PyIntTaskParameter>()?;
+    m.add_class::<PyFloatTaskParameter>()?;
+    m.add_class::<PyStringTaskParameter>()?;
+    m.add_class::<PyPathTaskParameter>()?;
+    m.add_class::<PyChunkIntTaskParameter>()?;
 
     m.add_function(wrap_pyfunction!(decode_job_template_str, m)?)?;
     m.add_function(wrap_pyfunction!(decode_job_template_dict, m)?)?;

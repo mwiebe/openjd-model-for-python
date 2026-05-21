@@ -71,12 +71,18 @@ for the pure-Python reference**:
    underlying Rust `StepParameterSpaceIterator::len()` continues to return
    0 for adaptive (its documented contract); the wrapper short-circuits
    on `chunks_adaptive()` before consulting it.
-6. **`taskParameterDefinitions` getter returns serde-internal JSON, not
+6. ~~**`taskParameterDefinitions` getter returns serde-internal JSON, not
    typed objects.** The reference returns `RangeExpressionTaskParameterDefinition`
    / `RangeListTaskParameterDefinition` / etc. with `.type` (a
    `TaskParameterType`) and `.range` attributes. The binding returns a
    nested dict like `{'int': {'range': {'rangeExpr': {...}}, 'chunks':
-   None}}`. Code reading `defs[name].type` breaks.
+   None}}`. Code reading `defs[name].type` breaks.~~ **Resolved (Rec #6).**
+   `StepParameterSpace.taskParameterDefinitions[name]` now returns a
+   typed pyclass instance — one of `IntTaskParameter`,
+   `FloatTaskParameter`, `StringTaskParameter`, `PathTaskParameter`,
+   or `ChunkIntTaskParameter` — mirroring the underlying Rust
+   `TaskParameter` runtime enum 1:1. Each has `.type`, `.range`, and
+   (for `ChunkIntTaskParameter`) `.chunks` attributes.
 7. **18 v2023_09 test files cannot even be collected.** They import legacy
    names (`Action`, `EnvironmentTemplate`, `RangeExpressionTaskParameterDefinition`,
    `JobIntParameterDefinition`, `HostRequirements`, etc.) from
@@ -196,7 +202,7 @@ The following all import successfully from `openjd.model._v1`:
 | `model_to_object(model=some_object)` | Always raises `NotImplementedError("model_to_object is not supported for this type")` for every Rust-backed model. |
 | `script.let` (advertised as `Optional[list[str]]`) | Works ✓ |
 | `step.resolvedBindings` | Works ✓ but reference tests use `script.let` — which also works. |
-| `space.taskParameterDefinitions` returns dict of typed defs | Returns dict whose values are nested serde-tagged JSON objects (see §5). |
+| ~~`space.taskParameterDefinitions` returns dict of typed defs~~ | Now returns ``dict[str, IntTaskParameter \| FloatTaskParameter \| StringTaskParameter \| PathTaskParameter \| ChunkIntTaskParameter]``. ✓ resolved (Rec #6). |
 
 ### Spec entries with no live binding symbol
 
@@ -466,7 +472,7 @@ This section lists every public symbol in the **reference**
 | `Step.script.actions.onRun.timeout` | string in spec | `Optional[str]` | ✓ |
 | `Step.script.let` | `Optional[list[str]]` | ✓ | ✓ |
 | `Step.script.embedded_files` / `embeddedFiles` | both forms | both forms | ✓ |
-| `Step.parameterSpace.taskParameterDefinitions[name]` | typed `RangeExpression…/RangeList…TaskParameterDefinition` | **Nested serde JSON `dict`** like `{'int': {'range': {'rangeExpr': {…}}, 'chunks': None}}` | ❌ |
+| ~~`Step.parameterSpace.taskParameterDefinitions[name]`~~ | typed `RangeExpression…/RangeList…TaskParameterDefinition` | one of `IntTaskParameter`, `FloatTaskParameter`, `StringTaskParameter`, `PathTaskParameter`, `ChunkIntTaskParameter` (mirrors Rust `TaskParameter` runtime enum) | ✓ resolved (Rec #6) |
 | `Step.parameterSpace.combination` | `Optional[str]` | `Optional[str]` | ✓ |
 | `Job.parameters[name].value` | `ExprValue` | `ExprValue` | ✓ |
 | `Environment.script.actions.onEnter` / `onExit` | `Optional[Action]` | `Optional[Action]` | ✓ |
@@ -663,7 +669,7 @@ in `test/openjd/model-v1/test_known_gaps.py`.
 | 5 | ~~`len(iter)` returns 0 on adaptive-chunked space; reference raises `ValueError`.~~ **Resolved** — `__len__` now raises `ValueError("Length is not available because the parameter space uses adaptive chunking.")`. | `test_step_param_space_iter_adaptive_len_raises` (now passing) |
 | 6 | ~~`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType` — none pickleable. (`TemplateSpecificationVersion` *is* pickleable because it's a Python `Enum`.)~~ **Partially resolved (Rec #8).** `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType`, and `TemplateSpecificationVersion` (Rust-side) all pickle now. The decoded model containers (`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`) still don't — they need `to_dict()` / `to_json()` accessors first. | `test_job_template_pickleable` (still xfail) |
 | 7 | ~~`TaskParameterType` is not hashable, but `JobParameterType` is.~~ **Resolved (Rec #9).** Added `frozen, hash` to `PyTaskParameterType`. | `test_task_parameter_type_hashable` (now passing) |
-| 8 | `StepParameterSpace.taskParameterDefinitions[name]` returns serde-tagged JSON, not typed object. | `test_task_parameter_definitions_typed_objects` |
+| 8 | ~~`StepParameterSpace.taskParameterDefinitions[name]` returns serde-tagged JSON, not typed object.~~ **Resolved (Rec #6).** Returns one of five typed pyclasses mirroring the Rust runtime enum. | `test_task_parameter_definitions_typed_objects` (passing — relocated to `test_task_parameter.py`) |
 | 9 | `decode_template` not exported (reference exports it). | `test_decode_template_re_export` |
 | 10 | `JobTemplate.specificationVersion` (camel) not exposed. | `test_job_template_specification_version_camelcase` |
 
@@ -774,14 +780,36 @@ proves the gap so it can be fixed and the proof regenerated.
    before consulting the underlying iterator's `len()`. Verified by
    promoting the `xfail` test to a passing test.
 
-6. **Expose `taskParameterDefinitions` as typed objects, not serde-tagged
+6. ~~**Expose `taskParameterDefinitions` as typed objects, not serde-tagged
    JSON.** `Step.parameterSpace.taskParameterDefinitions["F"]` must
    return an object with `.type` (a `TaskParameterType`) and `.range`
    (the appropriate range collection / `RangeExpr`). Either implement
    `IntTaskParameterDefinition` / `RangeExpressionTaskParameterDefinition`
    / `RangeListTaskParameterDefinition` etc. as Rust pyclasses, or add a
    thin Python wrapper around the existing dict. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_task_parameter_definitions_typed_objects`.
+   `test/openjd/model-v1/test_known_gaps.py::test_task_parameter_definitions_typed_objects`.~~
+   **Resolved.** Implemented as five Rust pyclasses mirroring the
+   underlying `openjd_model::job::TaskParameter` runtime enum 1:1
+   (rather than the v0 reference's two-class shape). Names follow
+   the Rust variants: `IntTaskParameter`, `FloatTaskParameter`,
+   `StringTaskParameter`, `PathTaskParameter`,
+   `ChunkIntTaskParameter`, plus a `TaskChunksDefinition` pyclass
+   for the chunks payload. `IntTaskParameter` deliberately omits
+   the `chunks` field (the runtime `Int` variant always carries
+   `Option::None` for it; mirroring runtime behaviour is more
+   useful than mirroring the struct field declaration). Each
+   pyclass has `__init__`, `__repr__`, `__eq__`, and `__reduce__`
+   for pickle. Required a small openjd-rs crate change to
+   re-export `RangeConstraint` from the crate root (was a private
+   module). New tests:
+   `test/openjd/model-v1/test_task_parameter.py` (35 tests across
+   7 classes covering construction, decode → create_job
+   round-trip, pickle, and dispatch dispatch via
+   `StepParameterSpace.taskParameterDefinitions`). The
+   `test_task_parameter_definitions_typed_objects` xfail in
+   `test_known_gaps.py` is removed; the equivalent passing test
+   lives at
+   `test_task_parameter.py::TestStepParameterSpaceTypedDict::test_dict_value_is_typed_pyclass_not_dict`.
 
 7. **Re-export the ~50 missing names from `openjd.model._v1.v2023_09`.**
    File: `src/openjd/model/_v1/v2023_09/__init__.py`. The 18 v2023_09

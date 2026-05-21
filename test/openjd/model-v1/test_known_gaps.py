@@ -20,7 +20,6 @@ import pickle
 import pytest
 
 from openjd.model._v1 import (
-    create_job,
     decode_job_template,
     model_to_object,
 )
@@ -57,36 +56,6 @@ def test_job_template_pickleable():
     data = pickle.dumps(t)
     rt = pickle.loads(data)
     assert rt.name == t.name
-
-
-@pytest.mark.xfail(
-    strict=True, reason="Issue: taskParameterDefinitions returns serde JSON shape, not typed object"
-)
-def test_task_parameter_definitions_typed_objects():
-    t = decode_job_template(
-        template={
-            "specificationVersion": "jobtemplate-2023-09",
-            "name": "X",
-            "steps": [
-                {
-                    "name": "S",
-                    "parameterSpace": {
-                        "taskParameterDefinitions": [
-                            {"name": "F", "type": "INT", "range": "1-3"}
-                        ]
-                    },
-                    "script": {"actions": {"onRun": {"command": "echo"}}},
-                }
-            ],
-        }
-    )
-    j = create_job(job_template=t, job_parameter_values={})
-    ps = j.steps[0].parameterSpace
-    F = ps.taskParameterDefinitions["F"]
-    # Reference: F.type is TaskParameterType.INT, F.range is the IntRangeExpr.
-    # Binding: F is a dict like {'int': {'range': {'rangeExpr': {...}}, 'chunks': None}}
-    assert hasattr(F, "type")
-    assert hasattr(F, "range")
 
 
 @pytest.mark.xfail(strict=True, reason="Issue: decode_template not exported (reference exports it)")

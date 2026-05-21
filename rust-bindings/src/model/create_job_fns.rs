@@ -7,7 +7,7 @@ use pyo3_stub_gen::derive::*;
 use pyo3::types::PyDict;
 
 use openjd_model::types::{JobParameterValues, JobParameterValue, JobParameterType, JobParameterInputValues};
-use openjd_model::EnvironmentTemplate;
+use openjd_model::template::EnvironmentTemplate;
 use openjd_model::PathParameterOptions;
 
 use crate::expr::expr_value::py_to_expr_value;

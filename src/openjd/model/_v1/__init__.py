@@ -33,6 +33,14 @@ from openjd._openjd_rs import (
     StepParameterSpace,
     StepDependency,
     CancelationMode,
+    # Task parameter pyclasses (output types from create_job; one per
+    # `TaskParameter` runtime variant in the underlying Rust crate).
+    IntTaskParameter,
+    FloatTaskParameter,
+    StringTaskParameter,
+    PathTaskParameter,
+    ChunkIntTaskParameter,
+    TaskChunksDefinition,
     # Iteration
     StepParameterSpaceIterator,
     StepDependencyGraph,
@@ -477,6 +485,13 @@ __all__ = (
     "StepParameterSpaceIterator",
     "TaskParameterSet",
     "TaskParameterType",
+    # Task-parameter pyclasses (one per Rust runtime variant).
+    "IntTaskParameter",
+    "FloatTaskParameter",
+    "StringTaskParameter",
+    "PathTaskParameter",
+    "ChunkIntTaskParameter",
+    "TaskChunksDefinition",
     "TemplateSpecificationVersion",
     "OpenJDModel",
     # Expr re-exports
