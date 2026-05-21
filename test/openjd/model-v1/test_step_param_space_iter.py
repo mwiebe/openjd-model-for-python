@@ -445,20 +445,11 @@ class TestStepParameterSpaceIterator:
         ]
         assert expected_values == [v for v in it]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "openjd-rs StepParameterSpaceIterator::contains has a known bug "
-            "for nested combination expressions: __contains__ returns False "
-            "for values the iterator just yielded. Simple (non-nested) "
-            "expressions work correctly — see "
-            "test_contains_self_yielded_values. Tracked upstream."
-        ),
-    )
     def test_nested_expr_contains(self) -> None:
-        """``__contains__`` should recognise values yielded by an
-        iterator over a nested combination expression. Currently
-        broken upstream."""
+        """``__contains__`` recognises values yielded by an iterator
+        over a nested combination expression. Regression test for
+        report finding #2 (recursive
+        ``AssociationNode::validate_containment`` projection)."""
 
         # GIVEN
         space = StepParameterSpace(

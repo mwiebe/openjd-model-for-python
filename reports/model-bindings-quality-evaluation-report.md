@@ -46,7 +46,7 @@ for the pure-Python reference**:
    which uses the same `for v in expected_values: assert v in it`
    pattern.
 
-   **Remaining issue (nested combination expressions):** `__contains__`
+   **Remaining issue (nested combination expressions):** ~~`__contains__`
    still returns `False` for values yielded by an iterator over a nested
    combination expression like `A * (B, C * D)`. This is an upstream bug
    in `openjd_model::job::step_param_space::StepParameterSpaceIterator::
@@ -55,7 +55,17 @@ for the pure-Python reference**:
    Tracked by
    `test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator::test_nested_expr_contains`
    (xfail). The simple-case behavior is verified by
-   `test_contains_self_yielded_values`, which passes.
+   `test_contains_self_yielded_values`, which passes.~~ **Resolved
+   upstream.** Fixed by `openjd-rs` commit "fix(model): correct
+   AssociationNode containment for nested expressions". Root cause was
+   in `AssociationNode::validate_containment`: the candidate set built
+   from the association's children's keys was being compared via
+   `params_equal` against the input `params`, which carries the full
+   parameter set when the association is nested under a Product. The
+   length-check in `params_equal` rejected every candidate. Fix
+   projects `params` onto the association's own keys before
+   comparison. The Python-side test
+   `test_nested_expr_contains` is no longer xfailed and passes.
 3. **`model_to_object` is unimplemented for every Rust-backed model.** The
    wrapper module raises `NotImplementedError`. The reference round-trips
    through `model.model_dump(by_alias=True, exclude_unset=True)` to produce
