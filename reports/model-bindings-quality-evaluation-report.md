@@ -882,16 +882,32 @@ proves the gap so it can be fixed and the proof regenerated.
     through `decode_job_template` again. Resolves
     `test/openjd/model-v1/test_known_gaps.py::test_job_template_specification_version_camelcase`.
 
-    **Partially resolved.** `JobTemplate.profile` now exposes the
+    **Partially resolved.** `JobTemplate.profile` exposes the
     declared revision and extensions list as a typed `ModelProfile`
     (mirrors `JobTemplate::profile()` in the Rust crate). See
     `rust-bindings/src/model/template.rs:49`. Read the template's
     `extensions:` field via `template.profile.extensions`.
     `specificationVersion` (camelCase accessor) is now exposed
     on both `JobTemplate` and `EnvironmentTemplate` as an alias
-    for `specification_version`. Still missing:
-    `parameter_definitions`, `steps`, `job_environments`, full
-    `EnvironmentTemplate.environment` body.
+    for `specification_version`. `JobTemplate.steps`,
+    `JobTemplate.job_environments`/`jobEnvironments`, and
+    `EnvironmentTemplate.environment` are now exposed, returning
+    typed pyclasses (`StepTemplate`, `Environment`, etc.) at
+    `openjd.model._v1.template`. The structural template-time
+    pyclasses (`StepTemplate`, `Environment`, `EnvironmentScript`,
+    `EnvironmentActions`, `Action`, `EmbeddedFile`, `StepScript`,
+    `StepActions`, `CancelationMode`, `HostRequirements`,
+    `AmountRequirement`, `AttributeRequirement`, `StepDependency`,
+    `SimpleAction`) mirror the Rust `template::*` types 1:1.
+
+    Still missing: `JobTemplate.parameter_definitions` and
+    `EnvironmentTemplate.parameter_definitions` (typed
+    `JobParameterDefinition` 12-variant dispatch), and a typed
+    pyclass for `StepTemplate.parameter_space`
+    (`StepParameterSpaceDefinition`). The follow-up commit will
+    address parameter definitions; the parameter-space definition
+    is deferred (the Rust struct does not impl `Serialize`, and a
+    typed pyclass for it requires deeper analysis).
 
 12. **Map `ModelError::FormatStringError` → `FormatStringError`, not
     `ModelValidationError`.** File: `rust-bindings/src/model/errors.rs`.

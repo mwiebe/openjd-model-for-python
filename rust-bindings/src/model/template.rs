@@ -10,6 +10,7 @@ use openjd_model::TemplateSpecificationVersion;
 
 use super::profile::PyModelProfile;
 use super::types::PyTemplateSpecificationVersion;
+use super::template_types::{PyEnvironment as PyTemplateEnvironment, PyStepTemplate};
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.model._v1.template", name = "JobTemplate", from_py_object)]
@@ -57,6 +58,35 @@ impl PyJobTemplate {
         PyModelProfile { inner: self.inner.profile() }
     }
 
+    /// The list of `StepTemplate`s defined on this job template.
+    /// Mirrors the `steps:` field in the YAML/JSON document.
+    #[getter]
+    fn steps(&self) -> Vec<PyStepTemplate> {
+        self.inner
+            .steps
+            .iter()
+            .map(|s| PyStepTemplate { inner: s.clone() })
+            .collect()
+    }
+
+    /// The list of job-level `Environment` definitions, or ``None``
+    /// if the template has no `jobEnvironments:` field. Mirrors the
+    /// `jobEnvironments:` field in the YAML/JSON document.
+    #[getter]
+    fn job_environments(&self) -> Option<Vec<PyTemplateEnvironment>> {
+        self.inner
+            .job_environments
+            .as_ref()
+            .map(|envs| envs.iter().map(|e| PyTemplateEnvironment { inner: e.clone() }).collect())
+    }
+
+    /// camelCase alias for `job_environments`.
+    #[getter]
+    #[pyo3(name = "jobEnvironments")]
+    fn job_environments_camel(&self) -> Option<Vec<PyTemplateEnvironment>> {
+        self.job_environments()
+    }
+
     fn __repr__(&self) -> String {
         format!("JobTemplate(name={:?}, version={:?})", self.inner.name.raw(), self.inner.specification_version)
     }
@@ -94,6 +124,13 @@ impl PyEnvironmentTemplate {
     #[getter]
     fn description(&self) -> Option<String> {
         self.inner.environment.description.as_ref().map(|d| d.0.clone())
+    }
+
+    /// The `Environment` defined by this template — mirrors the
+    /// `environment:` field in the YAML/JSON document.
+    #[getter]
+    fn environment(&self) -> PyTemplateEnvironment {
+        PyTemplateEnvironment { inner: self.inner.environment.clone() }
     }
 
     fn __repr__(&self) -> String {

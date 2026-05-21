@@ -155,6 +155,21 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyStringTaskParameter>()?;
     m.add_class::<PyPathTaskParameter>()?;
     m.add_class::<PyChunkIntTaskParameter>()?;
+    // Template-time structural pyclasses (mirror openjd_model::template::*)
+    m.add_class::<PyTemplateAction>()?;
+    m.add_class::<PyAmountRequirement>()?;
+    m.add_class::<PyAttributeRequirement>()?;
+    m.add_class::<PyTemplateCancelationMode>()?;
+    m.add_class::<PyTemplateEmbeddedFile>()?;
+    m.add_class::<PyTemplateEnvironment>()?;
+    m.add_class::<PyTemplateEnvironmentActions>()?;
+    m.add_class::<PyTemplateEnvironmentScript>()?;
+    m.add_class::<PyHostRequirements>()?;
+    m.add_class::<PySimpleAction>()?;
+    m.add_class::<PyTemplateStepActions>()?;
+    m.add_class::<PyTemplateStepDependency>()?;
+    m.add_class::<PyTemplateStepScript>()?;
+    m.add_class::<PyStepTemplate>()?;
 
     m.add_function(wrap_pyfunction!(decode_job_template_str, m)?)?;
     m.add_function(wrap_pyfunction!(decode_job_template_dict, m)?)?;

@@ -5,6 +5,7 @@ pub(crate) mod errors;
 pub(crate) mod types;
 pub(crate) mod profile;
 pub(crate) mod template;
+pub(crate) mod template_types;
 pub(crate) mod decode;
 pub(crate) mod job;
 mod create_job_fns;
@@ -28,4 +29,14 @@ pub(crate) use step_dependency_graph::{PyStepDependencyGraph, PyStepDependencyNo
 pub(crate) use task_parameter::{
     PyChunkIntTaskParameter, PyFloatTaskParameter, PyIntTaskParameter, PyPathTaskParameter,
     PyStringTaskParameter, PyTaskChunksDefinition,
+};
+pub(crate) use template_types::{
+    PyAction as PyTemplateAction, PyAmountRequirement, PyAttributeRequirement,
+    PyCancelationMode as PyTemplateCancelationMode, PyEmbeddedFile as PyTemplateEmbeddedFile,
+    PyEnvironment as PyTemplateEnvironment,
+    PyEnvironmentActions as PyTemplateEnvironmentActions,
+    PyEnvironmentScript as PyTemplateEnvironmentScript, PyHostRequirements,
+    PySimpleAction, PyStepActions as PyTemplateStepActions,
+    PyStepDependency as PyTemplateStepDependency, PyStepScript as PyTemplateStepScript,
+    PyStepTemplate,
 };

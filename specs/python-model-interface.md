@@ -372,6 +372,149 @@ template.name                    # raw format string, e.g. "{{Param.JobName}}"
 template.specification_version   # TemplateSpecificationVersion enum
 template.specificationVersion    # camelCase alias for specification_version
 template.description             # Optional[str]
+template.steps                   # list[StepTemplate]
+template.job_environments        # Optional[list[Environment]]
+template.jobEnvironments         # camelCase alias
+
+env_template = decode_environment_template(template={...})
+env_template.environment         # Environment
+env_template.specification_version
+env_template.specificationVersion
+```
+
+The structural pyclasses for template-time types live under
+``openjd.model._v1.template`` and mirror ``openjd_model::template``
+in the Rust crate 1:1.
+
+```python
+from openjd.model._v1.template import (
+    StepTemplate, Environment, Action,
+    EnvironmentScript, EnvironmentActions,
+    StepScript, StepActions, EmbeddedFile,
+    HostRequirements, AmountRequirement, AttributeRequirement,
+    StepDependency, CancelationMode, SimpleAction,
+)
+```
+
+The classes whose names collide with their job-time counterparts at
+``openjd.model._v1.job`` (``Action``, ``Environment``,
+``CancelationMode``, ``EmbeddedFile``, ``EnvironmentScript``,
+``EnvironmentActions``, ``StepScript``, ``StepActions``,
+``StepDependency``) are exposed under both their short name and a
+``Template``-prefixed alias (e.g. ``Action`` and ``TemplateAction``
+are the same class).
+
+### `StepTemplate`
+
+```python
+step = job_template.steps[0]
+step.name                       # str
+step.description                # Optional[str]
+step.let_bindings               # Optional[list[str]] (alias: step.let)
+step.dependencies               # Optional[list[StepDependency]]
+step.step_environments          # Optional[list[Environment]] (alias: stepEnvironments)
+step.host_requirements          # Optional[HostRequirements] (alias: hostRequirements)
+step.parameter_space            # Optional (typed pyclass not yet implemented; returns None)
+step.script                     # Optional[StepScript]
+# SimpleAction sugar (FEATURE_BUNDLE_1):
+step.bash                       # Optional[SimpleAction]
+step.python                     # Optional[SimpleAction]
+step.cmd                        # Optional[SimpleAction]
+step.powershell                 # Optional[SimpleAction]
+step.node                       # Optional[SimpleAction]
+```
+
+### `Environment`
+
+```python
+env = job_template.job_environments[0]  # or env_template.environment
+env.name                        # str
+env.description                 # Optional[str]
+env.script                      # Optional[EnvironmentScript]
+env.variables                   # Optional[dict[str, FormatString]]
+```
+
+### `EnvironmentScript` / `StepScript`
+
+```python
+script = step.script  # or env.script
+script.actions                  # StepActions or EnvironmentActions
+script.let_bindings             # Optional[list[str]] (alias: script.let)
+script.embedded_files           # Optional[list[EmbeddedFile]] (alias: embeddedFiles)
+```
+
+### `StepActions` / `EnvironmentActions`
+
+```python
+script.actions.on_run           # Action  (StepActions; alias: onRun)
+script.actions.on_enter         # Optional[Action]  (EnvironmentActions; alias: onEnter)
+script.actions.on_exit          # Optional[Action]  (EnvironmentActions; alias: onExit)
+```
+
+### `Action`
+
+```python
+action = step.script.actions.on_run
+action.command                  # FormatString
+action.args                     # Optional[list[FormatString]]
+action.timeout                  # Optional[FormatString]
+action.cancelation              # Optional[CancelationMode]
+```
+
+### `CancelationMode`
+
+```python
+cm = action.cancelation
+cm.mode                         # "TERMINATE" or "NOTIFY_THEN_TERMINATE"
+cm.notify_period_in_seconds     # Optional[FormatString] (alias: notifyPeriodInSeconds)
+```
+
+### `EmbeddedFile`
+
+```python
+ef = step.script.embedded_files[0]
+ef.name                         # str
+ef.type                         # "TEXT"
+ef.filename                     # Optional[FormatString]
+ef.data                         # Optional[FormatString]
+ef.runnable                     # Optional[bool]
+ef.end_of_line                  # Optional["LF" | "CRLF" | "AUTO"] (alias: endOfLine)
+```
+
+### `HostRequirements` / `AmountRequirement` / `AttributeRequirement`
+
+```python
+hr = step.host_requirements
+hr.amounts                      # Optional[list[AmountRequirement]]
+hr.attributes                   # Optional[list[AttributeRequirement]]
+
+amt = hr.amounts[0]
+amt.name                        # str
+amt.min                         # Optional[FormatString]
+amt.max                         # Optional[FormatString]
+
+attr = hr.attributes[0]
+attr.name                       # str
+attr.any_of                     # Optional[list[FormatString]] (alias: anyOf)
+attr.all_of                     # Optional[list[FormatString]] (alias: allOf)
+```
+
+### `StepDependency`
+
+```python
+dep = step.dependencies[0]
+dep.depends_on                  # str (alias: dependsOn)
+```
+
+### `SimpleAction` (FEATURE_BUNDLE_1)
+
+```python
+sa = step.bash  # or .python, .cmd, .powershell, .node
+sa.script                       # str
+sa.let_bindings                 # Optional[list[str]] (alias: let)
+sa.args                         # Optional[list[FormatString]]
+sa.timeout                      # Optional[FormatString]
+sa.cancelation                  # Optional[CancelationMode]
 ```
 
 ## Iteration Types (from Rust)
