@@ -478,7 +478,7 @@ This section lists every public symbol in the **reference**
 | `Environment.script.actions.onEnter` / `onExit` | `Optional[Action]` | `Optional[Action]` | ✓ |
 | `EmbeddedFile(name, type, filename, data, runnable, endOfLine)` | Pydantic model | Rust struct, both `endOfLine` and `end_of_line` accepted | ✓ |
 | `JobTemplate.name` / `description` / `specification_version` | All getters present | Same | ✓ |
-| `JobTemplate.specificationVersion` (camel) | exists | **Not exposed** | ❌ minor |
+| ~~`JobTemplate.specificationVersion` (camel) exists~~ | exists | exposed as a camelCase alias for `specification_version` | ✓ resolved (Rec #11 part 1) |
 | `JobTemplate.parameter_definitions` / `steps` / `extensions` | exist | **Not exposed** | ❌ |
 | `EnvironmentTemplate.environment` (the inner `Environment`) | exposed | **Not exposed** | ❌ |
 | `RevisionExtensions(spec_rev=, supported_extensions=)` | strict kw | also accepts `revision=` and `extensions=` | ⚠ |
@@ -671,7 +671,7 @@ in `test/openjd/model-v1/test_known_gaps.py`.
 | 7 | ~~`TaskParameterType` is not hashable, but `JobParameterType` is.~~ **Resolved (Rec #9).** Added `frozen, hash` to `PyTaskParameterType`. | `test_task_parameter_type_hashable` (now passing) |
 | 8 | ~~`StepParameterSpace.taskParameterDefinitions[name]` returns serde-tagged JSON, not typed object.~~ **Resolved (Rec #6).** Returns one of five typed pyclasses mirroring the Rust runtime enum. | `test_task_parameter_definitions_typed_objects` (passing — relocated to `test_task_parameter.py`) |
 | 9 | `decode_template` not exported (reference exports it). | `test_decode_template_re_export` |
-| 10 | `JobTemplate.specificationVersion` (camel) not exposed. | `test_job_template_specification_version_camelcase` |
+| 10 | ~~`JobTemplate.specificationVersion` (camel) not exposed.~~ **Resolved (Rec #11 part 1).** Exposed as a camelCase alias for `specification_version`. | `test_job_template_specification_version_camelcase` (passing — relocated to `test_rust_model_bindings.py::TestDecodeJobTemplate::test_specification_version_camelcase_alias`) |
 
 ### Other findings (informational, not failing tests)
 
@@ -886,11 +886,12 @@ proves the gap so it can be fixed and the proof regenerated.
     declared revision and extensions list as a typed `ModelProfile`
     (mirrors `JobTemplate::profile()` in the Rust crate). See
     `rust-bindings/src/model/template.rs:49`. Read the template's
-    `extensions:` field via `template.profile.extensions`. Still
-    missing: `specificationVersion` (camelCase accessor),
+    `extensions:` field via `template.profile.extensions`.
+    `specificationVersion` (camelCase accessor) is now exposed
+    on both `JobTemplate` and `EnvironmentTemplate` as an alias
+    for `specification_version`. Still missing:
     `parameter_definitions`, `steps`, `job_environments`, full
-    `EnvironmentTemplate.environment` body. The xfail test
-    `test_job_template_specification_version_camelcase` is unchanged.
+    `EnvironmentTemplate.environment` body.
 
 12. **Map `ModelError::FormatStringError` → `FormatStringError`, not
     `ModelValidationError`.** File: `rust-bindings/src/model/errors.rs`.

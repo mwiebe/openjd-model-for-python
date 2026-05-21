@@ -290,6 +290,12 @@ class EnvironmentTemplate:
     @property
     def specification_version(self) -> TemplateSpecificationVersion: ...
     @property
+    def specificationVersion(self) -> TemplateSpecificationVersion:
+        r"""
+        camelCase alias for `specification_version`. Mirrors the
+        `specificationVersion` field name in the JSON/YAML template.
+        """
+    @property
     def description(self) -> typing.Optional[builtins.str]: ...
     def __repr__(self) -> builtins.str: ...
 
@@ -668,6 +674,12 @@ class JobTemplate:
     def name(self) -> builtins.str: ...
     @property
     def specification_version(self) -> TemplateSpecificationVersion: ...
+    @property
+    def specificationVersion(self) -> TemplateSpecificationVersion:
+        r"""
+        camelCase alias for `specification_version`. Mirrors the
+        `specificationVersion` field name in the JSON/YAML template.
+        """
     @property
     def description(self) -> typing.Optional[builtins.str]: ...
     @property

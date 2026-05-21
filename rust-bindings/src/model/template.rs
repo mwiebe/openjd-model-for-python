@@ -34,6 +34,13 @@ impl PyJobTemplate {
             .unwrap_or(PyTemplateSpecificationVersion::JOBTEMPLATE_2023_09)
     }
 
+    /// camelCase alias for `specification_version`. Mirrors the
+    /// `specificationVersion` field name in the JSON/YAML template.
+    #[getter(specificationVersion)]
+    fn specification_version_camel(&self) -> PyTemplateSpecificationVersion {
+        self.specification_version()
+    }
+
     #[getter]
     fn description(&self) -> Option<String> {
         self.inner.description.as_ref().map(|d| d.0.clone())
@@ -75,6 +82,13 @@ impl PyEnvironmentTemplate {
         self.inner.specification_version.parse::<TemplateSpecificationVersion>()
             .map(PyTemplateSpecificationVersion::from)
             .unwrap_or(PyTemplateSpecificationVersion::ENVIRONMENT_2023_09)
+    }
+
+    /// camelCase alias for `specification_version`. Mirrors the
+    /// `specificationVersion` field name in the JSON/YAML template.
+    #[getter(specificationVersion)]
+    fn specification_version_camel(&self) -> PyTemplateSpecificationVersion {
+        self.specification_version()
     }
 
     #[getter]

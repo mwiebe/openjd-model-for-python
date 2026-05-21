@@ -55,6 +55,13 @@ class TestDecodeJobTemplate:
         assert template.name == "Test"
         assert str(template.specification_version) == "jobtemplate-2023-09" or template.specification_version.name == "JOBTEMPLATE_2023_09"
 
+    def test_specification_version_camelcase_alias(self) -> None:
+        """``specificationVersion`` is exposed as a camelCase alias for
+        ``specification_version`` (mirrors the JSON/YAML field name)."""
+        template = decode_job_template_dict(MINIMAL_JOB)
+        assert template.specificationVersion is not None
+        assert template.specificationVersion == template.specification_version
+
     def test_decode_yaml_string(self) -> None:
         yaml = """
 specificationVersion: jobtemplate-2023-09
@@ -112,6 +119,13 @@ class TestDecodeEnvironmentTemplate:
     def test_decode_from_dict(self) -> None:
         template = decode_environment_template_dict(MINIMAL_ENV)
         assert isinstance(template, EnvironmentTemplate)
+
+    def test_specification_version_camelcase_alias(self) -> None:
+        """``specificationVersion`` is exposed as a camelCase alias for
+        ``specification_version`` (mirrors the JSON/YAML field name)."""
+        template = decode_environment_template_dict(MINIMAL_ENV)
+        assert template.specificationVersion is not None
+        assert template.specificationVersion == template.specification_version
 
 
 class TestCreateJob:

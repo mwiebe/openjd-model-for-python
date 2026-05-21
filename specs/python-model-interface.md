@@ -370,6 +370,7 @@ Templates are produced by `decode_*` functions and passed to `create_job`.
 template = decode_job_template(template={...})
 template.name                    # raw format string, e.g. "{{Param.JobName}}"
 template.specification_version   # TemplateSpecificationVersion enum
+template.specificationVersion    # camelCase alias for specification_version
 template.description             # Optional[str]
 ```
 

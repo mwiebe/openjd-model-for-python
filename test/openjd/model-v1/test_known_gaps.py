@@ -61,20 +61,3 @@ def test_job_template_pickleable():
 @pytest.mark.xfail(strict=True, reason="Issue: decode_template not exported (reference exports it)")
 def test_decode_template_re_export():
     from openjd.model._v1 import decode_template  # noqa: F401
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="Issue: JobTemplate.specificationVersion (camelCase) not exposed; only specification_version",
-)
-def test_job_template_specification_version_camelcase():
-    t = decode_job_template(
-        template={
-            "specificationVersion": "jobtemplate-2023-09",
-            "name": "X",
-            "steps": [
-                {"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}
-            ],
-        }
-    )
-    assert t.specificationVersion is not None  # AttributeError today
