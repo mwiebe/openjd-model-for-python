@@ -1190,21 +1190,34 @@ impl PyStepTemplate {
         self.host_requirements()
     }
 
-    /// The step's parameter-space definition.
+    /// The step's parameter-space definition, or ``None`` if the
+    /// step has no `parameterSpace:` field.
     ///
-    /// **Not yet implemented** — returns ``None`` for now. The
-    /// underlying `StepParameterSpaceDefinition` Rust type is not
-    /// exposed as a typed pyclass. Use the resolved
-    /// `Step.parameterSpace` (on the job-time `Step`) for the
-    /// post-`create_job` form. See report finding #11 follow-up.
+    /// Returns a typed `StepParameterSpaceDefinition` whose
+    /// `task_parameter_definitions` is a list of typed pyclasses
+    /// dispatching on the `TaskParameterDefinition` enum
+    /// (`IntTaskParameterDefinition`, `FloatTaskParameterDefinition`,
+    /// `StringTaskParameterDefinition`,
+    /// `PathTaskParameterDefinition`,
+    /// `ChunkIntTaskParameterDefinition`).
+    ///
+    /// For the resolved (post-`create_job`) form with format strings
+    /// evaluated, see `Step.parameterSpace` on the job-time `Step`.
     #[getter]
-    fn parameter_space(&self) -> Option<()> {
-        None
+    fn parameter_space(&self) -> Option<super::step_param_space_def::PyStepParameterSpaceDefinition> {
+        self.inner
+            .parameter_space
+            .as_ref()
+            .map(|ps| super::step_param_space_def::PyStepParameterSpaceDefinition {
+                inner: ps.clone(),
+            })
     }
 
     #[getter]
     #[pyo3(name = "parameterSpace")]
-    fn parameter_space_camel(&self) -> Option<()> {
+    fn parameter_space_camel(
+        &self,
+    ) -> Option<super::step_param_space_def::PyStepParameterSpaceDefinition> {
         self.parameter_space()
     }
 

@@ -462,7 +462,8 @@ step.let_bindings               # Optional[list[str]] (alias: step.let)
 step.dependencies               # Optional[list[StepDependency]]
 step.step_environments          # Optional[list[Environment]] (alias: stepEnvironments)
 step.host_requirements          # Optional[HostRequirements] (alias: hostRequirements)
-step.parameter_space            # Optional (typed pyclass not yet implemented; returns None)
+step.parameter_space            # Optional[StepParameterSpaceDefinition]
+                                #   (alias: parameterSpace)
 step.script                     # Optional[StepScript]
 # SimpleAction sugar (FEATURE_BUNDLE_1):
 step.bash                       # Optional[SimpleAction]
@@ -564,6 +565,61 @@ sa.args                         # Optional[list[FormatString]]
 sa.timeout                      # Optional[FormatString]
 sa.cancelation                  # Optional[CancelationMode]
 ```
+
+### `StepParameterSpaceDefinition` (5 typed task-parameter variants)
+
+`StepTemplate.parameter_space` returns
+`Optional[StepParameterSpaceDefinition]`. The `task_parameter_definitions`
+list contains one of five typed pyclasses per element, mirroring the
+underlying `template::TaskParameterDefinition` enum 1:1:
+
+| Variant | Pyclass | `range` element type |
+|---|---|---|
+| `INT` | `IntTaskParameterDefinition` | `list[int]` or `FormatString` |
+| `FLOAT` | `FloatTaskParameterDefinition` | `list[float \| FormatString]` or `FormatString` |
+| `STRING` | `StringTaskParameterDefinition` | `list[FormatString]` or `FormatString` |
+| `PATH` | `PathTaskParameterDefinition` | `list[FormatString]` or `FormatString` |
+| `CHUNK[INT]` | `ChunkIntTaskParameterDefinition` | `list[int]` or `FormatString` |
+
+Common attributes on every variant:
+
+```python
+defs = step.parameter_space.task_parameter_definitions  # list[...]
+d = defs[0]
+d.type                          # "INT" | "FLOAT" | "STRING" | "PATH" | "CHUNK[INT]"
+d.name                          # str — the parameter name
+d.range                         # see table above
+```
+
+For lists where the element type is `int`/`float`/`FormatString`, the
+list-form vs format-string-form is dispatched by the binding: the
+`.range` getter returns either a Python list (literal range) or a
+`FormatString` (e.g. `"1-10:2"`, possibly carrying a
+`{{Param.X}}` interpolation under the EXPR extension). Only `INT` and
+`CHUNK[INT]` accept the list-form `[1, 2, 3]`; the others always carry
+`FormatString` elements (which may themselves be literal or
+interpolating).
+
+The `CHUNK[INT]` variant additionally exposes:
+
+```python
+chunks = chunk_int_def.chunks   # ChunksDefinition
+chunks.default_task_count       # int | FormatString  (alias: defaultTaskCount)
+chunks.target_runtime_seconds   # Optional[int | FormatString] (alias: targetRuntimeSeconds)
+chunks.range_constraint         # "CONTIGUOUS" or "NONCONTIGUOUS" (alias: rangeConstraint)
+```
+
+The combination expression on the parameter space is exposed as a raw
+string (no AST):
+
+```python
+ps = step.parameter_space
+ps.combination                  # Optional[str], e.g. "Param1 * (Param2, Param3)"
+```
+
+When the field is absent, `combination` is `None` and the resolver
+defaults to a left-to-right product over the
+`task_parameter_definitions` list.
 
 ### `JobParameterDefinition` (12 typed variants)
 

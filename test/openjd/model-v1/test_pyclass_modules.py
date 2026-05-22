@@ -72,6 +72,16 @@ EXPECTED_MODULES: dict[str, str] = {
     "JobTemplate": "openjd.model._v1.template",
     "SimpleAction": "openjd.model._v1.template",
     "StepTemplate": "openjd.model._v1.template",
+    # StepParameterSpaceDefinition + 5 typed task-parameter
+    # definitions (mirror `template::TaskParameterDefinition` enum)
+    # and the chunks payload `ChunksDefinition`.
+    "StepParameterSpaceDefinition": "openjd.model._v1.template",
+    "ChunksDefinition": "openjd.model._v1.template",
+    "IntTaskParameterDefinition": "openjd.model._v1.template",
+    "FloatTaskParameterDefinition": "openjd.model._v1.template",
+    "StringTaskParameterDefinition": "openjd.model._v1.template",
+    "PathTaskParameterDefinition": "openjd.model._v1.template",
+    "ChunkIntTaskParameterDefinition": "openjd.model._v1.template",
     "TemplateAction": "openjd.model._v1.template",
     "TemplateCancelationMode": "openjd.model._v1.template",
     "TemplateEmbeddedFile": "openjd.model._v1.template",

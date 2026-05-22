@@ -16,6 +16,8 @@ __all__ = [
     "CallerLimits",
     "CancelationMode",
     "ChunkIntTaskParameter",
+    "ChunkIntTaskParameterDefinition",
+    "ChunksDefinition",
     "DocumentType",
     "EmbeddedFile",
     "Environment",
@@ -28,11 +30,13 @@ __all__ = [
     "ExprType",
     "ExprValue",
     "FloatTaskParameter",
+    "FloatTaskParameterDefinition",
     "FormatString",
     "FunctionLibrary",
     "HostContext",
     "HostRequirements",
     "IntTaskParameter",
+    "IntTaskParameterDefinition",
     "Job",
     "JobBoolParameterDefinition",
     "JobFloatParameterDefinition",
@@ -56,6 +60,7 @@ __all__ = [
     "PathFormat",
     "PathMappingRule",
     "PathTaskParameter",
+    "PathTaskParameterDefinition",
     "PosixSessionUser",
     "RangeExpr",
     "ScriptRunnerState",
@@ -70,10 +75,12 @@ __all__ = [
     "StepDependencyGraph",
     "StepDependencyNode",
     "StepParameterSpace",
+    "StepParameterSpaceDefinition",
     "StepParameterSpaceIterator",
     "StepScript",
     "StepTemplate",
     "StringTaskParameter",
+    "StringTaskParameterDefinition",
     "SymbolTable",
     "TaskChunksDefinition",
     "TaskParameterType",
@@ -280,6 +287,34 @@ class ChunkIntTaskParameter:
         r"""
         Pickle support — round-trips through ``__init__(*, range=, chunks=)``.
         """
+
+@typing.final
+class ChunkIntTaskParameterDefinition:
+    @property
+    def type(self) -> builtins.str: ...
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def range(self) -> typing.Any: ...
+    @property
+    def chunks(self) -> ChunksDefinition: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class ChunksDefinition:
+    @property
+    def default_task_count(self) -> typing.Any: ...
+    @property
+    def defaultTaskCount(self) -> typing.Any: ...
+    @property
+    def target_runtime_seconds(self) -> typing.Optional[typing.Any]: ...
+    @property
+    def targetRuntimeSeconds(self) -> typing.Optional[typing.Any]: ...
+    @property
+    def range_constraint(self) -> builtins.str: ...
+    @property
+    def rangeConstraint(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class EmbeddedFile:
@@ -562,6 +597,16 @@ class FloatTaskParameter:
         """
 
 @typing.final
+class FloatTaskParameterDefinition:
+    @property
+    def type(self) -> builtins.str: ...
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def range(self) -> typing.Any: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class FormatString:
     def __new__(cls, input: builtins.str) -> FormatString: ...
     def resolve_string(self, symtab: typing.Any, *, library: typing.Optional[FunctionLibrary] = None, profile: typing.Optional[ExprProfile] = None) -> builtins.str: ...
@@ -703,6 +748,16 @@ class IntTaskParameter:
         r"""
         Pickle support — round-trips through ``__init__(*, range=...)``.
         """
+
+@typing.final
+class IntTaskParameterDefinition:
+    @property
+    def type(self) -> builtins.str: ...
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def range(self) -> typing.Any: ...
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class Job:
@@ -1196,6 +1251,16 @@ class PathTaskParameter:
         """
 
 @typing.final
+class PathTaskParameterDefinition:
+    @property
+    def type(self) -> builtins.str: ...
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def range(self) -> typing.Any: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class PosixSessionUser:
     r"""
     A PyO3 wrapper that holds an Arc<dyn SessionUser> for passing to Session.
@@ -1429,6 +1494,28 @@ class StepParameterSpace:
         """
 
 @typing.final
+class StepParameterSpaceDefinition:
+    @property
+    def task_parameter_definitions(self) -> list:
+        r"""
+        The list of typed task-parameter definitions. Each element is
+        one of `IntTaskParameterDefinition`,
+        `FloatTaskParameterDefinition`,
+        `StringTaskParameterDefinition`,
+        `PathTaskParameterDefinition`, or
+        `ChunkIntTaskParameterDefinition`.
+        """
+    @property
+    def taskParameterDefinitions(self) -> list: ...
+    @property
+    def combination(self) -> typing.Optional[builtins.str]:
+        r"""
+        The combination expression, or ``None`` if the default
+        (left-to-right product) applies.
+        """
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class StepParameterSpaceIterator:
     @property
     def names(self) -> builtins.set[builtins.str]: ...
@@ -1489,18 +1576,24 @@ class StepTemplate:
     @property
     def hostRequirements(self) -> typing.Optional[HostRequirements]: ...
     @property
-    def parameter_space(self) -> typing.Optional[None]:
+    def parameter_space(self) -> typing.Optional[StepParameterSpaceDefinition]:
         r"""
-        The step's parameter-space definition.
+        The step's parameter-space definition, or ``None`` if the
+        step has no `parameterSpace:` field.
         
-        **Not yet implemented** — returns ``None`` for now. The
-        underlying `StepParameterSpaceDefinition` Rust type is not
-        exposed as a typed pyclass. Use the resolved
-        `Step.parameterSpace` (on the job-time `Step`) for the
-        post-`create_job` form. See report finding #11 follow-up.
+        Returns a typed `StepParameterSpaceDefinition` whose
+        `task_parameter_definitions` is a list of typed pyclasses
+        dispatching on the `TaskParameterDefinition` enum
+        (`IntTaskParameterDefinition`, `FloatTaskParameterDefinition`,
+        `StringTaskParameterDefinition`,
+        `PathTaskParameterDefinition`,
+        `ChunkIntTaskParameterDefinition`).
+        
+        For the resolved (post-`create_job`) form with format strings
+        evaluated, see `Step.parameterSpace` on the job-time `Step`.
         """
     @property
-    def parameterSpace(self) -> typing.Optional[None]: ...
+    def parameterSpace(self) -> typing.Optional[StepParameterSpaceDefinition]: ...
     @property
     def script(self) -> typing.Optional[TemplateStepScript]: ...
     @property
@@ -1534,6 +1627,16 @@ class StringTaskParameter:
         r"""
         Pickle support — round-trips through ``__init__(*, range=...)``.
         """
+
+@typing.final
+class StringTaskParameterDefinition:
+    @property
+    def type(self) -> builtins.str: ...
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def range(self) -> typing.Any: ...
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class SymbolTable:

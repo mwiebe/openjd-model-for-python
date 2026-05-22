@@ -55,6 +55,15 @@ from openjd._openjd_rs import (
     JobListFloatParameterDefinition,
     JobListBoolParameterDefinition,
     JobListListIntParameterDefinition,
+    # StepParameterSpaceDefinition + 5 typed task-parameter
+    # definitions, returned by ``StepTemplate.parameter_space``.
+    StepParameterSpaceDefinition,
+    ChunksDefinition,
+    IntTaskParameterDefinition,
+    FloatTaskParameterDefinition,
+    StringTaskParameterDefinition,
+    PathTaskParameterDefinition,
+    ChunkIntTaskParameterDefinition,
 )
 
 
@@ -114,4 +123,13 @@ __all__ = (
     "JobPathParameterDefinition",
     "JobRangeExprParameterDefinition",
     "JobStringParameterDefinition",
+    # StepParameterSpaceDefinition + 5 typed task-parameter
+    # definitions, returned by ``StepTemplate.parameter_space``.
+    "StepParameterSpaceDefinition",
+    "ChunksDefinition",
+    "IntTaskParameterDefinition",
+    "FloatTaskParameterDefinition",
+    "StringTaskParameterDefinition",
+    "PathTaskParameterDefinition",
+    "ChunkIntTaskParameterDefinition",
 )

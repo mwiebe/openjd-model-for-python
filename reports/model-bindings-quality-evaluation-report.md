@@ -994,10 +994,34 @@ proves the gap so it can be fixed and the proof regenerated.
 
     Two narrow surfaces remain deferred:
 
-    - `StepTemplate.parameter_space` returns `None` for now. The
+    - ~~`StepTemplate.parameter_space` returns `None` for now. The
       underlying `StepParameterSpaceDefinition` Rust type does
       not implement `Serialize`, so a typed pyclass for it needs
-      deeper integration. Out of scope; documented in spec.
+      deeper integration. Out of scope; documented in spec.~~
+      **Resolved.** `StepTemplate.parameter_space` now returns
+      `Optional[StepParameterSpaceDefinition]` with a typed
+      `task_parameter_definitions` list dispatching on the
+      `template::TaskParameterDefinition` enum: 5 typed pyclasses
+      (`IntTaskParameterDefinition`,
+      `FloatTaskParameterDefinition`,
+      `StringTaskParameterDefinition`,
+      `PathTaskParameterDefinition`,
+      `ChunkIntTaskParameterDefinition`) plus a typed
+      `ChunksDefinition` for `CHUNK[INT]` chunks payloads. The
+      `Serialize` concern was sidestepped by exposing the inner
+      types directly via PyO3 getters rather than serializing
+      through a common JSON intermediate; range types
+      (`IntRange`/`StringRange`/`FloatRange`) are exposed as
+      Python unions (`list[…]` or `FormatString`) by dispatching
+      on the Rust enum variant in the getter. Tests:
+      `test/openjd/model-v1/test_step_param_space_def.py`
+      (14 tests covering all 5 variants, the empty/missing case,
+      camelCase aliases, FormatString interpolation in
+      `chunks.default_task_count`, and multi-variant dispatch).
+      Required openjd-rs change: extend
+      `template/mod.rs` `pub use task_parameters::{...}` to
+      re-export the 5 per-variant struct types and
+      `ChunksDefinition`.
     - The `user_interface` field on each `JobParameterDefinition`
       variant is not yet exposed. The `*UserInterface` Rust types
       are large enough to warrant a separate commit.

@@ -184,6 +184,17 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyJobListBoolParameterDefinition>()?;
     m.add_class::<PyJobListListIntParameterDefinition>()?;
 
+    // StepParameterSpaceDefinition + 5 typed task-parameter
+    // definitions (template-time, mirror the
+    // `template::TaskParameterDefinition` enum).
+    m.add_class::<PyStepParameterSpaceDefinition>()?;
+    m.add_class::<PyChunksDefinition>()?;
+    m.add_class::<PyIntTaskParameterDefinition>()?;
+    m.add_class::<PyFloatTaskParameterDefinition>()?;
+    m.add_class::<PyStringTaskParameterDefinition>()?;
+    m.add_class::<PyPathTaskParameterDefinition>()?;
+    m.add_class::<PyChunkIntTaskParameterDefinition>()?;
+
     m.add_function(wrap_pyfunction!(decode_job_template_str, m)?)?;
     m.add_function(wrap_pyfunction!(decode_job_template_dict, m)?)?;
     m.add_function(wrap_pyfunction!(decode_environment_template_str, m)?)?;
