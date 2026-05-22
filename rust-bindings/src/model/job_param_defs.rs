@@ -51,6 +51,12 @@ use openjd_model::template::{
 use openjd_model::types::{DataFlow, JobParameterType, ObjectType};
 
 use super::types::PyJobParameterType;
+use super::user_interfaces::{
+    PyBoolUserInterface, PyFloatUserInterface, PyHiddenOnlyUserInterface, PyIntUserInterface,
+    PyListFloatUserInterface, PyListIntUserInterface, PyListPathUserInterface,
+    PyListSimpleUserInterface, PyPathUserInterface, PyRangeExprUserInterface,
+    PyStringUserInterface,
+};
 
 // ── Helpers ──
 
@@ -142,6 +148,22 @@ impl PyJobStringParameterDefinition {
     fn __repr__(&self) -> String {
         format!("JobStringParameterDefinition(name={:?})", self.inner.name.as_str())
     }
+
+    /// The optional `userInterface` block. Returns
+    /// `Optional[StringUserInterface]` — see the type's spec for fields.
+    #[getter]
+    fn user_interface(&self) -> Option<PyStringUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyStringUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyStringUserInterface> {
+        self.user_interface()
+    }
 }
 
 // ── JobIntParameterDefinition ──
@@ -216,6 +238,20 @@ impl PyJobIntParameterDefinition {
     fn __repr__(&self) -> String {
         format!("JobIntParameterDefinition(name={:?})", self.inner.name.as_str())
     }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyIntUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyIntUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyIntUserInterface> {
+        self.user_interface()
+    }
 }
 
 // ── JobFloatParameterDefinition ──
@@ -289,6 +325,20 @@ impl PyJobFloatParameterDefinition {
 
     fn __repr__(&self) -> String {
         format!("JobFloatParameterDefinition(name={:?})", self.inner.name.as_str())
+    }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyFloatUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyFloatUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyFloatUserInterface> {
+        self.user_interface()
     }
 }
 
@@ -386,6 +436,20 @@ impl PyJobPathParameterDefinition {
     fn __repr__(&self) -> String {
         format!("JobPathParameterDefinition(name={:?})", self.inner.name.as_str())
     }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyPathUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyPathUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyPathUserInterface> {
+        self.user_interface()
+    }
 }
 
 // ── JobBoolParameterDefinition (EXPR) ──
@@ -426,6 +490,20 @@ impl PyJobBoolParameterDefinition {
 
     fn __repr__(&self) -> String {
         format!("JobBoolParameterDefinition(name={:?})", self.inner.name.as_str())
+    }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyBoolUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyBoolUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyBoolUserInterface> {
+        self.user_interface()
     }
 }
 
@@ -493,6 +571,20 @@ impl PyJobRangeExprParameterDefinition {
             self.inner.name.as_str()
         )
     }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyRangeExprUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyRangeExprUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyRangeExprUserInterface> {
+        self.user_interface()
+    }
 }
 
 // ── JobListStringParameterDefinition (EXPR) ──
@@ -558,6 +650,20 @@ impl PyJobListStringParameterDefinition {
             "JobListStringParameterDefinition(name={:?})",
             self.inner.name.as_str()
         )
+    }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyListSimpleUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyListSimpleUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyListSimpleUserInterface> {
+        self.user_interface()
     }
 }
 
@@ -647,6 +753,20 @@ impl PyJobListPathParameterDefinition {
             self.inner.name.as_str()
         )
     }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyListPathUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyListPathUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyListPathUserInterface> {
+        self.user_interface()
+    }
 }
 
 // ── JobListIntParameterDefinition (EXPR) ──
@@ -712,6 +832,20 @@ impl PyJobListIntParameterDefinition {
             "JobListIntParameterDefinition(name={:?})",
             self.inner.name.as_str()
         )
+    }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyListIntUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyListIntUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyListIntUserInterface> {
+        self.user_interface()
     }
 }
 
@@ -779,6 +913,20 @@ impl PyJobListFloatParameterDefinition {
             self.inner.name.as_str()
         )
     }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyListFloatUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyListFloatUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyListFloatUserInterface> {
+        self.user_interface()
+    }
 }
 
 // ── JobListBoolParameterDefinition (EXPR) ──
@@ -844,6 +992,20 @@ impl PyJobListBoolParameterDefinition {
             "JobListBoolParameterDefinition(name={:?})",
             self.inner.name.as_str()
         )
+    }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyListSimpleUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyListSimpleUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyListSimpleUserInterface> {
+        self.user_interface()
     }
 }
 
@@ -914,6 +1076,20 @@ impl PyJobListListIntParameterDefinition {
             "JobListListIntParameterDefinition(name={:?})",
             self.inner.name.as_str()
         )
+    }
+
+    #[getter]
+    fn user_interface(&self) -> Option<PyHiddenOnlyUserInterface> {
+        self.inner
+            .user_interface
+            .as_ref()
+            .map(|ui| PyHiddenOnlyUserInterface { inner: ui.clone() })
+    }
+
+    #[getter]
+    #[pyo3(name = "userInterface")]
+    fn user_interface_camel(&self) -> Option<PyHiddenOnlyUserInterface> {
+        self.user_interface()
     }
 }
 

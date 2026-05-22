@@ -1022,9 +1022,36 @@ proves the gap so it can be fixed and the proof regenerated.
       `template/mod.rs` `pub use task_parameters::{...}` to
       re-export the 5 per-variant struct types and
       `ChunksDefinition`.
-    - The `user_interface` field on each `JobParameterDefinition`
+    - ~~The `user_interface` field on each `JobParameterDefinition`
       variant is not yet exposed. The `*UserInterface` Rust types
-      are large enough to warrant a separate commit.
+      are large enough to warrant a separate commit.~~ **Resolved.**
+      Each `Job*ParameterDefinition` pyclass now has a
+      `user_interface` getter (camelCase alias `userInterface`)
+      returning `Optional[<TypedUserInterface>]` for that variant.
+      Eleven UI pyclasses mirror the Rust
+      `template::*UserInterface` struct types
+      (`StringUserInterface`, `IntUserInterface`,
+      `FloatUserInterface`, `PathUserInterface`,
+      `BoolUserInterface`, `RangeExprUserInterface`,
+      `ListSimpleUserInterface`, `ListPathUserInterface`,
+      `ListIntUserInterface`, `ListFloatUserInterface`,
+      `HiddenOnlyUserInterface`), plus a `FileFilter` pyclass for
+      file-filter entries on the path-bearing UIs. All have
+      `control`, `label`, `group_label` (alias `groupLabel`); per-
+      variant extras (`single_step_delta`, `decimals`,
+      `file_filters`, `file_filter_default`) are exposed where
+      applicable. Tests:
+      `test/openjd/model-v1/test_user_interfaces.py` (23 tests
+      covering the missing/None case, common fields on each
+      variant, type-specific fields, camelCase aliases, and
+      per-variant dispatch). Required openjd-rs change: extend
+      `template/mod.rs` `pub use` to re-export the 11 UI structs +
+      `FileFilter` + (un-`#[cfg(test)]`) `FlexInt`/`FlexFloat` —
+      already shipped via the
+      `feat(model): expose typed TaskParameterDefinition variants
+      and userInterface types` commit.
+
+    Finding #11 is now fully resolved.
 
 12. **Map `ModelError::FormatStringError` → `FormatStringError`, not
     `ModelValidationError`.** File: `rust-bindings/src/model/errors.rs`.

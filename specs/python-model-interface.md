@@ -676,8 +676,61 @@ d.max_value                     # Optional[int|float]  (alias: maxValue)
 # BOOL variant: only the common attributes
 ```
 
-The `user_interface` field on each variant is not yet exposed (the
-`*UserInterface` Rust types are large and warrant a follow-up commit).
+### `userInterface` types
+
+Each `Job*ParameterDefinition` exposes a `user_interface` getter
+(camelCase alias `userInterface`) that returns
+`Optional[<TypedUserInterface>]`. The pyclass type returned is
+specific to the parameter variant — see the table below. All UI
+pyclasses share three common fields: `control: Optional[str]`,
+`label: Optional[str]`, `group_label: Optional[str]` (camelCase
+alias `groupLabel`).
+
+| Job parameter variant | UI pyclass | Type-specific fields |
+|---|---|---|
+| `STRING` | `StringUserInterface` | (none) |
+| `INT` | `IntUserInterface` | `single_step_delta: Optional[int]` |
+| `FLOAT` | `FloatUserInterface` | `decimals: Optional[int]`, `single_step_delta: Optional[float]` |
+| `PATH` | `PathUserInterface` | `file_filters: Optional[list[FileFilter]]`, `file_filter_default: Optional[FileFilter]` |
+| `BOOL` (EXPR) | `BoolUserInterface` | (none) |
+| `RANGE_EXPR` (EXPR) | `RangeExprUserInterface` | (none) |
+| `LIST[STRING]`, `LIST[BOOL]` (EXPR) | `ListSimpleUserInterface` | (none) |
+| `LIST[PATH]` (EXPR) | `ListPathUserInterface` | `file_filters`, `file_filter_default` (same as `PathUserInterface`) |
+| `LIST[INT]` (EXPR) | `ListIntUserInterface` | `single_step_delta: Optional[int]` |
+| `LIST[FLOAT]` (EXPR) | `ListFloatUserInterface` | `decimals`, `single_step_delta` (same as `FloatUserInterface`) |
+| `LIST[LIST[INT]]` (EXPR) | `HiddenOnlyUserInterface` | (none) |
+
+Multi-word getters have camelCase aliases:
+`groupLabel`/`singleStepDelta`/`fileFilters`/`fileFilterDefault`.
+
+Example:
+
+```python
+from openjd.model._v1.template import (
+    JobIntParameterDefinition, IntUserInterface,
+)
+d = template.parameter_definitions[0]
+if isinstance(d, JobIntParameterDefinition) and d.user_interface is not None:
+    ui: IntUserInterface = d.user_interface
+    ui.control                  # e.g. "SPIN_BOX" or "DROPDOWN_LIST"
+    ui.label                    # Optional[str]
+    ui.group_label              # Optional[str] (alias: groupLabel)
+    ui.single_step_delta        # Optional[int] (alias: singleStepDelta)
+```
+
+The `control` field is preserved as a free-form `Optional[str]`;
+the spec defines per-variant validation (e.g. `INT` accepts
+`SPIN_BOX`/`DROPDOWN_LIST`/`HIDDEN`, `LIST[INT]` accepts
+`SPIN_BOX_LIST`/`HIDDEN`, etc.) that the decoder enforces at
+template-decode time.
+
+### `FileFilter`
+
+```python
+ff = path_ui.file_filters[0]
+ff.label                        # str
+ff.patterns                     # list[str], e.g. ["*.png", "*.jpg"]
+```
 
 ## Iteration Types (from Rust)
 

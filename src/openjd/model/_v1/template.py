@@ -64,6 +64,21 @@ from openjd._openjd_rs import (
     StringTaskParameterDefinition,
     PathTaskParameterDefinition,
     ChunkIntTaskParameterDefinition,
+    # userInterface pyclasses (template-time, mirror the Rust
+    # `template::*UserInterface` struct types). Returned by the
+    # `user_interface` getter on each `Job*ParameterDefinition`.
+    FileFilter,
+    StringUserInterface,
+    IntUserInterface,
+    FloatUserInterface,
+    PathUserInterface,
+    BoolUserInterface,
+    RangeExprUserInterface,
+    ListSimpleUserInterface,
+    ListPathUserInterface,
+    ListIntUserInterface,
+    ListFloatUserInterface,
+    HiddenOnlyUserInterface,
 )
 
 
@@ -132,4 +147,17 @@ __all__ = (
     "StringTaskParameterDefinition",
     "PathTaskParameterDefinition",
     "ChunkIntTaskParameterDefinition",
+    # userInterface pyclasses
+    "FileFilter",
+    "StringUserInterface",
+    "IntUserInterface",
+    "FloatUserInterface",
+    "PathUserInterface",
+    "BoolUserInterface",
+    "RangeExprUserInterface",
+    "ListSimpleUserInterface",
+    "ListPathUserInterface",
+    "ListIntUserInterface",
+    "ListFloatUserInterface",
+    "HiddenOnlyUserInterface",
 )

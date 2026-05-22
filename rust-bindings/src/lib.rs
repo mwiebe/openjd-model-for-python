@@ -195,6 +195,21 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPathTaskParameterDefinition>()?;
     m.add_class::<PyChunkIntTaskParameterDefinition>()?;
 
+    // userInterface pyclasses (template-time, mirror the
+    // `template::*UserInterface` Rust struct types) plus FileFilter.
+    m.add_class::<PyFileFilter>()?;
+    m.add_class::<PyStringUserInterface>()?;
+    m.add_class::<PyIntUserInterface>()?;
+    m.add_class::<PyFloatUserInterface>()?;
+    m.add_class::<PyPathUserInterface>()?;
+    m.add_class::<PyBoolUserInterface>()?;
+    m.add_class::<PyRangeExprUserInterface>()?;
+    m.add_class::<PyListSimpleUserInterface>()?;
+    m.add_class::<PyListPathUserInterface>()?;
+    m.add_class::<PyListIntUserInterface>()?;
+    m.add_class::<PyListFloatUserInterface>()?;
+    m.add_class::<PyHiddenOnlyUserInterface>()?;
+
     m.add_function(wrap_pyfunction!(decode_job_template_str, m)?)?;
     m.add_function(wrap_pyfunction!(decode_job_template_dict, m)?)?;
     m.add_function(wrap_pyfunction!(decode_environment_template_str, m)?)?;

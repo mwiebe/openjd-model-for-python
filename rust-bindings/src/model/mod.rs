@@ -8,6 +8,7 @@ pub(crate) mod template;
 pub(crate) mod template_types;
 pub(crate) mod job_param_defs;
 pub(crate) mod step_param_space_def;
+pub(crate) mod user_interfaces;
 pub(crate) mod decode;
 pub(crate) mod job;
 mod create_job_fns;
@@ -55,4 +56,10 @@ pub(crate) use step_param_space_def::{
     PyFloatTaskParameterDefinition, PyIntTaskParameterDefinition,
     PyPathTaskParameterDefinition, PyStepParameterSpaceDefinition,
     PyStringTaskParameterDefinition,
+};
+pub(crate) use user_interfaces::{
+    PyBoolUserInterface, PyFileFilter, PyFloatUserInterface, PyHiddenOnlyUserInterface,
+    PyIntUserInterface, PyListFloatUserInterface, PyListIntUserInterface,
+    PyListPathUserInterface, PyListSimpleUserInterface, PyPathUserInterface,
+    PyRangeExprUserInterface, PyStringUserInterface,
 };
