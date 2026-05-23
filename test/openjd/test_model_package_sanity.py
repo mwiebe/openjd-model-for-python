@@ -3,7 +3,7 @@
 
 """Sanity test for the openjd.model and openjd.model.v0 packages.
 
-This test lives outside ``test/openjd/model-v0/`` so it is not affected by
+This test lives outside ``test/openjd/model_v0/`` so it is not affected by
 the ``OPENJD_MODEL_V0_TEST_IMPORT`` conftest in that directory. It checks
 that the canonical public surface of each package is importable and that a
 minimal end-to-end flow (parse a template, create a job, iterate parameters)

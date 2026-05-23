@@ -28,7 +28,7 @@ direct value comparisons fall back to identity; the
 `FormatStringValidationError` exception class is registered but is not
 reachable from any public binding entry point today. The test-suite
 lint debt called out in the original draft of this report (16 ruff
-errors under `test/openjd/expr/` plus 2 stragglers in a model-v1
+errors under `test/openjd/expr/` plus 2 stragglers in a model_v1
 test file, totalling 18 workspace-wide) has been fully resolved
 (see Recommendation #10); `hatch run lint` is now clean.
 None of the remaining items block users of the bindings.
@@ -323,7 +323,7 @@ baseline was dominated by model/sessions:
 | `test/openjd/expr/test_parse_expression.py` | 2 |
 | `test/openjd/expr/test_slicing.py` | 1 |
 | `test/openjd/expr/test_memory.py` | 1 |
-| `test/openjd/model-v1/test_rust_model_bindings.py` | 2 |
+| `test/openjd/model_v1/test_rust_model_bindings.py` | 2 |
 
 Breakdown by ruff rule:
 
@@ -583,7 +583,7 @@ No correctness defects found in the current bindings.
       local `from openjd.expr import TypeCode` to the top of the
       file).
     - This commit also cleared the two stragglers in
-      `test/openjd/model-v1/test_rust_model_bindings.py` (an unused
+      `test/openjd/model_v1/test_rust_model_bindings.py` (an unused
       `UnsupportedSchema` import and a dead local
       `StepParameterSpaceIterator` import inside a fixture body),
       bringing `hatch run lint` to **0 errors workspace-wide**.

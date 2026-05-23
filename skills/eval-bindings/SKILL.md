@@ -64,7 +64,7 @@ Every binding component has four complementary artifacts that **MUST** be review
 1. **Python interface spec** — `specs/python-<component>-interface.md`. The contract the bindings advertise to Python users. This is the public-API spec for the component.
 2. **PyO3 binding source** — `rust-bindings/src/<component>/`. Rust code that wraps the underlying `openjd-<component>` crate and exposes it to Python via PyO3.
 3. **Python wrapper module** — `src/openjd/<component>/` (and for `model`, `src/openjd/model/_v1/`). The Python-facing package that re-exports symbols from `_openjd_rs` under user-friendly names.
-4. **Tests** — `test/openjd/<component>/` for `expr` and `sessions`; `test/openjd/model-v0/` and `test/openjd/model-v1/` for `model`.
+4. **Tests** — `test/openjd/<component>/` for `expr` and `sessions`; `test/openjd/model_v0/` and `test/openjd/model_v1/` for `model`.
 
 ### Five Alignment Criteria
 
@@ -98,7 +98,7 @@ Follow these steps in order:
 4. **Read and understand the Python wrapper module** in `src/openjd/<component>/` (and `src/openjd/model/_v1/` for `model`).
 5. **Read and understand the tests** in the corresponding `test/openjd/...` subdirectory.
 6. **Compare with the pure-Python reference** (see Pure-Python Reference Branch table). Use `git show <ref>:<path>` or a worktree at the reference branch. For each public symbol in the reference, verify the binding has a behaviorally equivalent counterpart.
-7. **Build and test**: Run `python scripts/maturin_build.py develop` (or `python scripts/maturin_build.py develop --features stub-gen` if regenerating stubs) and `python -m pytest test/openjd/<component>` (or `model-v0` and `model-v1` for `model`). Confirm clean compilation (no errors or warnings) and all tests pass. Run `cargo clippy --workspace -- -D warnings` against `rust-bindings/`.
+7. **Build and test**: Run `python scripts/maturin_build.py develop` (or `python scripts/maturin_build.py develop --features stub-gen` if regenerating stubs) and `python -m pytest test/openjd/<component>` (or `model_v0` and `model_v1` for `model`). Confirm clean compilation (no errors or warnings) and all tests pass. Run `cargo clippy --workspace -- -D warnings` against `rust-bindings/`.
 8. **Exploratory testing**: Actively try to find behavior gaps between the binding and the reference. Common probes:
     - Pickle a binding object and unpickle it; verify exception class names round-trip.
     - Hash and equality of value types across types that should compare equal (e.g. `1 == 1.0`).
@@ -172,7 +172,7 @@ can resolve items by striking them through with `~~ ... ~~ **Resolved.**`.
 | Input | Spec | Binding source | Wrapper module | Tests | Reference branch | Report |
 |-------|------|----------------|----------------|-------|------------------|--------|
 | `expr` | `specs/python-expr-interface.md` | `rust-bindings/src/expr/` | `src/openjd/expr/` | `test/openjd/expr/` | `openjd-model-for-python` (mwiebe fork) `expr` | `reports/expr-bindings-quality-evaluation-report.md` |
-| `model` | `specs/python-model-interface.md` | `rust-bindings/src/model/` | `src/openjd/model/_v1/` (and `src/openjd/model/`) | `test/openjd/model-v0/`, `test/openjd/model-v1/` | `openjd-model-for-python` (OpenJobDescription) `mainline` | `reports/model-bindings-quality-evaluation-report.md` |
+| `model` | `specs/python-model-interface.md` | `rust-bindings/src/model/` | `src/openjd/model/_v1/` (and `src/openjd/model/`) | `test/openjd/model_v0/`, `test/openjd/model_v1/` | `openjd-model-for-python` (OpenJobDescription) `mainline` | `reports/model-bindings-quality-evaluation-report.md` |
 | `sessions` | `specs/python-sessions-interface.md` | `rust-bindings/src/sessions/` |  `src/sessions/model/_v1/` (and `src/openjd/sessions/`) | `test/openjd/sessions-v0/`, `test/openjd/sessions-v1/`  | `openjd-sessions-for-python` `mainline` | `reports/sessions-bindings-quality-evaluation-report.md` |
 
 ### Note on `sessions`

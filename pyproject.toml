@@ -94,8 +94,8 @@ line-length = 100
 [tool.pytest.ini_options]
 xfail_strict = false
 # Use importlib import mode so test files with identical names in different
-# directories (e.g. test/openjd/model-v0/test_parse.py and
-# test/openjd/model-v1/test_parse.py) coexist in the same pytest run. The
+# directories (e.g. test/openjd/model_v0/test_parse.py and
+# test/openjd/model_v1/test_parse.py) coexist in the same pytest run. The
 # default rootdir-based import mode synthesizes a top-level module name from
 # the test filename and breaks on collisions; importlib mode imports each file
 # under its full filesystem path.

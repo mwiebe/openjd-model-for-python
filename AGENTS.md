@@ -89,7 +89,7 @@ Has both a pure-Python implementation (`openjd.model` / `openjd.model.v0`, built
 - **Errors** (`errors.rs`) — `PyDecodeValidationError`, `PyModelValidationError`, `PyUnsupportedSchema`.
 - **Merge** — `py_merge_job_parameter_definitions` exposes openjd-rs's parameter merge logic.
 
-Spec entry point: `specs/python-model-interface.md`. Python wrappers: pure-Python under `src/openjd/model/` (and its alias `src/openjd/model/v0/`) and Rust-backed under `src/openjd/model/_v1/`. Tests: `test/openjd/model-v0/` (pure-Python) and `test/openjd/model-v1/` (Rust-backed). Reference branch for parity: `OpenJobDescription/openjd-model-for-python` `mainline`.
+Spec entry point: `specs/python-model-interface.md`. Python wrappers: pure-Python under `src/openjd/model/` (and its alias `src/openjd/model/v0/`) and Rust-backed under `src/openjd/model/_v1/`. Tests: `test/openjd/model_v0/` (pure-Python) and `test/openjd/model_v1/` (Rust-backed). Reference branch for parity: `OpenJobDescription/openjd-model-for-python` `mainline`.
 
 ### `sessions` — `rust-bindings/src/sessions/`
 
@@ -128,7 +128,7 @@ Every binding component has **four** artifacts that must stay aligned:
 1. **Python interface spec** — `specs/python-<component>-interface.md`.
 2. **PyO3 binding source** — `rust-bindings/src/<component>/` plus the relevant registration block in `rust-bindings/src/lib.rs`.
 3. **Python wrapper module** — `src/openjd/<component>/__init__.py` (or `src/openjd/model/_v1/__init__.py` for `model`; `~/openjd-sessions-for-python/src/openjd/sessions/_v1/__init__.py` for `sessions`).
-4. **Tests** — `test/openjd/<component>/` (or `test/openjd/model-v0/` and `test/openjd/model-v1/` for `model`; the corresponding `test/openjd/sessions-v0/` and `sessions-v1/` in the sibling repo for `sessions`).
+4. **Tests** — `test/openjd/<component>/` (or `test/openjd/model_v0/` and `test/openjd/model_v1/` for `model`; the corresponding `test/openjd/sessions-v0/` and `sessions-v1/` in the sibling repo for `sessions`).
 
 A spec change without a wrapper update is invisible to users. A binding rename without a wrapper update breaks imports silently. A new exception class without `register_renamed_exception` shows up in tracebacks under its `Py`-prefixed internal name. A new symbol that is not in the spec is unsupported even if it works. **Treat all four artifacts as one unit when reviewing or modifying a component.**
 
@@ -182,7 +182,7 @@ Every `decode_*` / `create_job` / `evaluate_*` failure test must assert the exce
 
 **Reference parity**
 
-For every pure-Python reference test under `test/openjd/model-v0/` (and the equivalent in `~/openjd-sessions-for-python/test/openjd/sessions-v0/`), there should be an equivalent test under `test/openjd/model-v1/` (or `sessions-v1/`) exercising the same behaviour through the binding. New behaviour added on the binding side without a v0 counterpart is a divergence — note it in the relevant `reports/<component>-bindings-quality-evaluation-report.md`.
+For every pure-Python reference test under `test/openjd/model_v0/` (and the equivalent in `~/openjd-sessions-for-python/test/openjd/sessions-v0/`), there should be an equivalent test under `test/openjd/model_v1/` (or `sessions-v1/`) exercising the same behaviour through the binding. New behaviour added on the binding side without a v0 counterpart is a divergence — note it in the relevant `reports/<component>-bindings-quality-evaluation-report.md`.
 
 **Why:** The Python contract for v1 is supposed to be the same as the v0 contract (modulo the documented differences in the spec like Pydantic-vs-no-Pydantic). Catching message regressions and missing reference tests is how we keep that promise.
 

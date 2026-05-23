@@ -5,7 +5,7 @@ Behavior tests for the Rust-backed `IntRangeExpr` exposed from
 `openjd.model._v1`.
 
 The pure-Python reference's exhaustive parser/grammar coverage lives in
-`test/openjd/model-v0/_internal/test_range_expr.py`; this file focuses on
+`test/openjd/model_v0/_internal/test_range_expr.py`; this file focuses on
 behavior that is specific to the Rust binding's documented semantics.
 """
 

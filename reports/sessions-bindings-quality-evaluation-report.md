@@ -411,7 +411,7 @@ relevant enum decls or change the pyo3 `name = "..."` strings.
 ### 6.3 Pytest — model side
 
 ```
-$ python -m pytest test/openjd/expr test/openjd/model-v0 test/openjd/model-v1 --no-cov
+$ python -m pytest test/openjd/expr test/openjd/model_v0 test/openjd/model_v1 --no-cov
 
 4003 passed, 25 skipped, 19 xfailed, 8 warnings, 31 errors in 8.70s
 ```

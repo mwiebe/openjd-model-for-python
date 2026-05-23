@@ -53,7 +53,7 @@ for the pure-Python reference**:
    contains` (and its delegate `validate_containment`); the recursive
    traversal misclassifies values from the inner associative grouping.
    Tracked by
-   `test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator::test_nested_expr_contains`
+   `test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator::test_nested_expr_contains`
    (xfail). The simple-case behavior is verified by
    `test_contains_self_yielded_values`, which passes.~~ **Resolved
    upstream.** Fixed by `openjd-rs` commit "fix(model): correct
@@ -145,7 +145,7 @@ are advertised as a v0 drop-in. Items 7–8 (test coverage and spec) are
 required to detect regressions of the kind already found.
 
 A new test file
-[`test/openjd/model-v1/test_known_gaps.py`](../test/openjd/model-v1/test_known_gaps.py)
+[`test/openjd/model_v1/test_known_gaps.py`](../test/openjd/model_v1/test_known_gaps.py)
 documents the ten functional gaps as `pytest.mark.xfail(strict=True)`
 tests so the recommendations can be resolved one at a time.
 
@@ -388,7 +388,7 @@ EmbeddedFiles = list, EmbeddedFileTypes, ExtensionName,
 ```
 
 The reference module exposes ~85 symbols; the binding shim covers ~12.
-**Every test in `test/openjd/model-v1/v2023_09/` fails to collect** because
+**Every test in `test/openjd/model_v1/v2023_09/` fails to collect** because
 the missing names cause `ImportError`. **This is a v0-architecture
 artifact**, however — see Rec #7 for why the v1 surface deliberately
 does not mirror v0's per-revision class hierarchy. The remediation is
@@ -406,7 +406,7 @@ the binding-aware interface.
 ### Inventory
 
 ```
-test/openjd/model-v0/          —  pure-Python reference tests (still passing as a baseline)
+test/openjd/model_v0/          —  pure-Python reference tests (still passing as a baseline)
   __init__.py
   benchmark/test_yaml_loader_performance.py
   benchmark/test_benchmark_step_environments.py
@@ -415,7 +415,7 @@ test/openjd/model-v0/          —  pure-Python reference tests (still passing a
   v2023_09/{test_create,test_environments,test_parameter_space,test_strings,test_redacted_env_vars,test_definitions,test_module,test_job_template,test_environment_template,test_step_host_requirements,test_step_template,test_feature_bundle_1,test_embedded,test_chunk_int_task_parameter_type,test_action,test_scripts,test_job_parameters,test_template_variables}.py
   test_{capabilities,convert_pydantic_error,create_job,errors,fuzz,importable,lexer,merge_job_parameters,parse,step_dependency_graph,step_param_space_iter,step_param_space_iter_with_chunks,symbol_table,tokenstream,version_enums}.py
 
-test/openjd/model-v1/          —  binding tests
+test/openjd/model_v1/          —  binding tests
   __init__.py
   benchmark/{test_yaml_loader_performance,test_benchmark_step_environments}.py
   v2023_09/{… 18 files, each ImportError on collection …}
@@ -424,7 +424,7 @@ test/openjd/model-v1/          —  binding tests
   test_{capabilities,create_job,errors,fuzz,importable,merge_job_parameters,parse,pyclass_modules,rust_model_bindings,step_dependency_graph,step_param_space_iter,symbol_table,version_enums}.py
 ```
 
-### What test/openjd/model-v1 covers well
+### What test/openjd/model_v1 covers well
 
 - `test_pyclass_modules.py` — exhaustive coverage of `__module__` /
   `__name__` / `__qualname__` / pickle-name fix-up for every exposed
@@ -438,29 +438,29 @@ test/openjd/model-v1/          —  binding tests
 
 ### Coverage gaps vs reference
 
-- `test/openjd/model-v0/test_convert_pydantic_error.py` (~7290 lines)
-  has no analog in `model-v1`. Reasonable: pydantic-specific error
+- `test/openjd/model_v0/test_convert_pydantic_error.py` (~7290 lines)
+  has no analog in `model_v1`. Reasonable: pydantic-specific error
   conversion is N/A.
-- `test/openjd/model-v0/test_lexer.py` (token lexer tests) has no
+- `test/openjd/model_v0/test_lexer.py` (token lexer tests) has no
   analog. Reasonable: the binding does not expose a tokenstream.
-- `test/openjd/model-v0/test_tokenstream.py` similarly has no analog.
-- `test/openjd/model-v0/format_strings/` — six test files; one analog
-  exists (a directory exists at `model-v1/format_strings/` but it is
+- `test/openjd/model_v0/test_tokenstream.py` similarly has no analog.
+- `test/openjd/model_v0/format_strings/` — six test files; one analog
+  exists (a directory exists at `model_v1/format_strings/` but it is
   empty). Reference covers `_format_string`, `_expression`, `_parser`,
   `_dyn_constrained_str`, `_node`, `_edit_distance`; binding covers
   none. Affected behaviors: `FormatString` round-trip, expression
   parsing, edit-distance suggestion, tokens.
-- `test/openjd/model-v0/_internal/{test_combination_expr,test_create_job,test_range_expr,test_param_space_dim_validation,test_variable_reference_validation}.py`
+- `test/openjd/model_v0/_internal/{test_combination_expr,test_create_job,test_range_expr,test_param_space_dim_validation,test_variable_reference_validation}.py`
   — five test files; the binding has no analog (the directory at
-  `model-v1/_internal/` is empty).
-- `test/openjd/model-v0/v2023_09/` — 18 test files (~328k LoC of test
+  `model_v1/_internal/` is empty).
+- `test/openjd/model_v0/v2023_09/` — 18 test files (~328k LoC of test
   code). The binding's analog directory exists but **none of its 18
   files even collect** because of the missing
   `openjd.model._v1.v2023_09` re-exports. This is the largest single
   coverage gap.
 - `test_step_param_space_iter_with_chunks.py` — a ~28k-line reference
   test file that exhaustively covers chunked iteration. There is no
-  analog in `model-v1`.
+  analog in `model_v1`.
 
 ### Tests in the binding without a reference analog
 
@@ -575,7 +575,7 @@ The 25 rustc warnings break down as: 16 `non-camel-case-types`,
 8 `deprecated` PyO3 0.20-era APIs (FromPyObject auto-derive, downcast),
 and 1 `dead_code`. None block the build.
 
-### `python -m pytest test/openjd/model-v1` (Rust-backed)
+### `python -m pytest test/openjd/model_v1` (Rust-backed)
 
 ```
 5 failed, 593 passed, 18 errors in 4.16s
@@ -584,15 +584,15 @@ and 1 `dead_code`. None block the build.
 Failures:
 
 ```
-FAILED test/openjd/model-v1/test_parse.py::TestModelToObject::test[translates Decimal to string]
+FAILED test/openjd/model_v1/test_parse.py::TestModelToObject::test[translates Decimal to string]
        NotImplementedError: model_to_object is not supported for this type
-FAILED test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem
+FAILED test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem
        __contains__ returns False for self-yielded values
-FAILED test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_product_iteration
+FAILED test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_product_iteration
        descending range iteration order is reversed
-FAILED test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_product_getitem
+FAILED test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_product_getitem
        descending range __getitem__ order is reversed
-FAILED test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_nested_expr_iteration
+FAILED test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_nested_expr_iteration
        descending range iteration order is reversed (nested combination)
 ```
 
@@ -604,32 +604,32 @@ or `ImportError: cannot import name X from openjd.model._v1.v2023_09`):
 > revision-neutral architecture (Rec #7) means the
 > `_v1.v2023_09.<Type>` import paths the test files rely on don't
 > exist by design. The intent of these tests is preserved by tests
-> in the parent `test/openjd/model-v1/` directory written against
+> in the parent `test/openjd/model_v1/` directory written against
 > the revision-neutral surface; these v2023_09 files should be
 > deleted or recast.
 
 ```
-ERROR test/openjd/model-v1/v2023_09/test_action.py
-ERROR test/openjd/model-v1/v2023_09/test_chunk_int_task_parameter_type.py
-ERROR test/openjd/model-v1/v2023_09/test_create.py
-ERROR test/openjd/model-v1/v2023_09/test_definitions.py
-ERROR test/openjd/model-v1/v2023_09/test_embedded.py
-ERROR test/openjd/model-v1/v2023_09/test_environment_template.py
-ERROR test/openjd/model-v1/v2023_09/test_environments.py
-ERROR test/openjd/model-v1/v2023_09/test_feature_bundle_1.py
-ERROR test/openjd/model-v1/v2023_09/test_job_parameters.py
-ERROR test/openjd/model-v1/v2023_09/test_job_template.py
-ERROR test/openjd/model-v1/v2023_09/test_module.py
-ERROR test/openjd/model-v1/v2023_09/test_parameter_space.py
-ERROR test/openjd/model-v1/v2023_09/test_redacted_env_vars.py
-ERROR test/openjd/model-v1/v2023_09/test_scripts.py
-ERROR test/openjd/model-v1/v2023_09/test_step_host_requirements.py
-ERROR test/openjd/model-v1/v2023_09/test_step_template.py
-ERROR test/openjd/model-v1/v2023_09/test_strings.py
-ERROR test/openjd/model-v1/v2023_09/test_template_variables.py
+ERROR test/openjd/model_v1/v2023_09/test_action.py
+ERROR test/openjd/model_v1/v2023_09/test_chunk_int_task_parameter_type.py
+ERROR test/openjd/model_v1/v2023_09/test_create.py
+ERROR test/openjd/model_v1/v2023_09/test_definitions.py
+ERROR test/openjd/model_v1/v2023_09/test_embedded.py
+ERROR test/openjd/model_v1/v2023_09/test_environment_template.py
+ERROR test/openjd/model_v1/v2023_09/test_environments.py
+ERROR test/openjd/model_v1/v2023_09/test_feature_bundle_1.py
+ERROR test/openjd/model_v1/v2023_09/test_job_parameters.py
+ERROR test/openjd/model_v1/v2023_09/test_job_template.py
+ERROR test/openjd/model_v1/v2023_09/test_module.py
+ERROR test/openjd/model_v1/v2023_09/test_parameter_space.py
+ERROR test/openjd/model_v1/v2023_09/test_redacted_env_vars.py
+ERROR test/openjd/model_v1/v2023_09/test_scripts.py
+ERROR test/openjd/model_v1/v2023_09/test_step_host_requirements.py
+ERROR test/openjd/model_v1/v2023_09/test_step_template.py
+ERROR test/openjd/model_v1/v2023_09/test_strings.py
+ERROR test/openjd/model_v1/v2023_09/test_template_variables.py
 ```
 
-After adding `test/openjd/model-v1/test_known_gaps.py` (this report's
+After adding `test/openjd/model_v1/test_known_gaps.py` (this report's
 follow-on), the count becomes `5 failed, 593 passed, 10 xfailed, 18 errors`.
 
 After reclassifying `test_int_range_expr_descending_iteration_order`
@@ -647,7 +647,7 @@ passing — the count becomes
 which was failing on the same `__contains__` bug as §2 and now
 transparently passes.)
 
-### `python -m pytest test/openjd/model-v0` (pure-Python baseline)
+### `python -m pytest test/openjd/model_v0` (pure-Python baseline)
 
 ```
 2311 passed in 8.07s
@@ -694,7 +694,7 @@ UnsupportedSchema, WindowsSessionUser, create_environment, deserialize_step
 
 The probe in `/tmp/explore_model.py` (516 lines) drove out the items
 listed below. The 10 functional gaps now have failing-but-xfailed tests
-in `test/openjd/model-v1/test_known_gaps.py`.
+in `test/openjd/model_v1/test_known_gaps.py`.
 
 ### Confirmed bugs
 
@@ -747,7 +747,7 @@ proves the gap so it can be fixed and the proof regenerated.
 1. ~~**Fix `IntRangeExpr` descending-range iteration order.**
    `IntRangeExpr.from_str("-1 - -2 : -1")` must yield `[-1, -2]` (reference
    semantics: reflect the input direction). Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_int_range_expr_descending_iteration_order`
+   `test/openjd/model_v1/test_known_gaps.py::test_int_range_expr_descending_iteration_order`
    and the four `test_step_param_space_iter` failures.~~ **Resolved** —
    reclassified as an intentional behavior change, not a bug. `RangeExpr`
    values are always an increasing list of integers; descending input
@@ -769,7 +769,7 @@ proves the gap so it can be fixed and the proof regenerated.
    values.** The current `extract_task_parameter_set` interprets
    `TaskParameterValue` instances incorrectly when they are the dict
    values. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_contains_self_yielded`.~~
+   `test/openjd/model_v1/test_known_gaps.py::test_step_param_space_iter_contains_self_yielded`.~~
    **Resolved** — `extract_task_parameter_set` in
    `rust-bindings/src/model/step_param_space.rs` now reads the parameter
    type via `as_str()` (the convention used by `PyTaskParameterType` and
@@ -777,22 +777,22 @@ proves the gap so it can be fixed and the proof regenerated.
    before falling back to `.value` (stdlib `enum.Enum`) and `__str__`.
    Yielded values now round-trip through `__contains__`. The fix also
    transparently repairs
-   `test/openjd/model-v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
+   `test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
    which uses the same `for v in expected_values: assert v in it` idiom.
    Verified by promoting the `xfail` test to a passing test.
 
 3. **Implement `model_to_object` for every Rust-backed model type, or stop
    exporting it.** `decode_job_template(template=t); model_to_object(model=t)`
    should round-trip back to the input dict. Resolves
-   `test/openjd/model-v1/test_parse.py::TestModelToObject::test[translates Decimal to string]`
-   and `test/openjd/model-v1/test_known_gaps.py::test_model_to_object_round_trip`.
+   `test/openjd/model_v1/test_parse.py::TestModelToObject::test[translates Decimal to string]`
+   and `test/openjd/model_v1/test_known_gaps.py::test_model_to_object_round_trip`.
 
 4. ~~**Fix `StepParameterSpaceIterator.chunks_default_task_count` setter.**
    File: `rust-bindings/src/model/step_param_space.rs:199`. Currently
    returns `Ok(())` after validating `chunks_adaptive()`; must actually
    mutate the iterator state (or hold an interior `RefCell` for the
    chunk count). Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_chunks_default_task_count_setter`.~~
+   `test/openjd/model_v1/test_known_gaps.py::test_step_param_space_iter_chunks_default_task_count_setter`.~~
    **Resolved** — `PyStepParameterSpaceIterator` now holds a persistent
    `Mutex<StepParameterSpaceIterator>` (the upstream `NodeIterator` trait
    gained a `Send + Sync` bound; the upstream
@@ -809,7 +809,7 @@ proves the gap so it can be fixed and the proof regenerated.
    When `chunks_adaptive()` is `True`, `__len__` should raise the same
    message as the reference: `"Length is not available because the
    parameter space uses adaptive chunking."`. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_step_param_space_iter_adaptive_len_raises`.~~
+   `test/openjd/model_v1/test_known_gaps.py::test_step_param_space_iter_adaptive_len_raises`.~~
    **Resolved** — `__len__` in
    `rust-bindings/src/model/step_param_space.rs` now checks
    `iter.chunks_adaptive()` and raises
@@ -825,7 +825,7 @@ proves the gap so it can be fixed and the proof regenerated.
    `IntTaskParameterDefinition` / `RangeExpressionTaskParameterDefinition`
    / `RangeListTaskParameterDefinition` etc. as Rust pyclasses, or add a
    thin Python wrapper around the existing dict. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_task_parameter_definitions_typed_objects`.~~
+   `test/openjd/model_v1/test_known_gaps.py::test_task_parameter_definitions_typed_objects`.~~
    **Resolved.** Implemented as five Rust pyclasses mirroring the
    underlying `openjd_model::job::TaskParameter` runtime enum 1:1
    (rather than the v0 reference's two-class shape). Names follow
@@ -840,7 +840,7 @@ proves the gap so it can be fixed and the proof regenerated.
    for pickle. Required a small openjd-rs crate change to
    re-export `RangeConstraint` from the crate root (was a private
    module). New tests:
-   `test/openjd/model-v1/test_task_parameter.py` (35 tests across
+   `test/openjd/model_v1/test_task_parameter.py` (35 tests across
    7 classes covering construction, decode → create_job
    round-trip, pickle, and dispatch dispatch via
    `StepParameterSpace.taskParameterDefinitions`). The
@@ -869,7 +869,7 @@ proves the gap so it can be fixed and the proof regenerated.
    UserInterfaceLabelStringValue`
    plus a stub `_parse` submodule with a `_parse_model` entry point so
    the test files import. Without this, the 18 v2023_09 test files in
-   `test/openjd/model-v1/v2023_09/` remain uncollectable.~~
+   `test/openjd/model_v1/v2023_09/` remain uncollectable.~~
 
    **Won't fix.** This recommendation is an artifact of the v0
    Pydantic-based architecture and does not apply to the Rust
@@ -889,10 +889,10 @@ proves the gap so it can be fixed and the proof regenerated.
    pyclass at `openjd.model._v1.template.JobTemplate`, used for
    every revision.
 
-   The 18 v2023_09 test files in `test/openjd/model-v1/v2023_09/`
+   The 18 v2023_09 test files in `test/openjd/model_v1/v2023_09/`
    that cannot be collected are tests *ported from the v0 layout*
    that import per-revision class names. Their intent is preserved
-   in `test/openjd/model-v1/test_*` files written against the
+   in `test/openjd/model_v1/test_*` files written against the
    revision-neutral surface; the broken-collection v2023_09 files
    are dead weight and should be deleted (or re-cast to use the
    revision-neutral types) in a follow-up commit.
@@ -908,7 +908,7 @@ proves the gap so it can be fixed and the proof regenerated.
    `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`,
    `SymbolTable`, `JobParameterType`, `TaskParameterType`,
    `DocumentType`. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_job_template_pickleable`.
+   `test/openjd/model_v1/test_known_gaps.py::test_job_template_pickleable`.
 
    **Partially resolved.** All Group A enums (`DocumentType`,
    `JobParameterType`, `TaskParameterType`, `ModelExtension`,
@@ -919,7 +919,7 @@ proves the gap so it can be fixed and the proof regenerated.
    `SymbolTable` from `openjd.expr`) now pickle through the shared
    `_reconstruct_enum` / `_reconstruct_kwargs` helpers in
    `rust-bindings/src/pickle_helpers.rs`. New tests live in
-   `test/openjd/model-v1/test_pickle.py`.
+   `test/openjd/model_v1/test_pickle.py`.
    The decoded model containers (`JobTemplate`, `EnvironmentTemplate`,
    `Job`, `Step`, `StepScript`, `StepParameterSpace`) and the live
    `StepParameterSpaceIterator` / `StepDependencyGraph` types are
@@ -930,7 +930,7 @@ proves the gap so it can be fixed and the proof regenerated.
 
 9. ~~**Make `TaskParameterType` hashable** by adding `frozen, hash` to the
    `#[pyclass]` attribute. Resolves
-   `test/openjd/model-v1/test_known_gaps.py::test_task_parameter_type_hashable`.~~
+   `test/openjd/model_v1/test_known_gaps.py::test_task_parameter_type_hashable`.~~
    **Resolved.** `PyTaskParameterType` now declares `frozen, hash` and
    provides a `name` getter. The `test_task_parameter_type_hashable`
    xfail is now a passing regression test.
@@ -939,7 +939,7 @@ proves the gap so it can be fixed and the proof regenerated.
     implement it as a thin wrapper (auto-detect job vs environment
     template, then call the appropriate decoder) or alias to
     `parse_model`. Resolves
-    `test/openjd/model-v1/test_known_gaps.py::test_decode_template_re_export`.
+    `test/openjd/model_v1/test_known_gaps.py::test_decode_template_re_export`.
 
 11. ~~**Expose `JobTemplate.specificationVersion`, `parameter_definitions`,
     `steps`, `extensions`, `job_environments`** (and the same for
@@ -948,7 +948,7 @@ proves the gap so it can be fixed and the proof regenerated.
     interface (`name` / `description` / `specification_version`) blocks
     consumers from inspecting templates, forcing them to round-trip
     through `decode_job_template` again. Resolves
-    `test/openjd/model-v1/test_known_gaps.py::test_job_template_specification_version_camelcase`.~~
+    `test/openjd/model_v1/test_known_gaps.py::test_job_template_specification_version_camelcase`.~~
     **Resolved.**
 
     `JobTemplate` and `EnvironmentTemplate` now expose the full
@@ -1014,7 +1014,7 @@ proves the gap so it can be fixed and the proof regenerated.
       (`IntRange`/`StringRange`/`FloatRange`) are exposed as
       Python unions (`list[…]` or `FormatString`) by dispatching
       on the Rust enum variant in the getter. Tests:
-      `test/openjd/model-v1/test_step_param_space_def.py`
+      `test/openjd/model_v1/test_step_param_space_def.py`
       (14 tests covering all 5 variants, the empty/missing case,
       camelCase aliases, FormatString interpolation in
       `chunks.default_task_count`, and multi-variant dispatch).
@@ -1041,7 +1041,7 @@ proves the gap so it can be fixed and the proof regenerated.
       variant extras (`single_step_delta`, `decimals`,
       `file_filters`, `file_filter_default`) are exposed where
       applicable. Tests:
-      `test/openjd/model-v1/test_user_interfaces.py` (23 tests
+      `test/openjd/model_v1/test_user_interfaces.py` (23 tests
       covering the missing/None case, common fields on each
       variant, type-specific fields, camelCase aliases, and
       per-variant dispatch). Required openjd-rs change: extend
@@ -1112,7 +1112,7 @@ proves the gap so it can be fixed and the proof regenerated.
     silently rejects values like `Decimal` and `Path`.
 
 18. **Backfill tests.** Per §4, the following reference test files have
-    no analog in `test/openjd/model-v1/`:
+    no analog in `test/openjd/model_v1/`:
     - `format_strings/test_format_string.py` and 5 sibling files
     - `_internal/test_combination_expr.py` and 4 sibling files
     - `test_step_param_space_iter_with_chunks.py`
