@@ -3,7 +3,6 @@
 """Tests for RFC 0005/0006/0007 example expressions."""
 
 import sys
-import pytest
 from openjd.expr import evaluate_expression, ExprValue, SymbolTable, TypeCode
 from openjd.expr import PathFormat
 
@@ -60,22 +59,43 @@ class TestRFCExamples:
         )
 
     def test_quality_list_with_value(self) -> None:
-        # This test simulates the args context where target type is list[string]
-        pytest.skip("Uses internal Evaluator API not available in Rust bindings")
-        from openjd.expr import ExprType, TypeCode
-        from openjd.expr import get_default_library
+        # Mirrors the RFC 0005 "args" use-case: a target type that
+        # admits ``nulltype``, a single ``string``, or a
+        # ``list[string]``. The conditional yields a homogeneous
+        # ``list[string]`` (the int is converted to a string
+        # explicitly via ``string(...)`` because per RFC 0005
+        # "operators evaluate operands unconstrained" — list literal
+        # heterogeneity is not papered over by the target type).
+        # Exercises the public
+        # ``evaluate_expression(target_type=...)`` surface, the
+        # equivalent of the reference test's direct ``Evaluator``
+        # call.
+        from openjd.expr import ExprType
 
         symbols = SymbolTable({"Param": SymbolTable({"Quality": 5})})
-        list_string = ExprType(TypeCode.LIST, [ExprType("string")])
-        target_type = ExprType(TypeCode.UNION, [ExprType("nulltype"), ExprType("string"), list_string])
-
-        ast_node = ast_parse_keyword_context(
-            "['--quality', Param.Quality] if Param.Quality > 0 else null"
+        target_type = ExprType("nulltype | string | list[string]")
+        result = evaluate_expression(
+            "['--quality', string(Param.Quality)] if Param.Quality > 0 else null",
+            values=symbols,
+            target_type=target_type,
         )
-        evaluator = Evaluator([symbols], get_default_library())
-        result = evaluator.evaluate(ast_node, target_type)
-
         assert result.item() == ["--quality", "5"]
+        assert result.type == ExprType("list[string]")
+
+    def test_quality_list_branch_null(self) -> None:
+        # Companion to ``test_quality_list_with_value``: when the
+        # conditional takes the ``else`` branch, the result coerces
+        # cleanly to the union's ``nulltype`` member.
+        from openjd.expr import ExprType
+
+        symbols = SymbolTable({"Param": SymbolTable({"Quality": 0})})
+        target_type = ExprType("nulltype | string | list[string]")
+        result = evaluate_expression(
+            "['--quality', string(Param.Quality)] if Param.Quality > 0 else null",
+            values=symbols,
+            target_type=target_type,
+        )
+        assert result.type.type_code == TypeCode.NULLTYPE
 
     # --- RFC 0006: String manipulation ---
     def test_string_manipulation(self, tmp_path) -> None:
