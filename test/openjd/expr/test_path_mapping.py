@@ -358,7 +358,6 @@ class TestFormatMismatch:
     """Tests that constructor rejects wrong path types for the format."""
 
     def test_posix_rejects_windows_path(self) -> None:
-        from pathlib import PureWindowsPath
         with pytest.raises(TypeError, match="PurePosixPath"):
             PathMappingRule(
                 source_path_format=PathFormat.POSIX,
@@ -367,7 +366,6 @@ class TestFormatMismatch:
             )
 
     def test_windows_rejects_posix_path(self) -> None:
-        from pathlib import PurePosixPath
         with pytest.raises(TypeError, match="PureWindowsPath"):
             PathMappingRule(
                 source_path_format=PathFormat.WINDOWS,
@@ -376,7 +374,6 @@ class TestFormatMismatch:
             )
 
     def test_uri_rejects_purepath(self) -> None:
-        from pathlib import PurePosixPath
         with pytest.raises(TypeError, match="str"):
             PathMappingRule(
                 source_path_format=PathFormat.URI,

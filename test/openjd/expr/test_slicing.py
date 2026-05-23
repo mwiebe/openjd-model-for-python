@@ -5,7 +5,7 @@
 import pytest
 
 from openjd.expr import evaluate_expression
-from openjd.expr import ExpressionError, ExpressionError
+from openjd.expr import ExpressionError
 
 
 class TestListSlicing:

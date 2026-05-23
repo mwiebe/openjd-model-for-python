@@ -6,9 +6,7 @@ from __future__ import annotations
 
 import pytest
 from openjd.expr import evaluate_expression, SymbolTable, ExpressionError, ExprValue
-from openjd.expr import ExprType, TypeCode
-from openjd.expr import get_default_library
-from openjd.expr import ExpressionError
+from openjd.expr import ExprType
 from openjd.expr import PathFormat
 
 INT = ExprType("int")

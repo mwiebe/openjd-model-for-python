@@ -8,10 +8,8 @@ from openjd.expr import (
     parse_expression,
     evaluate_expression,
     ExpressionError,
-    ExprType,
     FormatString,
     SymbolTable,
-    PathFormat,
 )
 
 

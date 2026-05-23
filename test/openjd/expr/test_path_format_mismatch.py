@@ -6,9 +6,8 @@ import sys
 
 import pytest
 from openjd.expr import evaluate_expression, ExprValue, SymbolTable
-from openjd.expr import ExpressionError, ExpressionTypeError
+from openjd.expr import ExpressionError
 from openjd.expr import PathFormat
-from openjd.expr import ExprType
 
 
 class TestPathFormatMismatch:

@@ -3,7 +3,7 @@
 """Tests for memory-bounded evaluation."""
 
 import pytest
-from openjd.expr import evaluate_expression, parse_expression, ExpressionError
+from openjd.expr import evaluate_expression, parse_expression, ExpressionError, TypeCode
 
 
 class TestMemoryLimit:
@@ -107,7 +107,7 @@ class TestEvaluateExpressionReturnsExprValue:
     def test_has_type_attribute(self) -> None:
         """ExprValue has type attribute."""
         result = evaluate_expression("42")
-        from openjd.expr import TypeCode; assert result.type.type_code == TypeCode.INT
+        assert result.type.type_code == TypeCode.INT
 
 
 class TestMemoryReleasedInComprehensions:
