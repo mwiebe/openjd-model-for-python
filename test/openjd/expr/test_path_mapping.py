@@ -7,7 +7,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 import pytest
 
-from openjd.expr import PathMappingRule, PathFormat
+from openjd.expr import PathMappingRule, PathFormat, ExprProfile, HostContext
 
 
 class TestPathMappingRuleFromPosix:
@@ -428,9 +428,7 @@ class TestPathMappingViaProfile:
     """
 
     @staticmethod
-    def _profile_with_rule() -> "ExprProfile":  # noqa: F821
-        from openjd.expr import ExprProfile, HostContext
-
+    def _profile_with_rule() -> ExprProfile:
         rule = PathMappingRule(
             source_path_format=PathFormat.POSIX,
             source_path="/mnt/shared",

@@ -316,7 +316,9 @@ class TestStepParameterSpaceTypedDict:
         }
         t = decode_job_template(template=template)
         j = create_job(job_template=t, job_parameter_values={})
-        defs = j.steps[0].parameterSpace.taskParameterDefinitions
+        ps = j.steps[0].parameterSpace
+        assert ps is not None
+        defs = ps.taskParameterDefinitions
 
         assert isinstance(defs["I"], IntTaskParameter)
         assert isinstance(defs["F"], FloatTaskParameter)

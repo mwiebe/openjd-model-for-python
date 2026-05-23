@@ -2,6 +2,8 @@
 
 """Tests for operation-bounded evaluation."""
 
+from __future__ import annotations
+
 import pytest
 from openjd.expr import (
     evaluate_expression,

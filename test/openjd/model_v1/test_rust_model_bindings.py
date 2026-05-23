@@ -144,6 +144,7 @@ class TestCreateJob:
         step = job.steps[0]
         assert step.name == "Step1"
         assert step.script.actions.on_run.command.raw() == "echo"
+        assert step.script.actions.on_run.args is not None
         assert [a.raw() for a in step.script.actions.on_run.args] == ["hello"]
 
     def test_job_with_parameters(self) -> None:
@@ -166,7 +167,9 @@ class TestCreateJob:
             job_parameter_values={"Name": {"type": "STRING", "value": "MyJob"}},
         )
         assert job.name == "MyJob"
-        assert "Param.Name" in job.steps[0].script.actions.on_run.args[0].raw()
+        args = job.steps[0].script.actions.on_run.args
+        assert args is not None
+        assert "Param.Name" in args[0].raw()
 
     def test_job_with_description(self) -> None:
         tmpl = dict(MINIMAL_JOB, description="A test job")

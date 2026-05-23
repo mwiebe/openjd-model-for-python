@@ -1680,10 +1680,14 @@ class PosixSessionUser:
         """
 
 @typing.final
-class PyExprValueIter: ...
+class PyExprValueIter:
+    def __iter__(self) -> "PyExprValueIter": ...
+    def __next__(self) -> ExprValue: ...
 
 @typing.final
-class PyRangeExprIter: ...
+class PyRangeExprIter:
+    def __iter__(self) -> "PyRangeExprIter": ...
+    def __next__(self) -> builtins.int: ...
 
 @typing.final
 class RangeExpr:
@@ -2015,7 +2019,7 @@ class StepParameterSpaceIterator:
         which also exposes `__iter__`/`__next__` directly.
         """
 
-    def __next__(self) -> typing.Optional[dict]: ...
+    def __next__(self) -> dict: ...
     def __contains__(self, item: dict) -> builtins.bool: ...
     def reset_iter(self) -> None: ...
 
@@ -2892,3 +2896,47 @@ def preprocess_job_parameters(
     current_working_dir: builtins.str | os.PathLike | pathlib.Path,
     allow_job_template_dir_walk_up: builtins.bool = False,
 ) -> dict: ...
+
+# ── Manually-tracked declarations ───────────────────────────────────
+# Items below are not emitted by pyo3-stub-gen. They live behind
+# `register_renamed_exception` / `m.add(...)` calls in `lib.rs` rather
+# than `#[pyclass]` / `#[pyfunction]` macros. Keep this block in sync
+# with the `mod_init` body whenever new exceptions or constants are
+# added. The `generate_stubs.sh` post-processor appends an identical
+# block on regeneration.
+
+# openjd.expr exception classes (registered as ValueError subclasses).
+class ExpressionError(builtins.ValueError):
+    expr: typing.Optional[builtins.str]
+    node: typing.Optional[typing.Any]
+    lineno: typing.Optional[builtins.int]
+    col_offset: typing.Optional[builtins.int]
+    def __init__(
+        self,
+        *args: typing.Any,
+        expr: typing.Optional[builtins.str] = None,
+        node: typing.Optional[typing.Any] = None,
+        lineno: typing.Optional[builtins.int] = None,
+        col_offset: typing.Optional[builtins.int] = None,
+    ) -> None: ...
+    def with_context(
+        self,
+        expr: builtins.str,
+        node: typing.Optional[typing.Any] = None,
+    ) -> "ExpressionError": ...
+    def message_with_expr_prefix(self, prefix: builtins.str) -> builtins.str: ...
+
+class ExpressionTypeError(ExpressionError): ...
+class RangeExprError(builtins.ValueError): ...
+class FormatStringValidationError(builtins.ValueError): ...
+
+# openjd.model._v1.errors exception classes (registered as ValueError
+# subclasses).
+class DecodeValidationError(builtins.ValueError): ...
+class ModelValidationError(builtins.ValueError): ...
+class UnsupportedSchema(builtins.ValueError): ...
+
+# Integer constants from the openjd-expr crate, exposed at module
+# level for callers that want to inspect or override the limits.
+DEFAULT_MEMORY_LIMIT: builtins.int
+DEFAULT_OPERATION_LIMIT: builtins.int

@@ -588,7 +588,7 @@ class TestExpressionErrorKeywordArgs:
         # `__init__` is a real Python function with a typed
         # signature.
         with pytest.raises(TypeError, match="unexpected keyword argument"):
-            ExpressionError("bad", bogus=1)
+            ExpressionError("bad", bogus=1)  # type: ignore[call-arg]
 
     def test_with_context_attaches_expr(self) -> None:
         """``with_context`` returns a NEW error carrying the supplied

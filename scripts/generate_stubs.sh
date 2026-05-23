@@ -38,11 +38,104 @@ rm rust-bindings/pyproject.toml
 sed -i 's/r#type/type/g' src/openjd/_openjd_rs.pyi
 sed -i '/"PyExprValueIter"/d; /"PyRangeExprIter"/d; /"PyStepParamSpaceIter"/d' src/openjd/_openjd_rs.pyi
 
+# Tighten `__next__` return types: pyo3-stub-gen reflects the Rust
+# `Option<T>` signature (where `None` triggers StopIteration in
+# PyO3's glue), but at the Python level `__next__` should be typed
+# as returning `T` directly.
+sed -i 's|def __next__(self) -> typing\.Optional\[dict\]: \.\.\.|def __next__(self) -> dict: ...|' src/openjd/_openjd_rs.pyi
+
+# Fill in iterator-protocol methods on the internal `Py*Iter` classes.
+# pyo3-stub-gen emits them as empty marker classes (`class Foo: ...`),
+# but they're returned from `__iter__` accessors elsewhere in the
+# stub, so mypy needs `__next__` to type-check `for x in obj` and
+# `list(obj)` patterns at call sites.
+python3 - <<'PYI_FIXUP'
+import re
+from pathlib import Path
+
+p = Path("src/openjd/_openjd_rs.pyi")
+text = p.read_text()
+
+iter_classes = {
+    "PyExprValueIter": "ExprValue",
+    "PyRangeExprIter": "builtins.int",
+}
+for cls, item in iter_classes.items():
+    body = (
+        f"@typing.final\n"
+        f"class {cls}:\n"
+        f'    def __iter__(self) -> "{cls}": ...\n'
+        f"    def __next__(self) -> {item}: ..."
+    )
+    text = re.sub(
+        rf"@typing\.final\nclass {cls}: \.\.\.",
+        body,
+        text,
+        count=1,
+    )
+
+p.write_text(text)
+PYI_FIXUP
+
 # Suppress F821 false positives. pyo3-stub-gen emits forward references
 # in default-value expressions (e.g. `revision: SpecificationRevision =
 # SpecificationRevision.V2023_09`) which ruff flags as undefined names
 # even though they resolve at runtime. Add F821 to the existing noqa
 # comment so the generated stub passes lint cleanly.
 sed -i 's|^# ruff: noqa: E501, F401, F403, F405$|# ruff: noqa: E501, F401, F403, F405, F821|' src/openjd/_openjd_rs.pyi
+
+# Append manually-tracked declarations for symbols that pyo3-stub-gen
+# does not see. These are runtime-registered in `lib.rs` via
+# `register_renamed_exception` (the four `openjd.expr` exception
+# classes plus the three `openjd.model._v1.errors` exception classes)
+# and via `m.add(...)` for the two integer constants. They are part
+# of the public binding surface but live behind macros that the stub
+# generator does not crawl, so without this block mypy reports
+# "Module 'openjd._openjd_rs' has no attribute 'ExpressionError'"
+# (and so on) at every import site in the wrapper modules.
+cat >> src/openjd/_openjd_rs.pyi <<'PYI'
+
+# ── Manually-tracked declarations ───────────────────────────────────
+# Items below are not emitted by pyo3-stub-gen. They live behind
+# `register_renamed_exception` / `m.add(...)` calls in `lib.rs` rather
+# than `#[pyclass]` / `#[pyfunction]` macros. Keep this block in sync
+# with the `mod_init` body whenever new exceptions or constants are
+# added.
+
+# openjd.expr exception classes (registered as ValueError subclasses).
+class ExpressionError(builtins.ValueError):
+    expr: typing.Optional[builtins.str]
+    node: typing.Optional[typing.Any]
+    lineno: typing.Optional[builtins.int]
+    col_offset: typing.Optional[builtins.int]
+    def __init__(
+        self,
+        *args: typing.Any,
+        expr: typing.Optional[builtins.str] = None,
+        node: typing.Optional[typing.Any] = None,
+        lineno: typing.Optional[builtins.int] = None,
+        col_offset: typing.Optional[builtins.int] = None,
+    ) -> None: ...
+    def with_context(
+        self,
+        expr: builtins.str,
+        node: typing.Optional[typing.Any] = None,
+    ) -> "ExpressionError": ...
+    def message_with_expr_prefix(self, prefix: builtins.str) -> builtins.str: ...
+class ExpressionTypeError(ExpressionError): ...
+class RangeExprError(builtins.ValueError): ...
+class FormatStringValidationError(builtins.ValueError): ...
+
+# openjd.model._v1.errors exception classes (registered as ValueError
+# subclasses).
+class DecodeValidationError(builtins.ValueError): ...
+class ModelValidationError(builtins.ValueError): ...
+class UnsupportedSchema(builtins.ValueError): ...
+
+# Integer constants from the openjd-expr crate, exposed at module
+# level for callers that want to inspect or override the limits.
+DEFAULT_MEMORY_LIMIT: builtins.int
+DEFAULT_OPERATION_LIMIT: builtins.int
+PYI
 
 echo "Generated src/openjd/_openjd_rs.pyi"

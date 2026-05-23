@@ -74,6 +74,7 @@ def _decode_with_param(param: dict, *, extensions=None):
         template=template,
         supported_extensions=list(extensions) if extensions else None,
     )
+    assert t.parameter_definitions is not None
     return t.parameter_definitions[0]
 
 
@@ -390,6 +391,7 @@ class TestListPathUserInterface:
         ui = d.user_interface
         assert isinstance(ui, ListPathUserInterface)
         assert ui.control == "CHOOSE_INPUT_FILE_LIST"
+        assert ui.file_filters is not None
         assert ui.file_filters[0].label == "Source"
 
 
