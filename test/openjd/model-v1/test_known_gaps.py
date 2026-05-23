@@ -48,9 +48,7 @@ def test_job_template_pickleable():
         template={
             "specificationVersion": "jobtemplate-2023-09",
             "name": "X",
-            "steps": [
-                {"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}
-            ],
+            "steps": [{"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}],
         }
     )
     data = pickle.dumps(t)

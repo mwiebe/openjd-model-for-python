@@ -15,7 +15,6 @@ from openjd._openjd_rs import (
     DocumentType,
     DecodeValidationError,
     ModelValidationError,
-    UnsupportedSchema,
     JobTemplate,
     EnvironmentTemplate,
     Job,
@@ -53,7 +52,10 @@ class TestDecodeJobTemplate:
         template = decode_job_template_str(json.dumps(MINIMAL_JOB), DocumentType.JSON)
         assert isinstance(template, JobTemplate)
         assert template.name == "Test"
-        assert str(template.specification_version) == "jobtemplate-2023-09" or template.specification_version.name == "JOBTEMPLATE_2023_09"
+        assert (
+            str(template.specification_version) == "jobtemplate-2023-09"
+            or template.specification_version.name == "JOBTEMPLATE_2023_09"
+        )
 
     def test_specification_version_camelcase_alias(self) -> None:
         """``specificationVersion`` is exposed as a camelCase alias for
@@ -148,9 +150,7 @@ class TestCreateJob:
         tmpl = {
             "specificationVersion": "jobtemplate-2023-09",
             "name": "{{Param.Name}}",
-            "parameterDefinitions": [
-                {"name": "Name", "type": "STRING", "default": "DefaultJob"}
-            ],
+            "parameterDefinitions": [{"name": "Name", "type": "STRING", "default": "DefaultJob"}],
             "steps": [
                 {
                     "name": "S",
@@ -214,7 +214,6 @@ class TestStepParameterSpaceIterator:
 
     @pytest.fixture
     def job_with_params(self):
-        from openjd._openjd_rs import StepParameterSpaceIterator
         tmpl = {
             "specificationVersion": "jobtemplate-2023-09",
             "name": "Test",
@@ -235,40 +234,47 @@ class TestStepParameterSpaceIterator:
 
     def test_len(self, job_with_params) -> None:
         from openjd._openjd_rs import StepParameterSpaceIterator
+
         it = StepParameterSpaceIterator(step=job_with_params.steps[0])
         assert len(it) == 10
 
     def test_getitem(self, job_with_params) -> None:
         from openjd._openjd_rs import StepParameterSpaceIterator
+
         it = StepParameterSpaceIterator(step=job_with_params.steps[0])
         assert it[0]["Frame"].value == "1"
         assert it[9]["Frame"].value == "10"
 
     def test_negative_index(self, job_with_params) -> None:
         from openjd._openjd_rs import StepParameterSpaceIterator
+
         it = StepParameterSpaceIterator(step=job_with_params.steps[0])
         assert it[-1]["Frame"].value == "10"
         assert it[-10]["Frame"].value == "1"
 
     def test_index_out_of_bounds(self, job_with_params) -> None:
         from openjd._openjd_rs import StepParameterSpaceIterator
+
         it = StepParameterSpaceIterator(step=job_with_params.steps[0])
         with pytest.raises(IndexError):
             it[10]
 
     def test_iteration(self, job_with_params) -> None:
         from openjd._openjd_rs import StepParameterSpaceIterator
+
         it = StepParameterSpaceIterator(step=job_with_params.steps[0])
         frames = [params["Frame"].value for params in it]
         assert frames == [str(i) for i in range(1, 11)]
 
     def test_names(self, job_with_params) -> None:
         from openjd._openjd_rs import StepParameterSpaceIterator
+
         it = StepParameterSpaceIterator(step=job_with_params.steps[0])
         assert it.names == {"Frame"}
 
     def test_step_without_params(self) -> None:
         from openjd._openjd_rs import StepParameterSpaceIterator
+
         tmpl = {
             "specificationVersion": "jobtemplate-2023-09",
             "name": "Test",
@@ -285,6 +291,7 @@ class TestStepDependencyGraph:
 
     def test_topo_sorted(self) -> None:
         from openjd._openjd_rs import StepDependencyGraph
+
         tmpl = {
             "specificationVersion": "jobtemplate-2023-09",
             "name": "Test",
@@ -310,6 +317,7 @@ class TestStepDependencyGraph:
 
     def test_step_names(self) -> None:
         from openjd._openjd_rs import StepDependencyGraph
+
         tmpl = {
             "specificationVersion": "jobtemplate-2023-09",
             "name": "Test",
@@ -325,6 +333,7 @@ class TestStepDependencyGraph:
 
     def test_no_dependencies(self) -> None:
         from openjd._openjd_rs import StepDependencyGraph
+
         tmpl = {
             "specificationVersion": "jobtemplate-2023-09",
             "name": "Test",

@@ -26,11 +26,12 @@ implementations that the pure-Python reference inherits for free
 (frozen dataclass, `str` subclass, etc.), so pickle round-trips and
 direct value comparisons fall back to identity; the
 `FormatStringValidationError` exception class is registered but is not
-reachable from any public binding entry point today; and the test
-suite carries lint debt (16 ruff errors under `test/openjd/expr/` —
-unused imports, duplicate imports, an `E702`, and two `F821` references
-to reference-only Python helpers in a `pytest.skip`-guarded block).
-None of these block users of the bindings.
+reachable from any public binding entry point today. The test-suite
+lint debt called out in the original draft of this report (16 ruff
+errors under `test/openjd/expr/` plus 2 stragglers in a model-v1
+test file, totalling 18 workspace-wide) has been fully resolved
+(see Recommendation #10); `hatch run lint` is now clean.
+None of the remaining items block users of the bindings.
 
 ## 1. Python Interface Spec Review
 
@@ -304,12 +305,14 @@ covered by the pytest suite.)
 
 ```
 $ hatch run lint
-Found 18 errors.
-[*] 15 fixable with the `--fix` option.
+Found 0 errors.
 ```
 
-Of those 18 errors, **16 are under `test/openjd/expr/`**, contrary to
-the assumption that the lint baseline is dominated by model/sessions:
+The 18 errors that were live on **2026-05-22** when this report
+was first drafted have all been resolved (see Recommendation #10).
+For historical reference, **16 of those 18** lived under
+`test/openjd/expr/`, contrary to the assumption that the lint
+baseline was dominated by model/sessions:
 
 | File | Errors |
 |------|--------|
@@ -424,20 +427,21 @@ public expr API.
 
 ### Lint debt under `test/openjd/expr/`
 
-`hatch run lint` reports 16 errors under expr test files (see §6 for
-breakdown). They fall into three categories:
+(Historical, fully resolved — see Recommendation #10.) `hatch run
+lint` originally reported 16 errors under expr test files, falling
+into three categories:
 
-1. **Autofixable unused / duplicate imports** (13 errors): ruff
-   `--fix` resolves these mechanically.
+1. **Autofixable unused / duplicate imports** (13 errors): cleared
+   by `ruff check --fix test/openjd/expr` in commit `3728c78`.
 2. **`E702` semicolon-joined statement** in `test_memory.py:110`:
-   minor stylistic fix.
+   manually rewritten in commit `3728c78` (hoisted the local
+   `TypeCode` import to the top of the file).
 3. **`F821` references to reference-only Python helpers**
    (`ast_parse_keyword_context`, `Evaluator`) inside a
-   `pytest.skip(...)` block in `test_rfc_examples.py:64-75`. The block
-   is unreachable but ruff doesn't know that. Either delete the
-   skipped test (it covered a reference internal API that the
-   bindings deliberately don't expose) or rewrite it to exercise the
-   same behaviour through `evaluate_expression(target_type=...)`.
+   `pytest.skip(...)` block in `test_rfc_examples.py:64-75`:
+   replaced in commit `d3bc98a` with two new tests that exercise
+   the same RFC-0005 args use-case through the public
+   `evaluate_expression(target_type=...)` surface.
 
 ### Spec gaps: `copy_used_symtab_values` and the `FormatStringValidationError` raise site
 
@@ -552,14 +556,37 @@ No correctness defects found in the current bindings.
    above") in `specs/python-expr-interface.md` would prevent
    misreadings about the default state of `ExprProfile()`.
 
-10. **Resolve lint debt under `test/openjd/expr/`.** Run
+10. ~~**Resolve lint debt under `test/openjd/expr/`.** Run
     `ruff --fix test/openjd/expr` to auto-resolve the 13 unused- or
     duplicate-import errors. Manually fix the `E702` semicolon-joined
     statement at `test_memory.py:110`. Remove or rewrite the
     `pytest.skip(...)` block at `test_rfc_examples.py:64-75` so that
     `ast_parse_keyword_context` and `Evaluator` no longer appear as
     `F821` undefined names. After all three groups, the expr test
-    suite should contribute zero errors to `hatch run lint`.
+    suite should contribute zero errors to `hatch run lint`.~~
+    **Resolved.** Three commits cleared all 16 expr-test lint
+    errors:
+
+    - `d3bc98a` rewrote the skipped `test_quality_list_with_value`
+      block in `test_rfc_examples.py` against the public
+      `evaluate_expression(target_type=...)` API (using the built-in
+      `string()` function to satisfy RFC 0005's unconstrained-operand
+      rule), eliminating the two `F821`s and an unused `pytest`
+      import. A companion `test_quality_list_branch_null` test was
+      added for the conditional's `else` branch.
+    - `3728c78` ran `ruff check --fix test/openjd/expr` to clear
+      eleven `F401`/`F811` unused- or duplicate-import errors across
+      `test_lists.py`, `test_parse_expression.py`,
+      `test_path_format_mismatch.py`, `test_path_mapping.py`,
+      `test_slicing.py`, plus a manual rewrite of the `E702`
+      semicolon-joined statement in `test_memory.py:110` (hoisted the
+      local `from openjd.expr import TypeCode` to the top of the
+      file).
+    - This commit also cleared the two stragglers in
+      `test/openjd/model-v1/test_rust_model_bindings.py` (an unused
+      `UnsupportedSchema` import and a dead local
+      `StepParameterSpaceIterator` import inside a fixture body),
+      bringing `hatch run lint` to **0 errors workspace-wide**.
 
 11. **Drop the unreachable arm in `From<PyTypeCode> for TypeCode`.**
     `expr_type.rs::From<TypeCode>` correctly panics on a future

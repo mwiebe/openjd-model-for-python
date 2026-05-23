@@ -66,9 +66,7 @@ def _decode_with_param(param: dict, *, extensions=None):
         "specificationVersion": "jobtemplate-2023-09",
         "name": "T",
         "parameterDefinitions": [param],
-        "steps": [
-            {"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}
-        ],
+        "steps": [{"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}],
     }
     if extensions:
         template["extensions"] = list(extensions)
@@ -91,11 +89,13 @@ class TestUserInterfaceAccessor:
         assert d.userInterface is None
 
     def test_camelcase_alias(self) -> None:
-        d = _decode_with_param({
-            "name": "F",
-            "type": "STRING",
-            "userInterface": {"control": "LINE_EDIT"},
-        })
+        d = _decode_with_param(
+            {
+                "name": "F",
+                "type": "STRING",
+                "userInterface": {"control": "LINE_EDIT"},
+            }
+        )
         # ``user_interface`` and ``userInterface`` getters both return
         # a typed pyclass; the underlying class object is the same.
         assert type(d.user_interface) is type(d.userInterface)
@@ -110,15 +110,17 @@ class TestCommonFields:
     check each variant exposes them correctly."""
 
     def test_string_common_fields(self) -> None:
-        d = _decode_with_param({
-            "name": "F",
-            "type": "STRING",
-            "userInterface": {
-                "control": "LINE_EDIT",
-                "label": "A label",
-                "groupLabel": "Group A",
-            },
-        })
+        d = _decode_with_param(
+            {
+                "name": "F",
+                "type": "STRING",
+                "userInterface": {
+                    "control": "LINE_EDIT",
+                    "label": "A label",
+                    "groupLabel": "Group A",
+                },
+            }
+        )
         ui = d.user_interface
         assert isinstance(ui, StringUserInterface)
         assert ui.control == "LINE_EDIT"
@@ -129,11 +131,13 @@ class TestCommonFields:
     def test_optional_fields_default_to_none(self) -> None:
         """Each common field is optional; a userInterface block can
         carry just a control."""
-        d = _decode_with_param({
-            "name": "F",
-            "type": "STRING",
-            "userInterface": {"control": "LINE_EDIT"},
-        })
+        d = _decode_with_param(
+            {
+                "name": "F",
+                "type": "STRING",
+                "userInterface": {"control": "LINE_EDIT"},
+            }
+        )
         ui = d.user_interface
         assert ui.control == "LINE_EDIT"
         assert ui.label is None
@@ -145,16 +149,18 @@ class TestCommonFields:
 
 class TestIntUserInterface:
     def test_full(self) -> None:
-        d = _decode_with_param({
-            "name": "Frame",
-            "type": "INT",
-            "userInterface": {
-                "control": "SPIN_BOX",
-                "label": "Frame",
-                "groupLabel": "Animation",
-                "singleStepDelta": 5,
-            },
-        })
+        d = _decode_with_param(
+            {
+                "name": "Frame",
+                "type": "INT",
+                "userInterface": {
+                    "control": "SPIN_BOX",
+                    "label": "Frame",
+                    "groupLabel": "Animation",
+                    "singleStepDelta": 5,
+                },
+            }
+        )
         assert isinstance(d, JobIntParameterDefinition)
         ui = d.user_interface
         assert isinstance(ui, IntUserInterface)
@@ -167,11 +173,13 @@ class TestIntUserInterface:
         assert ui.groupLabel == "Animation"
 
     def test_no_single_step_delta(self) -> None:
-        d = _decode_with_param({
-            "name": "Frame",
-            "type": "INT",
-            "userInterface": {"control": "SPIN_BOX"},
-        })
+        d = _decode_with_param(
+            {
+                "name": "Frame",
+                "type": "INT",
+                "userInterface": {"control": "SPIN_BOX"},
+            }
+        )
         ui = d.user_interface
         assert ui.single_step_delta is None
         assert ui.singleStepDelta is None
@@ -182,15 +190,17 @@ class TestIntUserInterface:
 
 class TestFloatUserInterface:
     def test_full(self) -> None:
-        d = _decode_with_param({
-            "name": "X",
-            "type": "FLOAT",
-            "userInterface": {
-                "control": "SPIN_BOX",
-                "decimals": 3,
-                "singleStepDelta": 0.25,
-            },
-        })
+        d = _decode_with_param(
+            {
+                "name": "X",
+                "type": "FLOAT",
+                "userInterface": {
+                    "control": "SPIN_BOX",
+                    "decimals": 3,
+                    "singleStepDelta": 0.25,
+                },
+            }
+        )
         assert isinstance(d, JobFloatParameterDefinition)
         ui = d.user_interface
         assert isinstance(ui, FloatUserInterface)
@@ -199,11 +209,13 @@ class TestFloatUserInterface:
         assert ui.singleStepDelta == 0.25
 
     def test_only_decimals(self) -> None:
-        d = _decode_with_param({
-            "name": "X",
-            "type": "FLOAT",
-            "userInterface": {"decimals": 4},
-        })
+        d = _decode_with_param(
+            {
+                "name": "X",
+                "type": "FLOAT",
+                "userInterface": {"decimals": 4},
+            }
+        )
         ui = d.user_interface
         assert ui.decimals == 4
         assert ui.single_step_delta is None
@@ -214,24 +226,26 @@ class TestFloatUserInterface:
 
 class TestPathUserInterface:
     def test_with_file_filters(self) -> None:
-        d = _decode_with_param({
-            "name": "Input",
-            "type": "PATH",
-            "objectType": "FILE",
-            "dataFlow": "IN",
-            "userInterface": {
-                "control": "CHOOSE_INPUT_FILE",
-                "label": "Input file",
-                "fileFilters": [
-                    {"label": "Images", "patterns": ["*.png", "*.jpg"]},
-                    {"label": "All", "patterns": ["*"]},
-                ],
-                "fileFilterDefault": {
-                    "label": "Images",
-                    "patterns": ["*.png", "*.jpg"],
+        d = _decode_with_param(
+            {
+                "name": "Input",
+                "type": "PATH",
+                "objectType": "FILE",
+                "dataFlow": "IN",
+                "userInterface": {
+                    "control": "CHOOSE_INPUT_FILE",
+                    "label": "Input file",
+                    "fileFilters": [
+                        {"label": "Images", "patterns": ["*.png", "*.jpg"]},
+                        {"label": "All", "patterns": ["*"]},
+                    ],
+                    "fileFilterDefault": {
+                        "label": "Images",
+                        "patterns": ["*.png", "*.jpg"],
+                    },
                 },
-            },
-        })
+            }
+        )
         assert isinstance(d, JobPathParameterDefinition)
         ui = d.user_interface
         assert isinstance(ui, PathUserInterface)
@@ -253,13 +267,15 @@ class TestPathUserInterface:
         assert ui.fileFilterDefault is not None
 
     def test_no_file_filters(self) -> None:
-        d = _decode_with_param({
-            "name": "Out",
-            "type": "PATH",
-            "objectType": "DIRECTORY",
-            "dataFlow": "OUT",
-            "userInterface": {"control": "CHOOSE_DIRECTORY"},
-        })
+        d = _decode_with_param(
+            {
+                "name": "Out",
+                "type": "PATH",
+                "objectType": "DIRECTORY",
+                "dataFlow": "OUT",
+                "userInterface": {"control": "CHOOSE_DIRECTORY"},
+            }
+        )
         ui = d.user_interface
         assert ui.file_filters is None
         assert ui.file_filter_default is None
@@ -267,17 +283,19 @@ class TestPathUserInterface:
 
 class TestFileFilter:
     def test_label_and_patterns(self) -> None:
-        d = _decode_with_param({
-            "name": "Input",
-            "type": "PATH",
-            "objectType": "FILE",
-            "dataFlow": "IN",
-            "userInterface": {
-                "fileFilters": [
-                    {"label": "Source", "patterns": ["*.py", "*.rs", "*.c"]},
-                ],
-            },
-        })
+        d = _decode_with_param(
+            {
+                "name": "Input",
+                "type": "PATH",
+                "objectType": "FILE",
+                "dataFlow": "IN",
+                "userInterface": {
+                    "fileFilters": [
+                        {"label": "Source", "patterns": ["*.py", "*.rs", "*.c"]},
+                    ],
+                },
+            }
+        )
         ff = d.user_interface.file_filters[0]
         assert ff.label == "Source"
         assert ff.patterns == ["*.py", "*.rs", "*.c"]
@@ -443,30 +461,43 @@ class TestVariantDispatch:
     the correct ``*UserInterface`` pyclass type."""
 
     def test_string_returns_string_ui(self) -> None:
-        d = _decode_with_param({
-            "name": "F", "type": "STRING",
-            "userInterface": {"control": "LINE_EDIT"},
-        })
+        d = _decode_with_param(
+            {
+                "name": "F",
+                "type": "STRING",
+                "userInterface": {"control": "LINE_EDIT"},
+            }
+        )
         assert isinstance(d.user_interface, StringUserInterface)
 
     def test_int_returns_int_ui(self) -> None:
-        d = _decode_with_param({
-            "name": "F", "type": "INT",
-            "userInterface": {"control": "SPIN_BOX"},
-        })
+        d = _decode_with_param(
+            {
+                "name": "F",
+                "type": "INT",
+                "userInterface": {"control": "SPIN_BOX"},
+            }
+        )
         assert isinstance(d.user_interface, IntUserInterface)
 
     def test_float_returns_float_ui(self) -> None:
-        d = _decode_with_param({
-            "name": "F", "type": "FLOAT",
-            "userInterface": {"control": "SPIN_BOX"},
-        })
+        d = _decode_with_param(
+            {
+                "name": "F",
+                "type": "FLOAT",
+                "userInterface": {"control": "SPIN_BOX"},
+            }
+        )
         assert isinstance(d.user_interface, FloatUserInterface)
 
     def test_path_returns_path_ui(self) -> None:
-        d = _decode_with_param({
-            "name": "F", "type": "PATH",
-            "objectType": "FILE", "dataFlow": "IN",
-            "userInterface": {"control": "CHOOSE_INPUT_FILE"},
-        })
+        d = _decode_with_param(
+            {
+                "name": "F",
+                "type": "PATH",
+                "objectType": "FILE",
+                "dataFlow": "IN",
+                "userInterface": {"control": "CHOOSE_INPUT_FILE"},
+            }
+        )
         assert isinstance(d.user_interface, PathUserInterface)

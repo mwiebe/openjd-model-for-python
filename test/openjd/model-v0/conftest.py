@@ -78,8 +78,7 @@ def _import_mode() -> str:
     mode = os.environ.get(_VAR, _DEFAULT).lower()
     if mode not in _CHOICES:
         raise ValueError(
-            f"{_VAR}={mode!r} is not one of {_CHOICES}. "
-            f"Set {_VAR}=root or {_VAR}=v0."
+            f"{_VAR}={mode!r} is not one of {_CHOICES}. " f"Set {_VAR}=root or {_VAR}=v0."
         )
     return mode
 

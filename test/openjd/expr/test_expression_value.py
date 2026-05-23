@@ -203,6 +203,7 @@ class TestExprValueRepr:
 
     def test_repr_empty_list_path(self) -> None:
         import sys
+
         v = ExprValue([], type="list[path]")
         expected_fmt = "PathFormat.WINDOWS" if sys.platform == "win32" else "PathFormat.POSIX"
         assert repr(v) == f"ExprValue([], type='list[path]', path_format={expected_fmt})"

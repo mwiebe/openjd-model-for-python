@@ -209,9 +209,9 @@ class TestPyClassModules:
         # Python error messages and `repr(cls)` show the class by its
         # conceptually-correct dotted name.
         expected_fqn = f"{expected_module}.{class_name}"
-        assert expected_fqn in repr(cls), (
-            f"repr({class_name}) = {repr(cls)!r}, expected to contain {expected_fqn!r}"
-        )
+        assert expected_fqn in repr(
+            cls
+        ), f"repr({class_name}) = {repr(cls)!r}, expected to contain {expected_fqn!r}"
 
     # ── exception class tests ──
     #
@@ -227,9 +227,7 @@ class TestPyClassModules:
         sorted(EXPECTED_EXCEPTION_MODULES.items()),
         ids=lambda v: v,
     )
-    def test_exception_module_attribute(
-        self, class_name: str, expected_module: str
-    ) -> None:
+    def test_exception_module_attribute(self, class_name: str, expected_module: str) -> None:
         # GIVEN an exception class created via PyO3's create_exception! macro
         cls = getattr(_openjd_rs, class_name)
         # THEN the `_openjd_rs` Rust module init should have fixed its
@@ -245,9 +243,7 @@ class TestPyClassModules:
         sorted(EXPECTED_EXCEPTION_MODULES.items()),
         ids=lambda v: v,
     )
-    def test_exception_name_attribute(
-        self, class_name: str, expected_module: str
-    ) -> None:
+    def test_exception_name_attribute(self, class_name: str, expected_module: str) -> None:
         # GIVEN an exception class created via PyO3's create_exception! macro.
         # The macro bakes a `Py` prefix into the class's __name__, e.g.
         # `PyDecodeValidationError`. The Rust module init's
@@ -262,18 +258,16 @@ class TestPyClassModules:
             f"__name__ to {class_name!r}."
         )
         # AND __qualname__ should agree with __name__.
-        assert cls.__qualname__ == class_name, (
-            f"{class_name}.__qualname__ = {cls.__qualname__!r}, expected {class_name!r}"
-        )
+        assert (
+            cls.__qualname__ == class_name
+        ), f"{class_name}.__qualname__ = {cls.__qualname__!r}, expected {class_name!r}"
 
     @pytest.mark.parametrize(
         ("class_name", "expected_module"),
         sorted(EXPECTED_EXCEPTION_MODULES.items()),
         ids=lambda v: v,
     )
-    def test_exception_traceback_shows_module(
-        self, class_name: str, expected_module: str
-    ) -> None:
+    def test_exception_traceback_shows_module(self, class_name: str, expected_module: str) -> None:
         # GIVEN an exception class from the openjd._openjd_rs native module
         cls = getattr(_openjd_rs, class_name)
         # WHEN the exception is raised and formatted via repr(type(exc))
@@ -313,7 +307,7 @@ class TestPyClassModules:
         # THEN none of them should still report 'builtins'
         assert not offenders, (
             "The following Rust-backed classes still report __module__='builtins'. "
-            "Add `module = \"openjd.X\"` to their `#[pyclass(...)]` attributes:\n  "
+            'Add `module = "openjd.X"` to their `#[pyclass(...)]` attributes:\n  '
             + "\n  ".join(offenders)
         )
 
@@ -330,6 +324,7 @@ class TestPyClassModules:
         # misclassified by this scan.
         import openjd.expr  # noqa: F401
         import openjd.model._v1  # noqa: F401
+
         try:
             import openjd.sessions._v1  # noqa: F401
         except ImportError:

@@ -225,6 +225,7 @@ class TestFormatString:
 
     def test_escaped_braces(self):
         from openjd.expr import escape_format_string
+
         escaped = escape_format_string("{{literal}}")
         fs = FormatString(escaped)
         st = SymbolTable()

@@ -23,22 +23,13 @@ class TestUriPathExpressions:
     """URI-mode `path()` properties resolve through the evaluator."""
 
     def test_uri_name(self) -> None:
-        assert (
-            evaluate_expression('path("s3://bucket/dir/file.obj").name').item()
-            == "file.obj"
-        )
+        assert evaluate_expression('path("s3://bucket/dir/file.obj").name').item() == "file.obj"
 
     def test_uri_stem(self) -> None:
-        assert (
-            evaluate_expression('path("s3://bucket/dir/file.obj").stem').item()
-            == "file"
-        )
+        assert evaluate_expression('path("s3://bucket/dir/file.obj").stem').item() == "file"
 
     def test_uri_suffix(self) -> None:
-        assert (
-            evaluate_expression('path("s3://bucket/dir/file.obj").suffix').item()
-            == ".obj"
-        )
+        assert evaluate_expression('path("s3://bucket/dir/file.obj").suffix').item() == ".obj"
 
     def test_uri_suffixes(self) -> None:
         result = evaluate_expression('path("https://host/archive.tar.gz").suffixes')
@@ -53,14 +44,8 @@ class TestUriPathExpressions:
         assert result.item() == ["s3://bucket", "dir", "file.obj"]
 
     def test_uri_parent_chain(self) -> None:
-        assert (
-            str(evaluate_expression('path("s3://bucket/a/b").parent'))
-            == "s3://bucket/a"
-        )
-        assert (
-            str(evaluate_expression('path("s3://bucket/a/b").parent.parent'))
-            == "s3://bucket"
-        )
+        assert str(evaluate_expression('path("s3://bucket/a/b").parent')) == "s3://bucket/a"
+        assert str(evaluate_expression('path("s3://bucket/a/b").parent.parent')) == "s3://bucket"
         # The authority component is the floor: parent of the bare
         # authority is itself.
         assert (
@@ -133,21 +118,15 @@ class TestUriPathOperators:
         assert str(result) == "s3://bucket/file.txt"
 
     def test_with_suffix(self) -> None:
-        result = evaluate_expression(
-            'path("s3://bucket/renders/scene.exr").with_suffix(".png")'
-        )
+        result = evaluate_expression('path("s3://bucket/renders/scene.exr").with_suffix(".png")')
         assert str(result) == "s3://bucket/renders/scene.png"
 
     def test_with_name(self) -> None:
-        result = evaluate_expression(
-            'path("s3://bucket/renders/scene.exr").with_name("other.obj")'
-        )
+        result = evaluate_expression('path("s3://bucket/renders/scene.exr").with_name("other.obj")')
         assert str(result) == "s3://bucket/renders/other.obj"
 
     def test_with_stem(self) -> None:
-        result = evaluate_expression(
-            'path("s3://bucket/renders/scene.exr").with_stem("final")'
-        )
+        result = evaluate_expression('path("s3://bucket/renders/scene.exr").with_stem("final")')
         assert str(result) == "s3://bucket/renders/final.exr"
 
     def test_as_posix_identity(self) -> None:
@@ -155,9 +134,7 @@ class TestUriPathOperators:
         assert result.item() == "s3://bucket/a/b"
 
     def test_with_number(self) -> None:
-        result = evaluate_expression(
-            'path("s3://bucket/renders/shot_####.exr").with_number(42)'
-        )
+        result = evaluate_expression('path("s3://bucket/renders/shot_####.exr").with_number(42)')
         assert str(result) == "s3://bucket/renders/shot_0042.exr"
 
 
@@ -197,9 +174,7 @@ class TestUriPathSchemeVariety:
         assert result.item() == ["fsx://vol-123", "data", "file.bin"]
 
     def test_custom_scheme(self) -> None:
-        result = evaluate_expression(
-            'path("my-scheme+2://server/path/file.txt").parent'
-        )
+        result = evaluate_expression('path("my-scheme+2://server/path/file.txt").parent')
         assert str(result) == "my-scheme+2://server/path"
 
 
@@ -215,11 +190,7 @@ class TestUriPathInSymbolTable:
             == "file.obj"
         )
         assert (
-            str(
-                evaluate_expression(
-                    "P.parent", values=symtab, path_format=PathFormat.POSIX
-                )
-            )
+            str(evaluate_expression("P.parent", values=symtab, path_format=PathFormat.POSIX))
             == "s3://bucket/dir"
         )
 

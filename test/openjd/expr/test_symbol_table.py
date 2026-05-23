@@ -164,9 +164,7 @@ class TestSymbolTable:
         """``SymbolTable.symbols`` returns the set of every dotted leaf
         path. Top-level keys with leaf values appear bare; nested
         subtables flatten to their leaves."""
-        symtab = SymbolTable(
-            {"Param": {"Frame": 1, "Name": "x"}, "Task.Index": 0}
-        )
+        symtab = SymbolTable({"Param": {"Frame": 1, "Name": "x"}, "Task.Index": 0})
         assert symtab.symbols == {"Param.Frame", "Param.Name", "Task.Index"}
 
     def test_symbols_empty_table(self) -> None:

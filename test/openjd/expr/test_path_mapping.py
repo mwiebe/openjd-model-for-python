@@ -216,7 +216,6 @@ class TestPathMappingRuleValidation:
     """Tests for from_dict validation shared across formats."""
 
 
-
 class TestPathMappingRuleSerialization:
     """Tests for from_dict/to_dict serialization."""
 
@@ -270,9 +269,7 @@ class TestPathMappingRuleSerialization:
 
     def test_from_dict_missing_field(self) -> None:
         with pytest.raises(ValueError, match="requires"):
-            PathMappingRule.from_dict(
-                {"source_path_format": "POSIX", "source_path": "/mnt"}
-            )
+            PathMappingRule.from_dict({"source_path_format": "POSIX", "source_path": "/mnt"})
 
     def test_to_dict_posix(self, tmp_path) -> None:
         rule = PathMappingRule(

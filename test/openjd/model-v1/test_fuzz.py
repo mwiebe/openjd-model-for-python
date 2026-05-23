@@ -31,7 +31,12 @@ from openjd.model._v1.errors import (
     UnsupportedSchema,
 )
 
-EXPECTED_EXCEPTIONS = (DecodeValidationError, ModelValidationError, UnsupportedSchema, NotImplementedError)
+EXPECTED_EXCEPTIONS = (
+    DecodeValidationError,
+    ModelValidationError,
+    UnsupportedSchema,
+    NotImplementedError,
+)
 
 
 def random_string(min_len=0, max_len=50):

@@ -269,7 +269,9 @@ except ImportError:
     from yaml import SafeLoader as _YamlLoader  # type: ignore[assignment]
 
 
-def document_string_to_object(*, document: str, document_type: "DocumentType | None" = None) -> dict[str, Any]:
+def document_string_to_object(
+    *, document: str, document_type: "DocumentType | None" = None
+) -> dict[str, Any]:
     """Parse a YAML or JSON document string into a Python dict."""
     import json as _json
 
@@ -317,7 +319,9 @@ def decode_job_template(
     """
     return decode_job_template_dict(
         template,
-        supported_extensions=list(supported_extensions) if supported_extensions is not None else None,
+        supported_extensions=(
+            list(supported_extensions) if supported_extensions is not None else None
+        ),
         caller_limits=caller_limits,
     )
 
@@ -334,7 +338,9 @@ def decode_environment_template(
     """
     return decode_environment_template_dict(
         template,
-        supported_extensions=list(supported_extensions) if supported_extensions is not None else None,
+        supported_extensions=(
+            list(supported_extensions) if supported_extensions is not None else None
+        ),
     )
 
 

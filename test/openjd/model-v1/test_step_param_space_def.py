@@ -118,9 +118,7 @@ class TestParameterSpaceAccessor:
             }
         )
         ps = step.parameter_space
-        assert len(ps.taskParameterDefinitions) == len(
-            ps.task_parameter_definitions
-        )
+        assert len(ps.taskParameterDefinitions) == len(ps.task_parameter_definitions)
 
 
 # ── Per-variant tests ──

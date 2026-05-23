@@ -79,9 +79,8 @@ class TestPaths:
     def test_with_suffix(self, tmp_path) -> None:
         p = tmp_path / "output" / "render.exr"
         symtab = SymbolTable({"P": _p(p)})
-        assert (
-            str(evaluate_expression("with_suffix(P, '.png')", values=symtab))
-            .endswith("render.png")
+        assert str(evaluate_expression("with_suffix(P, '.png')", values=symtab)).endswith(
+            "render.png"
         )
 
     def test_path_from_string(self) -> None:

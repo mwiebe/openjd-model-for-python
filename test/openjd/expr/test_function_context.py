@@ -88,9 +88,7 @@ class TestApplyPathMappingContext:
         ]
         profile = ExprProfile().with_host_context(HostContext.with_rules(rules))
 
-        result = evaluate_expression(
-            "apply_path_mapping('/old/path/file.txt')", profile=profile
-        )
+        result = evaluate_expression("apply_path_mapping('/old/path/file.txt')", profile=profile)
         assert str(result) == str(dest / "file.txt")
 
     def test_unmatched_path_unchanged(self, tmp_path) -> None:
@@ -107,9 +105,7 @@ class TestApplyPathMappingContext:
         ]
         profile = ExprProfile().with_host_context(HostContext.with_rules(rules))
 
-        result = evaluate_expression(
-            "apply_path_mapping('/other/path/file.txt')", profile=profile
-        )
+        result = evaluate_expression("apply_path_mapping('/other/path/file.txt')", profile=profile)
         assert str(result) == str(PurePath("/other/path/file.txt"))
 
     def test_no_rules_returns_path_unchanged(self) -> None:

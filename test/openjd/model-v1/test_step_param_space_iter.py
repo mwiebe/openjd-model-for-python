@@ -227,9 +227,7 @@ class TestStepParameterSpaceIterator:
             pytest.param(_int_list([0, 10, 20, 40]), 4, id="list-4"),
         ],
     )
-    def test_single_param_len(
-        self, range_param: dict[str, Any], expected_len: int
-    ) -> None:
+    def test_single_param_len(self, range_param: dict[str, Any], expected_len: int) -> None:
         # GIVEN
         space = StepParameterSpace(
             taskParameterDefinitions={
@@ -527,7 +525,9 @@ class TestStepParameterSpaceIterator:
         # (defaultTaskCount + targetRuntimeSeconds).
         space = StepParameterSpace(
             taskParameterDefinitions={
-                "F": _chunk_int_adaptive("1-100", default_task_count=10, target_runtime_seconds=120),
+                "F": _chunk_int_adaptive(
+                    "1-100", default_task_count=10, target_runtime_seconds=120
+                ),
             }
         )
 
@@ -548,7 +548,9 @@ class TestStepParameterSpaceIterator:
         # GIVEN
         space = StepParameterSpace(
             taskParameterDefinitions={
-                "F": _chunk_int_adaptive("1-100", default_task_count=10, target_runtime_seconds=120),
+                "F": _chunk_int_adaptive(
+                    "1-100", default_task_count=10, target_runtime_seconds=120
+                ),
             }
         )
 

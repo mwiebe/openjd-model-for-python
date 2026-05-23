@@ -79,9 +79,7 @@ def _decode_with_chunks(param_dict: dict, *, extensions=None):
             }
         ],
     }
-    t = decode_job_template(
-        template=template, supported_extensions=extensions or ["TASK_CHUNKING"]
-    )
+    t = decode_job_template(template=template, supported_extensions=extensions or ["TASK_CHUNKING"])
     return create_job(job_template=t, job_parameter_values={})
 
 
@@ -144,9 +142,7 @@ class TestIntTaskParameter:
 
 class TestFloatTaskParameter:
     def test_decode_float_range(self) -> None:
-        j = _decode_with_param(
-            {"name": "F", "type": "FLOAT", "range": ["1.5", "2.5", "3.5"]}
-        )
+        j = _decode_with_param({"name": "F", "type": "FLOAT", "range": ["1.5", "2.5", "3.5"]})
         F = j.steps[0].parameterSpace.taskParameterDefinitions["F"]
 
         assert isinstance(F, FloatTaskParameter)
@@ -178,9 +174,7 @@ class TestStringTaskParameter:
 
 class TestPathTaskParameter:
     def test_decode_path_range(self) -> None:
-        j = _decode_with_param(
-            {"name": "F", "type": "PATH", "range": ["/a/b", "/c/d"]}
-        )
+        j = _decode_with_param({"name": "F", "type": "PATH", "range": ["/a/b", "/c/d"]})
         F = j.steps[0].parameterSpace.taskParameterDefinitions["F"]
 
         assert isinstance(F, PathTaskParameter)
@@ -235,9 +229,7 @@ class TestChunkIntTaskParameter:
         assert F.chunks.range_constraint == "NONCONTIGUOUS"
 
     def test_construct_and_pickle(self) -> None:
-        chunks = TaskChunksDefinition(
-            default_task_count=4, range_constraint="CONTIGUOUS"
-        )
+        chunks = TaskChunksDefinition(default_task_count=4, range_constraint="CONTIGUOUS")
         a = ChunkIntTaskParameter(range=[1, 2, 3], chunks=chunks)
         assert a.type == TaskParameterType.CHUNK_INT
         assert a.chunks.default_task_count == 4

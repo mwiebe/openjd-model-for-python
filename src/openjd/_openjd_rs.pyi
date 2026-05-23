@@ -6,6 +6,7 @@ import enum
 import os
 import pathlib
 import typing
+
 __all__ = [
     "Action",
     "ActionResult",
@@ -136,25 +137,39 @@ class Action:
     def timeout(self) -> typing.Optional[builtins.str]: ...
     @property
     def cancelation(self) -> typing.Optional[CancelationMode]: ...
-    def __new__(cls, *, command: FormatString, args: typing.Optional[typing.Sequence[FormatString]] = None, timeout: typing.Optional[FormatString] = None, cancelation: typing.Optional[CancelationMode] = None) -> Action: ...
+    def __new__(
+        cls,
+        *,
+        command: FormatString,
+        args: typing.Optional[typing.Sequence[FormatString]] = None,
+        timeout: typing.Optional[FormatString] = None,
+        cancelation: typing.Optional[CancelationMode] = None,
+    ) -> Action: ...
 
 @typing.final
 class ActionResult:
     r"""
     The result of running an action: terminal state, exit code, and a
     captured snippet of stdout (if any).
-    
+
     `ActionResult` is normally produced by the binding when an action
     completes; user code can also construct one directly, e.g. for
     tests. All three fields are exposed as read-only attributes.
     """
+
     @property
     def state(self) -> ActionState: ...
     @property
     def exit_code(self) -> typing.Optional[builtins.int]: ...
     @property
     def stdout(self) -> builtins.str: ...
-    def __new__(cls, *, state: ActionState, exit_code: typing.Optional[builtins.int] = None, stdout: builtins.str = '') -> ActionResult: ...
+    def __new__(
+        cls,
+        *,
+        state: ActionState,
+        exit_code: typing.Optional[builtins.int] = None,
+        stdout: builtins.str = "",
+    ) -> ActionResult: ...
     def __repr__(self) -> builtins.str: ...
     def __eq__(self, other: ActionResult) -> builtins.bool: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
@@ -181,22 +196,43 @@ class ActionStatus:
         When the action started, as a tz-aware UTC `datetime`, or `None`
         if the action has not started yet.
         """
+
     @property
     def ended_at(self) -> typing.Optional[typing.Any]:
         r"""
         When the action ended, as a tz-aware UTC `datetime`, or `None`
         if the action has not ended yet.
         """
-    def __new__(cls, *, state: ActionState, progress: typing.Optional[builtins.float] = None, status_message: typing.Optional[builtins.str] = None, fail_message: typing.Optional[builtins.str] = None, exit_code: typing.Optional[builtins.int] = None) -> ActionStatus: ...
+
+    def __new__(
+        cls,
+        *,
+        state: ActionState,
+        progress: typing.Optional[builtins.float] = None,
+        status_message: typing.Optional[builtins.str] = None,
+        fail_message: typing.Optional[builtins.str] = None,
+        exit_code: typing.Optional[builtins.int] = None,
+    ) -> ActionStatus: ...
     def __repr__(self) -> builtins.str: ...
     @classmethod
-    def _from_state(cls, *, state: ActionState, progress: typing.Optional[builtins.float] = None, status_message: typing.Optional[builtins.str] = None, fail_message: typing.Optional[builtins.str] = None, exit_code: typing.Optional[builtins.int] = None, started_at: typing.Optional[typing.Any] = None, ended_at: typing.Optional[typing.Any] = None) -> ActionStatus:
+    def _from_state(
+        cls,
+        *,
+        state: ActionState,
+        progress: typing.Optional[builtins.float] = None,
+        status_message: typing.Optional[builtins.str] = None,
+        fail_message: typing.Optional[builtins.str] = None,
+        exit_code: typing.Optional[builtins.int] = None,
+        started_at: typing.Optional[typing.Any] = None,
+        ended_at: typing.Optional[typing.Any] = None,
+    ) -> ActionStatus:
         r"""
         Internal classmethod used by pickle to reconstruct an
         `ActionStatus` with its full state including `started_at` and
         `ended_at`. Not intended for normal user code; use
         `ActionStatus(*, state, ...)` for ordinary construction.
         """
+
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
         Pickle support — round-trips through `_from_state` which can
@@ -212,7 +248,13 @@ class AmountRequirement:
     def min(self) -> typing.Optional[FormatString]: ...
     @property
     def max(self) -> typing.Optional[FormatString]: ...
-    def __new__(cls, *, name: builtins.str, min: typing.Optional[FormatString] = None, max: typing.Optional[FormatString] = None) -> AmountRequirement: ...
+    def __new__(
+        cls,
+        *,
+        name: builtins.str,
+        min: typing.Optional[FormatString] = None,
+        max: typing.Optional[FormatString] = None,
+    ) -> AmountRequirement: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -228,7 +270,13 @@ class AttributeRequirement:
     def all_of(self) -> typing.Optional[builtins.list[FormatString]]: ...
     @property
     def allOf(self) -> typing.Optional[builtins.list[FormatString]]: ...
-    def __new__(cls, *, name: builtins.str, any_of: typing.Optional[typing.Sequence[FormatString]] = None, all_of: typing.Optional[typing.Sequence[FormatString]] = None) -> AttributeRequirement: ...
+    def __new__(
+        cls,
+        *,
+        name: builtins.str,
+        any_of: typing.Optional[typing.Sequence[FormatString]] = None,
+        all_of: typing.Optional[typing.Sequence[FormatString]] = None,
+    ) -> AttributeRequirement: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -248,13 +296,14 @@ class BoolUserInterface:
 class CallerLimits:
     r"""
     Caller-supplied limits beyond what the OpenJD spec defines.
-    
+
     All fields are optional; `None` means "no additional restriction
     beyond the spec-defined limit." Caller limits can only tighten
     spec-defined limits, never relax them.
-    
+
     Mirrors `openjd_model::CallerLimits`.
     """
+
     @property
     def max_step_count(self) -> typing.Optional[builtins.int]: ...
     @property
@@ -267,7 +316,16 @@ class CallerLimits:
     def max_environment_size(self) -> typing.Optional[builtins.int]: ...
     @property
     def max_template_size(self) -> typing.Optional[builtins.int]: ...
-    def __new__(cls, *, max_step_count: typing.Optional[builtins.int] = None, max_env_count: typing.Optional[builtins.int] = None, max_task_count: typing.Optional[builtins.int] = None, max_step_script_size: typing.Optional[builtins.int] = None, max_environment_size: typing.Optional[builtins.int] = None, max_template_size: typing.Optional[builtins.int] = None) -> CallerLimits: ...
+    def __new__(
+        cls,
+        *,
+        max_step_count: typing.Optional[builtins.int] = None,
+        max_env_count: typing.Optional[builtins.int] = None,
+        max_task_count: typing.Optional[builtins.int] = None,
+        max_step_script_size: typing.Optional[builtins.int] = None,
+        max_environment_size: typing.Optional[builtins.int] = None,
+        max_template_size: typing.Optional[builtins.int] = None,
+    ) -> CallerLimits: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
@@ -289,22 +347,28 @@ class ChunkIntTaskParameter:
     a `RangeExpr`) plus a required :class:`TaskChunksDefinition`.
     Available only when the ``TASK_CHUNKING`` extension is enabled.
     """
+
     @property
     def type(self) -> TaskParameterType:
         r"""
         Always ``TaskParameterType.CHUNK_INT``.
         """
+
     @property
     def range(self) -> typing.Any:
         r"""
         Either a ``list[int]`` or a :class:`openjd.expr.RangeExpr`.
         """
+
     @property
     def chunks(self) -> TaskChunksDefinition:
         r"""
         The chunks definition. Always set on this variant.
         """
-    def __new__(cls, *, range: typing.Any, chunks: TaskChunksDefinition) -> ChunkIntTaskParameter: ...
+
+    def __new__(
+        cls, *, range: typing.Any, chunks: TaskChunksDefinition
+    ) -> ChunkIntTaskParameter: ...
     def __repr__(self) -> builtins.str: ...
     def __eq__(self, other: ChunkIntTaskParameter) -> builtins.bool: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
@@ -350,17 +414,27 @@ class EmbeddedFile:
     def filename(self) -> typing.Optional[builtins.str]: ...
     @property
     def data(self) -> typing.Optional[builtins.str]: ...
-    def __new__(cls, *, name: builtins.str, type: builtins.str, filename: typing.Optional[FormatString] = None, data: typing.Optional[FormatString] = None, runnable: typing.Optional[builtins.bool] = None, endOfLine: typing.Optional[builtins.str] = None, end_of_line: typing.Optional[builtins.str] = None) -> EmbeddedFile:
+    def __new__(
+        cls,
+        *,
+        name: builtins.str,
+        type: builtins.str,
+        filename: typing.Optional[FormatString] = None,
+        data: typing.Optional[FormatString] = None,
+        runnable: typing.Optional[builtins.bool] = None,
+        endOfLine: typing.Optional[builtins.str] = None,
+        end_of_line: typing.Optional[builtins.str] = None,
+    ) -> EmbeddedFile:
         r"""
         Build an EmbeddedFile in the v2023_09 schema.
-        
+
         Accepts keyword arguments matching the legacy Pydantic EmbeddedFileText
         shape used by the Deadline Cloud worker agent and other consumers:
-        
+
         ```text
         EmbeddedFile(name="x", type="TEXT", data=FormatString("..."))
         ```
-        
+
         Also accepts snake-case (`end_of_line`) and camelCase (`endOfLine`).
         """
 
@@ -408,6 +482,7 @@ class EnvironmentTemplate:
         camelCase alias for `specification_version`. Mirrors the
         `specificationVersion` field name in the JSON/YAML template.
         """
+
     @property
     def description(self) -> typing.Optional[builtins.str]: ...
     @property
@@ -416,6 +491,7 @@ class EnvironmentTemplate:
         The `Environment` defined by this template — mirrors the
         `environment:` field in the YAML/JSON document.
         """
+
     @property
     def parameter_definitions(self) -> typing.Optional[list]:
         r"""
@@ -425,29 +501,32 @@ class EnvironmentTemplate:
         `JobTemplate.parameter_definitions` for the details of each
         variant.
         """
+
     @property
     def parameterDefinitions(self) -> typing.Optional[list]:
         r"""
         camelCase alias for `parameter_definitions`.
         """
+
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class ExprExtension:
     r"""
     Expression-language extensions.
-    
+
     `openjd_expr::ExprExtension` is empty-but-`#[non_exhaustive]`
     today — no expression-level extensions exist yet. The Python
     binding cannot represent an empty enum, so we use a thin wrapper
     class whose only purpose is to carry zero or more named variants
     once they exist. Today it has no constructors.
-    
+
     When the first `ExprExtension` variant lands in the Rust crate,
     add a matching `#[classattr]` here (e.g. `Foo: PyExprExtension`)
     and a corresponding arm in `From<PyExprExtension>` /
     `From<ExprExtension>`.
     """
+
     ALL: builtins.list[ExprExtension]
     r"""
     All extension variants, in a stable order. Empty today.
@@ -461,7 +540,7 @@ class ExprProfile:
     r"""
     A complete expression profile: revision, enabled extensions, and
     host context.
-    
+
     Mirrors `openjd_expr::ExprProfile`. Pass to
     [`FunctionLibrary.for_profile(profile)`](crate::expr::PyFunctionLibrary)
     and to entry points like `evaluate_expression(..., profile=...)`,
@@ -469,41 +548,53 @@ class ExprProfile:
     `FormatString.resolve(..., profile=...)`,
     `FormatString.resolve_string(..., profile=...)`.
     """
+
     @property
     def revision(self) -> ExprRevision:
         r"""
         The specification revision this profile targets.
         """
+
     @property
     def extensions(self) -> builtins.list[ExprExtension]:
         r"""
         The set of enabled extensions, as a frozenset-compatible list.
         """
+
     @property
     def host_context(self) -> HostContext:
         r"""
         The host context.
         """
-    def __new__(cls, revision: typing.Optional[ExprRevision] = None, *, extensions: typing.Optional[typing.Sequence[ExprExtension]] = None, host_context: typing.Optional[HostContext] = None) -> ExprProfile:
+
+    def __new__(
+        cls,
+        revision: typing.Optional[ExprRevision] = None,
+        *,
+        extensions: typing.Optional[typing.Sequence[ExprExtension]] = None,
+        host_context: typing.Optional[HostContext] = None,
+    ) -> ExprProfile:
         r"""
         Build a profile for the given revision with no extensions and
         no host context.
-        
+
         Default arguments mirror `ExprProfile::current()` if `revision`
         is omitted: current revision, no extensions, no host context.
         """
+
     @classmethod
     def current(cls) -> ExprProfile:
         r"""
         Shortcut for `ExprProfile()` with the current revision, no
         extensions, and no host context.
         """
+
     @classmethod
     def latest(cls) -> ExprProfile:
         r"""
         Build a profile with the latest revision and every known
         expression extension enabled.
-        
+
         **Intentionally unstable across crate versions.** As new
         extensions are added to `ExprExtension::ALL` and new revisions
         land at `ExprRevision::CURRENT`, the set of accepted syntax,
@@ -511,20 +602,24 @@ class ExprProfile:
         across crate versions, construct an explicit profile via
         `ExprProfile(revision=...)` instead.
         """
+
     def with_extensions(self, extensions: typing.Sequence[ExprExtension]) -> ExprProfile:
         r"""
         Builder: return a new profile with the given extensions
         (replaces any existing set). Does not mutate `self`.
         """
+
     def with_host_context(self, host_context: HostContext) -> ExprProfile:
         r"""
         Builder: return a new profile with the given host context.
         Does not mutate `self`.
         """
+
     def has_extension(self, ext: ExprExtension) -> builtins.bool:
         r"""
         Whether the given extension is enabled in this profile.
         """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
@@ -538,7 +633,9 @@ class ExprType:
     def type_code(self) -> TypeCode: ...
     @property
     def type_params(self) -> builtins.list[ExprType]: ...
-    def __new__(cls, arg: typing.Any, params: typing.Optional[typing.Sequence[ExprType]] = None) -> ExprType: ...
+    def __new__(
+        cls, arg: typing.Any, params: typing.Optional[typing.Sequence[ExprType]] = None
+    ) -> ExprType: ...
     @staticmethod
     def list(elem: ExprType) -> ExprType: ...
     @staticmethod
@@ -565,7 +662,12 @@ class ExprValue:
     def type(self) -> ExprType: ...
     @property
     def is_null(self) -> builtins.bool: ...
-    def __new__(cls, value: typing.Any, type: typing.Optional[typing.Any] = None, path_format: typing.Optional[PathFormat] = None) -> ExprValue: ...
+    def __new__(
+        cls,
+        value: typing.Any,
+        type: typing.Optional[typing.Any] = None,
+        path_format: typing.Optional[PathFormat] = None,
+    ) -> ExprValue: ...
     @staticmethod
     def unresolved(ty: typing.Any) -> ExprValue: ...
     @staticmethod
@@ -579,6 +681,7 @@ class ExprValue:
         memory-limit-aware code (the same accounting that
         ``DEFAULT_MEMORY_LIMIT`` enforces during evaluation).
         """
+
     def item(self) -> typing.Any: ...
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, index: builtins.int) -> ExprValue: ...
@@ -591,12 +694,12 @@ class ExprValue:
         r"""
         Pickle support — round-trips through `__init__` (or
         `unresolved` for `Unresolved` values).
-        
+
         The reducer encodes:
         - the native Python value (`item()`)
         - the type name (e.g. `"int"`, `"list[path]"`)
         - for path / list-of-path values, the path format
-        
+
         For `Unresolved(t)` values we use `ExprValue.unresolved(t)` instead.
         """
 
@@ -613,11 +716,13 @@ class FloatTaskParameter:
     r"""
     Resolved FLOAT task parameter: a list of floats.
     """
+
     @property
     def type(self) -> TaskParameterType:
         r"""
         Always ``TaskParameterType.FLOAT``.
         """
+
     @property
     def range(self) -> builtins.list[builtins.float]: ...
     def __new__(cls, *, range: typing.Sequence[builtins.float]) -> FloatTaskParameter: ...
@@ -659,8 +764,20 @@ class FloatUserInterface:
 @typing.final
 class FormatString:
     def __new__(cls, input: builtins.str) -> FormatString: ...
-    def resolve_string(self, symtab: typing.Any, *, library: typing.Optional[FunctionLibrary] = None, profile: typing.Optional[ExprProfile] = None) -> builtins.str: ...
-    def resolve(self, symtab: typing.Any, *, library: typing.Optional[FunctionLibrary] = None, profile: typing.Optional[ExprProfile] = None) -> ExprValue: ...
+    def resolve_string(
+        self,
+        symtab: typing.Any,
+        *,
+        library: typing.Optional[FunctionLibrary] = None,
+        profile: typing.Optional[ExprProfile] = None,
+    ) -> builtins.str: ...
+    def resolve(
+        self,
+        symtab: typing.Any,
+        *,
+        library: typing.Optional[FunctionLibrary] = None,
+        profile: typing.Optional[ExprProfile] = None,
+    ) -> ExprValue: ...
     def raw(self) -> builtins.str: ...
     def has_complex_expressions(self) -> builtins.bool: ...
     def expression_names(self) -> builtins.list[builtins.str]: ...
@@ -672,6 +789,7 @@ class FormatString:
         stopping at property/method access (e.g. for `Param.Name.upper()`,
         copies `Param.Name` but not `Param.Name.upper`).
         """
+
     def __str__(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[type, tuple[builtins.str]]:
@@ -687,12 +805,14 @@ class FunctionLibrary:
         True iff this library has any host-context functions
         registered (today: `apply_path_mapping`).
         """
+
     def __new__(cls) -> FunctionLibrary:
         r"""
         Build a library for the default profile (current revision, no
         extensions, no host context). Equivalent to
         `FunctionLibrary.for_profile(ExprProfile.current())`.
         """
+
     @classmethod
     def for_profile(cls, profile: ExprProfile) -> FunctionLibrary:
         r"""
@@ -701,6 +821,7 @@ class FunctionLibrary:
         keys on revision + extensions + host-kind, so callers that
         reuse the same profile reuse the same `Arc<FunctionLibrary>`.
         """
+
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -719,9 +840,9 @@ class HiddenOnlyUserInterface:
 class HostContext:
     r"""
     Host-context state available to expression evaluation.
-    
+
     Three states, mirroring `openjd_expr::HostContext`:
-    
+
     - [`none()`](Self::none) — no host-context functions registered.
     - [`unresolved()`](Self::unresolved) — host-context signatures
       registered with stub implementations that return
@@ -730,18 +851,20 @@ class HostContext:
       for type checking.
     - [`with_rules(rules)`](Self::with_rules) — real implementations
       with path-mapping rules registered. Use at runtime.
-    
+
     Constructed via class methods to keep the three states distinct
     at the Python call site; there is no public `__init__` because
     "default-constructed `HostContext`" is ambiguous (is it `None` or
     a `WithRules` of an empty list?). The Rust crate makes the choice
     explicit; the Python binding does the same.
     """
+
     @classmethod
     def none(cls) -> HostContext:
         r"""
         No host-context functions are registered. Default state.
         """
+
     @classmethod
     def unresolved(cls) -> HostContext:
         r"""
@@ -749,27 +872,31 @@ class HostContext:
         implementations that return `Unresolved(T)`. Use at
         template-validation time.
         """
+
     @classmethod
     def with_rules(cls, rules: typing.Sequence[PathMappingRule]) -> HostContext:
         r"""
         Host-context functions registered with implementations that
         use the supplied path mapping rules. Use at runtime.
-        
+
         `rules` may be empty — that still constructs a `WithRules`
         host context (`apply_path_mapping` is registered, returns
         the path unchanged). Passing zero rules is *not* the same as
         passing no host context at all.
         """
+
     def is_enabled(self) -> builtins.bool:
         r"""
         Whether this host context registers any host-context
         functions (i.e. is *not* `None`).
         """
+
     def is_unresolved(self) -> builtins.bool:
         r"""
         Whether this host context uses unresolved stub
         implementations.
         """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
@@ -783,7 +910,12 @@ class HostRequirements:
     def amounts(self) -> typing.Optional[builtins.list[AmountRequirement]]: ...
     @property
     def attributes(self) -> typing.Optional[builtins.list[AttributeRequirement]]: ...
-    def __new__(cls, *, amounts: typing.Optional[typing.Sequence[AmountRequirement]] = None, attributes: typing.Optional[typing.Sequence[AttributeRequirement]] = None) -> HostRequirements: ...
+    def __new__(
+        cls,
+        *,
+        amounts: typing.Optional[typing.Sequence[AmountRequirement]] = None,
+        attributes: typing.Optional[typing.Sequence[AttributeRequirement]] = None,
+    ) -> HostRequirements: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -793,16 +925,19 @@ class IntTaskParameter:
     Resolved INT task parameter: a `range` (list of ints OR a
     `RangeExpr`) and no chunks.
     """
+
     @property
     def type(self) -> TaskParameterType:
         r"""
         Always ``TaskParameterType.INT``.
         """
+
     @property
     def range(self) -> typing.Any:
         r"""
         Either a ``list[int]`` or a :class:`openjd.expr.RangeExpr`.
         """
+
     def __new__(cls, *, range: typing.Any) -> IntTaskParameter: ...
     def __repr__(self) -> builtins.str: ...
     def __eq__(self, other: IntTaskParameter) -> builtins.bool: ...
@@ -1197,6 +1332,7 @@ class JobStringParameterDefinition:
         The optional `userInterface` block. Returns
         `Optional[StringUserInterface]` — see the type's spec for fields.
         """
+
     @property
     def userInterface(self) -> typing.Optional[StringUserInterface]: ...
     def __repr__(self) -> builtins.str: ...
@@ -1213,6 +1349,7 @@ class JobTemplate:
         camelCase alias for `specification_version`. Mirrors the
         `specificationVersion` field name in the JSON/YAML template.
         """
+
     @property
     def description(self) -> typing.Optional[builtins.str]: ...
     @property
@@ -1222,15 +1359,17 @@ class JobTemplate:
         described by this template: the revision from
         `specificationVersion` and the extensions set declared on
         the template's `extensions:` field.
-        
+
         Mirrors `JobTemplate::profile()` in the underlying Rust crate.
         """
+
     @property
     def steps(self) -> builtins.list[StepTemplate]:
         r"""
         The list of `StepTemplate`s defined on this job template.
         Mirrors the `steps:` field in the YAML/JSON document.
         """
+
     @property
     def job_environments(self) -> typing.Optional[builtins.list[TemplateEnvironment]]:
         r"""
@@ -1238,11 +1377,13 @@ class JobTemplate:
         if the template has no `jobEnvironments:` field. Mirrors the
         `jobEnvironments:` field in the YAML/JSON document.
         """
+
     @property
     def jobEnvironments(self) -> typing.Optional[builtins.list[TemplateEnvironment]]:
         r"""
         camelCase alias for `job_environments`.
         """
+
     @property
     def parameter_definitions(self) -> typing.Optional[list]:
         r"""
@@ -1254,11 +1395,13 @@ class JobTemplate:
         …, `JobListListIntParameterDefinition`). Mirrors the
         `parameterDefinitions:` field in the YAML/JSON document.
         """
+
     @property
     def parameterDefinitions(self) -> typing.Optional[list]:
         r"""
         camelCase alias for `parameter_definitions`.
         """
+
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -1331,58 +1474,73 @@ class ListSimpleUserInterface:
 class ModelProfile:
     r"""
     Model-side profile: spec revision plus enabled extensions.
-    
+
     Mirrors `openjd_model::ModelProfile`. Pass to
     [`decode_job_template(profile=...)`](crate::model::decode_job_template_str),
     `decode_environment_template(profile=...)`, and
     `create_job(profile=...)`.
-    
+
     Use [`to_expr_profile(host_context)`](Self::to_expr_profile) to
     derive a matching `ExprProfile` for the expression engine.
     """
+
     @property
     def revision(self) -> SpecificationRevision:
         r"""
         The specification revision this profile targets.
         """
+
     @property
     def extensions(self) -> builtins.list[ModelExtension]:
         r"""
         The set of enabled extensions, as a list.
         """
-    def __new__(cls, revision: SpecificationRevision = SpecificationRevision.V2023_09, *, extensions: typing.Optional[typing.Sequence[ModelExtension]] = None) -> ModelProfile:
+
+    def __new__(
+        cls,
+        revision: SpecificationRevision = SpecificationRevision.V2023_09,
+        *,
+        extensions: typing.Optional[typing.Sequence[ModelExtension]] = None,
+    ) -> ModelProfile:
         r"""
         Build a profile for the given revision with the given extension set.
-        
+
         `extensions` accepts `ModelExtension` values directly. To pass
         extension *strings* (e.g. `["EXPR", "TASK_CHUNKING"]`) use
         [`from_strings`](Self::from_strings).
         """
+
     @classmethod
-    def from_strings(cls, revision: SpecificationRevision, extensions: typing.Sequence[builtins.str]) -> ModelProfile:
+    def from_strings(
+        cls, revision: SpecificationRevision, extensions: typing.Sequence[builtins.str]
+    ) -> ModelProfile:
         r"""
         Build a profile from a list of extension *strings* (e.g. the
         strings that appear in a template's `extensions:` field).
         Unknown names are an error.
         """
+
     def with_extensions(self, extensions: typing.Sequence[ModelExtension]) -> ModelProfile:
         r"""
         Builder: return a new profile with the given extensions
         (replaces any existing set). Does not mutate `self`.
         """
+
     def has_extension(self, ext: ModelExtension) -> builtins.bool:
         r"""
         Whether the given extension is enabled in this profile.
         """
+
     def to_expr_profile(self, host_context: HostContext) -> ExprProfile:
         r"""
         Derive an [`ExprProfile`](crate::expr::PyExprProfile) matching this
         profile's revision and extensions, with the caller-specified
         [`HostContext`](crate::expr::PyHostContext).
-        
+
         This is the bridge from the model layer to the expression engine:
         pass the result to `FunctionLibrary.for_profile(...)`.
         """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
@@ -1405,7 +1563,17 @@ class ParsedExpression:
     @property
     def operation_count(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
-    def evaluate(self, *, values: typing.Optional[typing.Any] = None, library: typing.Optional[FunctionLibrary] = None, profile: typing.Optional[ExprProfile] = None, target_type: typing.Optional[ExprType] = None, path_format: typing.Optional[PathFormat] = None, memory_limit: typing.Optional[builtins.int] = None, operation_limit: typing.Optional[builtins.int] = None) -> ExprValue: ...
+    def evaluate(
+        self,
+        *,
+        values: typing.Optional[typing.Any] = None,
+        library: typing.Optional[FunctionLibrary] = None,
+        profile: typing.Optional[ExprProfile] = None,
+        target_type: typing.Optional[ExprType] = None,
+        path_format: typing.Optional[PathFormat] = None,
+        memory_limit: typing.Optional[builtins.int] = None,
+        operation_limit: typing.Optional[builtins.int] = None,
+    ) -> ExprValue: ...
 
 @typing.final
 class PathMappingRule:
@@ -1415,9 +1583,17 @@ class PathMappingRule:
     def source_path(self) -> builtins.str: ...
     @property
     def destination_path(self) -> builtins.str: ...
-    def __new__(cls, *, source_path_format: PathFormat, source_path: typing.Any, destination_path: typing.Any) -> PathMappingRule: ...
+    def __new__(
+        cls,
+        *,
+        source_path_format: PathFormat,
+        source_path: typing.Any,
+        destination_path: typing.Any,
+    ) -> PathMappingRule: ...
     def __repr__(self) -> builtins.str: ...
-    def apply(self, *, path: builtins.str, output_format: typing.Optional[PathFormat] = None) -> tuple[builtins.bool, builtins.str]: ...
+    def apply(
+        self, *, path: builtins.str, output_format: typing.Optional[PathFormat] = None
+    ) -> tuple[builtins.bool, builtins.str]: ...
     def to_dict(self) -> builtins.dict[builtins.str, builtins.str]: ...
     @staticmethod
     def from_dict(d: dict) -> PathMappingRule: ...
@@ -1431,11 +1607,13 @@ class PathTaskParameter:
     r"""
     Resolved PATH task parameter: a list of path strings.
     """
+
     @property
     def type(self) -> TaskParameterType:
         r"""
         Always ``TaskParameterType.PATH``.
         """
+
     @property
     def range(self) -> builtins.list[builtins.str]: ...
     def __new__(cls, *, range: typing.Sequence[builtins.str]) -> PathTaskParameter: ...
@@ -1481,17 +1659,20 @@ class PosixSessionUser:
     r"""
     A PyO3 wrapper that holds an Arc<dyn SessionUser> for passing to Session.
     """
+
     @property
     def user(self) -> builtins.str: ...
     @property
     def group(self) -> builtins.str: ...
-    def __new__(cls, user: builtins.str, *, group: typing.Optional[builtins.str] = None) -> PosixSessionUser: ...
+    def __new__(
+        cls, user: builtins.str, *, group: typing.Optional[builtins.str] = None
+    ) -> PosixSessionUser: ...
     def is_process_user(self) -> builtins.bool: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
         Pickle support — round-trips through `__init__(user, *, group=...)`.
-        
+
         Note that on non-POSIX hosts the resulting object cannot be
         loaded (the constructor raises `RuntimeError`). This matches
         the reference Python class, which is also platform-restricted
@@ -1499,12 +1680,10 @@ class PosixSessionUser:
         """
 
 @typing.final
-class PyExprValueIter:
-    ...
+class PyExprValueIter: ...
 
 @typing.final
-class PyRangeExprIter:
-    ...
+class PyRangeExprIter: ...
 
 @typing.final
 class RangeExpr:
@@ -1513,11 +1692,13 @@ class RangeExpr:
         r"""
         Smallest value in the range expression.
         """
+
     @property
     def end(self) -> builtins.int:
         r"""
         Largest value in the range expression.
         """
+
     def __new__(cls, expr: builtins.str) -> RangeExpr: ...
     @staticmethod
     def from_str(expr: builtins.str) -> RangeExpr: ...
@@ -1527,10 +1708,11 @@ class RangeExpr:
         Build a `RangeExpr` from a list of values. Values may be ints,
         strs (parsed as ints), or a mix. Duplicates are removed and the
         final range is sorted ascending.
-        
+
         Raises ``ValueError`` if the list is empty (matching the
         pure-Python reference).
         """
+
     def __len__(self) -> builtins.int: ...
     def __eq__(self, other: RangeExpr) -> builtins.bool: ...
     def __contains__(self, value: builtins.int) -> builtins.bool: ...
@@ -1547,6 +1729,7 @@ class RangeExpr:
         the value is interpreter-session-local and not stable across
         processes.
         """
+
     def __reduce__(self) -> tuple[type, tuple[builtins.str]]:
         r"""
         Pickle support — round-trips through the canonical string
@@ -1579,41 +1762,87 @@ class Session:
     def action_status(self) -> typing.Optional[ActionStatus]: ...
     @property
     def environments_entered(self) -> builtins.list[builtins.str]: ...
-    def __new__(cls, *, session_id: builtins.str, job_parameter_values: dict, path_mapping_rules: typing.Optional[typing.Sequence[PathMappingRule]] = None, retain_working_dir: builtins.bool = False, os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, session_root_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, user: typing.Optional[typing.Any] = None) -> Session: ...
+    def __new__(
+        cls,
+        *,
+        session_id: builtins.str,
+        job_parameter_values: dict,
+        path_mapping_rules: typing.Optional[typing.Sequence[PathMappingRule]] = None,
+        retain_working_dir: builtins.bool = False,
+        os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None,
+        session_root_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None,
+        user: typing.Optional[typing.Any] = None,
+    ) -> Session: ...
     def extend_path_mapping_rules(self, additional: typing.Sequence[PathMappingRule]) -> None:
         r"""
         Extend the session's path mapping rules with additional rules.
-        
+
         Rules are stored sorted by source-path length (longest first) so that
         the most specific rule matches first during FormatString resolution.
-        
+
         Consumers (notably the Deadline Cloud worker agent's Job Attachments
         download action) call this after an action assigns additional path
         mappings — e.g. per-storage-profile mappings derived at task-sync time.
-        
+
         Returns an error if an action is currently in-flight (the underlying
         Session has been taken by a background thread). Call this between
         actions.
         """
-    def enter_environment(self, *, environment: Environment, identifier: typing.Optional[builtins.str] = None, os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> builtins.str:
+
+    def enter_environment(
+        self,
+        *,
+        environment: Environment,
+        identifier: typing.Optional[builtins.str] = None,
+        os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None,
+    ) -> builtins.str:
         r"""
         Enter an environment. Non-blocking — spawns the onEnter action on a
         background thread and returns the environment identifier immediately.
         """
-    def exit_environment(self, *, identifier: builtins.str, keep_session_running: builtins.bool = True, os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> None:
+
+    def exit_environment(
+        self,
+        *,
+        identifier: builtins.str,
+        keep_session_running: builtins.bool = True,
+        os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None,
+    ) -> None:
         r"""
         Exit an environment. Non-blocking — spawns the onExit action on a
         background thread.
         """
-    def run_task(self, *, step_script: StepScript, task_parameter_values: typing.Optional[dict] = None, os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> None:
+
+    def run_task(
+        self,
+        *,
+        step_script: StepScript,
+        task_parameter_values: typing.Optional[dict] = None,
+        os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None,
+    ) -> None:
         r"""
         Run a task. Non-blocking — spawns the onRun action on a background thread.
         """
-    def run_subprocess(self, *, command: builtins.str, args: typing.Optional[typing.Sequence[builtins.str]] = None, timeout: typing.Optional[builtins.float] = None, os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, use_session_env_vars: builtins.bool = True, log_banner_message: typing.Optional[builtins.str] = None) -> None:
+
+    def run_subprocess(
+        self,
+        *,
+        command: builtins.str,
+        args: typing.Optional[typing.Sequence[builtins.str]] = None,
+        timeout: typing.Optional[builtins.float] = None,
+        os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None,
+        use_session_env_vars: builtins.bool = True,
+        log_banner_message: typing.Optional[builtins.str] = None,
+    ) -> None:
         r"""
         Run a subprocess. Non-blocking — spawns on a background thread.
         """
-    def cancel_action(self, time_limit: typing.Optional[builtins.float], mark_action_failed: typing.Optional[builtins.bool]) -> None: ...
+
+    def cancel_action(
+        self,
+        time_limit: typing.Optional[builtins.float],
+        mark_action_failed: typing.Optional[builtins.bool],
+    ) -> None: ...
     def cleanup(self) -> None: ...
     def __repr__(self) -> builtins.str: ...
 
@@ -1631,7 +1860,15 @@ class SimpleAction:
     def timeout(self) -> typing.Optional[FormatString]: ...
     @property
     def cancelation(self) -> typing.Optional[TemplateCancelationMode]: ...
-    def __new__(cls, *, script: builtins.str, let_bindings: typing.Optional[typing.Sequence[builtins.str]] = None, args: typing.Optional[typing.Sequence[FormatString]] = None, timeout: typing.Optional[FormatString] = None, cancelation: typing.Optional[TemplateCancelationMode] = None) -> SimpleAction: ...
+    def __new__(
+        cls,
+        *,
+        script: builtins.str,
+        let_bindings: typing.Optional[typing.Sequence[builtins.str]] = None,
+        args: typing.Optional[typing.Sequence[FormatString]] = None,
+        timeout: typing.Optional[FormatString] = None,
+        cancelation: typing.Optional[TemplateCancelationMode] = None,
+    ) -> SimpleAction: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -1710,10 +1947,15 @@ class StepParameterSpace:
     def taskParameterDefinitions(self) -> typing.Any: ...
     @property
     def combination(self) -> typing.Optional[builtins.str]: ...
-    def __new__(cls, *, taskParameterDefinitions: typing.Optional[dict] = None, combination: typing.Optional[builtins.str] = None) -> StepParameterSpace:
+    def __new__(
+        cls,
+        *,
+        taskParameterDefinitions: typing.Optional[dict] = None,
+        combination: typing.Optional[builtins.str] = None,
+    ) -> StepParameterSpace:
         r"""
         Build a parameter space from a Python dict of definitions.
-        
+
         Each value in `taskParameterDefinitions` may be either:
         - A dict with `type` (string or enum) and `range` (list of strings
           or a RangeExpr). For CHUNK[INT] params, `chunks` is required.
@@ -1733,6 +1975,7 @@ class StepParameterSpaceDefinition:
         `PathTaskParameterDefinition`, or
         `ChunkIntTaskParameterDefinition`.
         """
+
     @property
     def taskParameterDefinitions(self) -> list: ...
     @property
@@ -1741,6 +1984,7 @@ class StepParameterSpaceDefinition:
         The combination expression, or ``None`` if the default
         (left-to-right product) applies.
         """
+
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -1755,7 +1999,12 @@ class StepParameterSpaceIterator:
     def chunks_default_task_count(self) -> typing.Optional[builtins.int]: ...
     @chunks_default_task_count.setter
     def chunks_default_task_count(self, value: builtins.int) -> None: ...
-    def __new__(cls, *, step: typing.Optional[Step] = None, space: typing.Optional[StepParameterSpace] = None) -> StepParameterSpaceIterator: ...
+    def __new__(
+        cls,
+        *,
+        step: typing.Optional[Step] = None,
+        space: typing.Optional[StepParameterSpace] = None,
+    ) -> StepParameterSpaceIterator: ...
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, index: builtins.int) -> dict: ...
     def __iter__(self) -> StepParameterSpaceIterator:
@@ -1765,6 +2014,7 @@ class StepParameterSpaceIterator:
         `StepParameterSpaceIterator`. Mirrors the Python reference,
         which also exposes `__iter__`/`__next__` directly.
         """
+
     def __next__(self) -> typing.Optional[dict]: ...
     def __contains__(self, item: dict) -> builtins.bool: ...
     def reset_iter(self) -> None: ...
@@ -1781,7 +2031,13 @@ class StepScript:
     def embedded_files(self) -> typing.Optional[builtins.list[EmbeddedFile]]: ...
     @property
     def embeddedFiles(self) -> typing.Optional[builtins.list[EmbeddedFile]]: ...
-    def __new__(cls, *, actions: StepActions, embeddedFiles: typing.Optional[typing.Sequence[EmbeddedFile]] = None, let_: typing.Optional[typing.Sequence[builtins.str]] = None) -> StepScript: ...
+    def __new__(
+        cls,
+        *,
+        actions: StepActions,
+        embeddedFiles: typing.Optional[typing.Sequence[EmbeddedFile]] = None,
+        let_: typing.Optional[typing.Sequence[builtins.str]] = None,
+    ) -> StepScript: ...
 
 @typing.final
 class StepTemplate:
@@ -1808,7 +2064,7 @@ class StepTemplate:
         r"""
         The step's parameter-space definition, or ``None`` if the
         step has no `parameterSpace:` field.
-        
+
         Returns a typed `StepParameterSpaceDefinition` whose
         `task_parameter_definitions` is a list of typed pyclasses
         dispatching on the `TaskParameterDefinition` enum
@@ -1816,10 +2072,11 @@ class StepTemplate:
         `StringTaskParameterDefinition`,
         `PathTaskParameterDefinition`,
         `ChunkIntTaskParameterDefinition`).
-        
+
         For the resolved (post-`create_job`) form with format strings
         evaluated, see `Step.parameterSpace` on the job-time `Step`.
         """
+
     @property
     def parameterSpace(self) -> typing.Optional[StepParameterSpaceDefinition]: ...
     @property
@@ -1841,11 +2098,13 @@ class StringTaskParameter:
     r"""
     Resolved STRING task parameter: a list of strings.
     """
+
     @property
     def type(self) -> TaskParameterType:
         r"""
         Always ``TaskParameterType.STRING``.
         """
+
     @property
     def range(self) -> builtins.list[builtins.str]: ...
     def __new__(cls, *, range: typing.Sequence[builtins.str]) -> StringTaskParameter: ...
@@ -1884,7 +2143,9 @@ class SymbolTable:
     def keys(self) -> builtins.set[builtins.str]: ...
     @property
     def symbols(self) -> builtins.set[builtins.str]: ...
-    def __new__(cls, init: typing.Optional[typing.Any] = None, *, source: typing.Optional[typing.Any] = None) -> SymbolTable: ...
+    def __new__(
+        cls, init: typing.Optional[typing.Any] = None, *, source: typing.Optional[typing.Any] = None
+    ) -> SymbolTable: ...
     def __contains__(self, key: builtins.str) -> builtins.bool: ...
     def __getitem__(self, key: builtins.str) -> typing.Any: ...
     def get(self, name: builtins.str) -> typing.Optional[typing.Any]: ...
@@ -1895,6 +2156,7 @@ class SymbolTable:
         Pickle support — round-trips through a flat
         `dict[str, ExprValue]` of all dotted leaf paths.
         """
+
     def __repr__(self) -> builtins.str:
         r"""
         Mirror the pure-Python reference's ``SymbolTable({...})`` repr.
@@ -1907,12 +2169,13 @@ class SymbolTable:
 class TaskChunksDefinition:
     r"""
     Resolved chunks payload attached to a `ChunkIntTaskParameter`.
-    
+
     Mirrors `openjd_model::job::ResolvedChunks` — the post-
     format-string-resolution form. `target_runtime_seconds` is
     optional; `range_constraint` is one of the strings
     `"CONTIGUOUS"` or `"NONCONTIGUOUS"`.
     """
+
     @property
     def default_task_count(self) -> builtins.int: ...
     @property
@@ -1922,7 +2185,14 @@ class TaskChunksDefinition:
         r"""
         Either ``"CONTIGUOUS"`` or ``"NONCONTIGUOUS"``.
         """
-    def __new__(cls, *, default_task_count: builtins.int, target_runtime_seconds: typing.Optional[builtins.int] = None, range_constraint: builtins.str) -> TaskChunksDefinition: ...
+
+    def __new__(
+        cls,
+        *,
+        default_task_count: builtins.int,
+        target_runtime_seconds: typing.Optional[builtins.int] = None,
+        range_constraint: builtins.str,
+    ) -> TaskChunksDefinition: ...
     def __repr__(self) -> builtins.str: ...
     def __eq__(self, other: TaskChunksDefinition) -> builtins.bool: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
@@ -1958,7 +2228,14 @@ class TemplateAction:
     def timeout(self) -> typing.Optional[FormatString]: ...
     @property
     def cancelation(self) -> typing.Optional[TemplateCancelationMode]: ...
-    def __new__(cls, *, command: FormatString, args: typing.Optional[typing.Sequence[FormatString]] = None, timeout: typing.Optional[FormatString] = None, cancelation: typing.Optional[TemplateCancelationMode] = None) -> TemplateAction: ...
+    def __new__(
+        cls,
+        *,
+        command: FormatString,
+        args: typing.Optional[typing.Sequence[FormatString]] = None,
+        timeout: typing.Optional[FormatString] = None,
+        cancelation: typing.Optional[TemplateCancelationMode] = None,
+    ) -> TemplateAction: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -1970,7 +2247,9 @@ class TemplateCancelationMode:
     def notify_period_in_seconds(self) -> typing.Optional[FormatString]: ...
     @property
     def notifyPeriodInSeconds(self) -> typing.Optional[FormatString]: ...
-    def __new__(cls, *, mode: builtins.str, notify_period_in_seconds: typing.Optional[FormatString] = None) -> TemplateCancelationMode: ...
+    def __new__(
+        cls, *, mode: builtins.str, notify_period_in_seconds: typing.Optional[FormatString] = None
+    ) -> TemplateCancelationMode: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -1990,7 +2269,16 @@ class TemplateEmbeddedFile:
     def end_of_line(self) -> typing.Optional[builtins.str]: ...
     @property
     def endOfLine(self) -> typing.Optional[builtins.str]: ...
-    def __new__(cls, *, name: builtins.str, type_: builtins.str, filename: typing.Optional[FormatString] = None, data: typing.Optional[FormatString] = None, runnable: typing.Optional[builtins.bool] = None, end_of_line: typing.Optional[builtins.str] = None) -> TemplateEmbeddedFile: ...
+    def __new__(
+        cls,
+        *,
+        name: builtins.str,
+        type_: builtins.str,
+        filename: typing.Optional[FormatString] = None,
+        data: typing.Optional[FormatString] = None,
+        runnable: typing.Optional[builtins.bool] = None,
+        end_of_line: typing.Optional[builtins.str] = None,
+    ) -> TemplateEmbeddedFile: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -2004,7 +2292,14 @@ class TemplateEnvironment:
     def script(self) -> typing.Optional[TemplateEnvironmentScript]: ...
     @property
     def variables(self) -> typing.Optional[dict]: ...
-    def __new__(cls, *, name: builtins.str, description: typing.Optional[builtins.str] = None, script: typing.Optional[TemplateEnvironmentScript] = None, variables: typing.Optional[dict] = None) -> TemplateEnvironment: ...
+    def __new__(
+        cls,
+        *,
+        name: builtins.str,
+        description: typing.Optional[builtins.str] = None,
+        script: typing.Optional[TemplateEnvironmentScript] = None,
+        variables: typing.Optional[dict] = None,
+    ) -> TemplateEnvironment: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -2018,7 +2313,12 @@ class TemplateEnvironmentActions:
     def on_exit(self) -> typing.Optional[TemplateAction]: ...
     @property
     def onExit(self) -> typing.Optional[TemplateAction]: ...
-    def __new__(cls, *, on_enter: typing.Optional[TemplateAction] = None, on_exit: typing.Optional[TemplateAction] = None) -> TemplateEnvironmentActions: ...
+    def __new__(
+        cls,
+        *,
+        on_enter: typing.Optional[TemplateAction] = None,
+        on_exit: typing.Optional[TemplateAction] = None,
+    ) -> TemplateEnvironmentActions: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -2034,7 +2334,13 @@ class TemplateEnvironmentScript:
     def embedded_files(self) -> typing.Optional[builtins.list[TemplateEmbeddedFile]]: ...
     @property
     def embeddedFiles(self) -> typing.Optional[builtins.list[TemplateEmbeddedFile]]: ...
-    def __new__(cls, *, actions: TemplateEnvironmentActions, let_bindings: typing.Optional[typing.Sequence[builtins.str]] = None, embedded_files: typing.Optional[typing.Sequence[TemplateEmbeddedFile]] = None) -> TemplateEnvironmentScript: ...
+    def __new__(
+        cls,
+        *,
+        actions: TemplateEnvironmentActions,
+        let_bindings: typing.Optional[typing.Sequence[builtins.str]] = None,
+        embedded_files: typing.Optional[typing.Sequence[TemplateEmbeddedFile]] = None,
+    ) -> TemplateEnvironmentScript: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -2070,7 +2376,13 @@ class TemplateStepScript:
     def embedded_files(self) -> typing.Optional[builtins.list[TemplateEmbeddedFile]]: ...
     @property
     def embeddedFiles(self) -> typing.Optional[builtins.list[TemplateEmbeddedFile]]: ...
-    def __new__(cls, *, actions: TemplateStepActions, let_bindings: typing.Optional[typing.Sequence[builtins.str]] = None, embedded_files: typing.Optional[typing.Sequence[TemplateEmbeddedFile]] = None) -> TemplateStepScript: ...
+    def __new__(
+        cls,
+        *,
+        actions: TemplateStepActions,
+        let_bindings: typing.Optional[typing.Sequence[builtins.str]] = None,
+        embedded_files: typing.Optional[typing.Sequence[TemplateEmbeddedFile]] = None,
+    ) -> TemplateStepScript: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -2078,20 +2390,24 @@ class TemplateStepScript:
 class ValidationContext:
     r"""
     A `ModelProfile` plus `CallerLimits`, bundled together.
-    
+
     Most callers can construct one directly from a `ModelProfile`, or
     derive one from a parsed template via `JobTemplate.profile`.
-    
+
     Mirrors `openjd_model::types::ValidationContext`.
     """
+
     @property
     def profile(self) -> ModelProfile: ...
     @property
     def caller_limits(self) -> CallerLimits: ...
-    def __new__(cls, profile: ModelProfile, *, caller_limits: typing.Optional[CallerLimits] = None) -> ValidationContext:
+    def __new__(
+        cls, profile: ModelProfile, *, caller_limits: typing.Optional[CallerLimits] = None
+    ) -> ValidationContext:
         r"""
         Build a context from a profile, with optional caller limits.
         """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
@@ -2103,22 +2419,23 @@ class ValidationContext:
 class WindowsSessionUser:
     r"""
     PyO3 binding for `openjd_sessions::WindowsSessionUser`.
-    
+
     Mirrors the legacy Python `WindowsSessionUser` API: construct with
     `WindowsSessionUser(user, *, password=..., logon_token=...)`. Exposes
     `.user`, `.password`, `.logon_token`, and `is_process_user()`.
-    
+
     Validation of the username/password is performed unconditionally by the
     underlying Rust `WindowsSessionUser::with_password` (which calls
     `LogonUserW`). There is no Python-level override hook — callers that need
     to bypass real Windows logon for testing must mock at a different layer
     (e.g. patching the binding constructor itself).
-    
+
     The class is importable on all platforms so that consumers can reference
     it in type annotations and `isinstance` checks, but actual instantiation
     fails on non-Windows hosts with a `RuntimeError`, matching the legacy
     Python class.
     """
+
     @property
     def user(self) -> builtins.str: ...
     @property
@@ -2127,6 +2444,7 @@ class WindowsSessionUser:
         The password supplied at construction time, or `None` if construction
         used a logon token or no credentials.
         """
+
     @property
     def logon_token(self) -> typing.Optional[builtins.int]:
         r"""
@@ -2134,34 +2452,42 @@ class WindowsSessionUser:
         construction used a password or no credentials. Returned as an
         `int` mirroring `ctypes.wintypes.HANDLE` semantics.
         """
-    def __new__(cls, user: builtins.str, *, password: typing.Optional[builtins.str] = None, logon_token: typing.Optional[typing.Any] = None) -> WindowsSessionUser:
+
+    def __new__(
+        cls,
+        user: builtins.str,
+        *,
+        password: typing.Optional[builtins.str] = None,
+        logon_token: typing.Optional[typing.Any] = None,
+    ) -> WindowsSessionUser:
         r"""
         Create a `WindowsSessionUser`.
-        
+
         Arguments mirror the legacy Python class. Exactly one of `password`
         or `logon_token` must be provided when the user is not the process
         owner. When the user is the process owner, both must be `None`.
-        
+
         On Windows, supplying `password` triggers immediate credential
         validation via `LogonUserW`; a logon failure raises
         `BadCredentialsException`. On non-Windows hosts the constructor
         raises `RuntimeError` (matching the legacy Python class), but the
         type itself is importable.
-        
+
         `logon_token` accepts either a Python `int` or any object with an
         `__int__` method (e.g. `ctypes.wintypes.HANDLE` from a pywin32
         `LogonUser` call). This matches the legacy Python class which used
         `ctypes.wintypes.HANDLE` directly.
         """
+
     def is_process_user(self) -> builtins.bool: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
         Pickle support — round-trips through `__init__(user, *,
         password=..., logon_token=...)`.
-        
+
         **Caveats:**
-        
+
         1. Pickling a Windows password is sensitive — it is stored
            plaintext in the pickle output. Avoid pickling
            `WindowsSessionUser` to disk or over an untrusted channel.
@@ -2189,6 +2515,7 @@ class ActionState(enum.Enum):
         Match Python's Enum.name surface so callers using `state.name`
         (e.g. f"...as {state.name}") work without changes.
         """
+
     def __str__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
@@ -2205,6 +2532,7 @@ class DocumentType(enum.Enum):
         r"""
         Variant name as a string (e.g. `"YAML"`).
         """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
@@ -2215,12 +2543,13 @@ class DocumentType(enum.Enum):
 class ExprRevision(enum.Enum):
     r"""
     Expression-language specification revision.
-    
+
     Mirrors `openjd_expr::ExprRevision`. Marked `#[non_exhaustive]`
     in Rust so future revisions can be added without a SemVer break;
     the Python enum has the same growth path — new variants will be
     added here as the spec adds them.
     """
+
     V2026_02 = ...
 
     CURRENT: ExprRevision = ExprRevision.V2026_02
@@ -2233,11 +2562,13 @@ class ExprRevision(enum.Enum):
         r"""
         Variant name as a string (e.g. `"V2026_02"`).
         """
+
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str:
         r"""
         Spec-form revision string, e.g. `"2026-02"`.
         """
+
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
         Pickle support — round-trips through the variant name.
@@ -2263,6 +2594,7 @@ class JobParameterType(enum.Enum):
         r"""
         Variant name as a string (e.g. `"INT"`, `"LIST_STRING"`).
         """
+
     def as_str(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
@@ -2276,12 +2608,13 @@ class ModelExtension(enum.Enum):
     r"""
     Model-side extension recognized by the `2023_09` specification
     revision.
-    
+
     Names match `openjd_model::types::ModelExtension` (which in turn
     matches the canonical UPPER_SNAKE_CASE strings as they appear in
     template YAML/JSON). The Python enum is `eq, eq_int` so that
     `ModelExtension.EXPR == ModelExtension.EXPR` works in sets.
     """
+
     TASK_CHUNKING = ...
     REDACTED_ENV_VARS = ...
     FEATURE_BUNDLE_1 = ...
@@ -2293,10 +2626,12 @@ class ModelExtension(enum.Enum):
         Variant name as a string (e.g. `"EXPR"`). Equivalent to
         [`as_str()`](Self::as_str).
         """
+
     def as_str(self) -> builtins.str:
         r"""
         Spec-form extension name, e.g. `"EXPR"`.
         """
+
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     @staticmethod
@@ -2305,6 +2640,7 @@ class ModelExtension(enum.Enum):
         Parse an UPPER_SNAKE_CASE extension name into a
         `ModelExtension`. Returns `None` for unrecognized names.
         """
+
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
         Pickle support — round-trips through the variant name.
@@ -2338,6 +2674,7 @@ class ScriptRunnerState(enum.Enum):
         r"""
         Variant name as a string (e.g. `"READY"`).
         """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
@@ -2357,6 +2694,7 @@ class SessionState(enum.Enum):
         r"""
         Variant name as a string (e.g. `"READY"`).
         """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
@@ -2367,11 +2705,12 @@ class SessionState(enum.Enum):
 class SpecificationRevision(enum.Enum):
     r"""
     Revision of the OpenJD specification.
-    
+
     Mirrors `openjd_model::types::SpecificationRevision`. Marked
     `#[non_exhaustive]` in Rust so future revisions can be added
     without a SemVer break; the Python enum has the same growth path.
     """
+
     V2023_09 = ...
 
     @property
@@ -2379,11 +2718,13 @@ class SpecificationRevision(enum.Enum):
         r"""
         Variant name as a string (e.g. `"V2023_09"`).
         """
+
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str:
         r"""
         Spec-form revision string, e.g. `"2023-09"`.
         """
+
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
         Pickle support — round-trips through the variant name.
@@ -2401,10 +2742,11 @@ class TaskParameterType(enum.Enum):
     def name(self) -> builtins.str:
         r"""
         Variant name as a string (e.g. `"INT"`, `"CHUNK_INT"`).
-        
+
         Distinct from `as_str()` for the `CHUNK_INT` variant, whose
         spec form is `"CHUNK[INT]"`.
         """
+
     def as_str(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
@@ -2422,6 +2764,7 @@ class TemplateSpecificationVersion(enum.Enum):
         r"""
         Variant name as a string (e.g. `"JOBTEMPLATE_2023_09"`).
         """
+
     def as_str(self) -> builtins.str: ...
     def is_job_template(self) -> builtins.bool: ...
     def is_environment_template(self) -> builtins.bool: ...
@@ -2456,6 +2799,7 @@ class TypeCode(enum.Enum):
         r"""
         Variant name as a string (e.g. `"INT"`).
         """
+
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
         Pickle support — round-trips through the variant name.
@@ -2467,29 +2811,48 @@ def create_environment(env_template: EnvironmentTemplate) -> Environment:
     the same contents. Analogous to how `create_job` instantiates a `JobTemplate`
     into a `Job`, but for a standalone environment (no job parameters involved
     in environment-only templates).
-    
+
     Consumers like the Deadline Cloud worker agent need this to turn the
     `EnvironmentDetails` boto payload into an `Environment` they can pass to
     `Session.enter_environment`.
     """
 
-def create_job(*, job_template: JobTemplate, job_parameter_values: dict, environment_templates: typing.Optional[typing.Sequence[EnvironmentTemplate]] = None, validation_context: typing.Optional[ValidationContext] = None) -> Job: ...
-
-def decode_environment_template_dict(template: dict, *, supported_extensions: typing.Optional[typing.Sequence[builtins.str]] = None) -> EnvironmentTemplate: ...
-
-def decode_environment_template_str(document: builtins.str, format: DocumentType = DocumentType.YAML, *, supported_extensions: typing.Optional[typing.Sequence[builtins.str]] = None) -> EnvironmentTemplate: ...
-
-def decode_job_template_dict(template: dict, *, supported_extensions: typing.Optional[typing.Sequence[builtins.str]] = None, caller_limits: typing.Optional[CallerLimits] = None) -> JobTemplate: ...
-
-def decode_job_template_str(document: builtins.str, format: DocumentType = DocumentType.YAML, *, supported_extensions: typing.Optional[typing.Sequence[builtins.str]] = None, caller_limits: typing.Optional[CallerLimits] = None) -> JobTemplate: ...
-
+def create_job(
+    *,
+    job_template: JobTemplate,
+    job_parameter_values: dict,
+    environment_templates: typing.Optional[typing.Sequence[EnvironmentTemplate]] = None,
+    validation_context: typing.Optional[ValidationContext] = None,
+) -> Job: ...
+def decode_environment_template_dict(
+    template: dict, *, supported_extensions: typing.Optional[typing.Sequence[builtins.str]] = None
+) -> EnvironmentTemplate: ...
+def decode_environment_template_str(
+    document: builtins.str,
+    format: DocumentType = DocumentType.YAML,
+    *,
+    supported_extensions: typing.Optional[typing.Sequence[builtins.str]] = None,
+) -> EnvironmentTemplate: ...
+def decode_job_template_dict(
+    template: dict,
+    *,
+    supported_extensions: typing.Optional[typing.Sequence[builtins.str]] = None,
+    caller_limits: typing.Optional[CallerLimits] = None,
+) -> JobTemplate: ...
+def decode_job_template_str(
+    document: builtins.str,
+    format: DocumentType = DocumentType.YAML,
+    *,
+    supported_extensions: typing.Optional[typing.Sequence[builtins.str]] = None,
+    caller_limits: typing.Optional[CallerLimits] = None,
+) -> JobTemplate: ...
 def deserialize_step(step_dict: dict) -> Step:
     r"""
     Deserialize a job-side `Step` from a Python dict. This matches the
     payload shape that the Deadline Cloud service's `GetStepDetails` /
     `BatchGetJobEntity` API returns in the `template` field: it is a
     serialized `openjd_model::job::Step`, not a template-side StepTemplate.
-    
+
     Consumers like the Deadline Cloud worker agent use this to reconstruct
     a `Step` object from the wire payload so they can pass its
     parameter_space to the step-parameter-space iterator and its script
@@ -2497,16 +2860,35 @@ def deserialize_step(step_dict: dict) -> Step:
     """
 
 def escape_format_string(value: builtins.str) -> builtins.str: ...
-
-def evaluate_expression(expr: builtins.str, *, values: typing.Optional[typing.Any] = None, library: typing.Optional[FunctionLibrary] = None, profile: typing.Optional[ExprProfile] = None, target_type: typing.Optional[ExprType] = None, memory_limit: typing.Optional[builtins.int] = None, operation_limit: typing.Optional[builtins.int] = None, path_format: typing.Optional[PathFormat] = None) -> ExprValue: ...
-
-def evaluate_let_bindings(bindings: typing.Sequence[builtins.str], symtab: SymbolTable, library: typing.Optional[FunctionLibrary] = None) -> SymbolTable: ...
-
+def evaluate_expression(
+    expr: builtins.str,
+    *,
+    values: typing.Optional[typing.Any] = None,
+    library: typing.Optional[FunctionLibrary] = None,
+    profile: typing.Optional[ExprProfile] = None,
+    target_type: typing.Optional[ExprType] = None,
+    memory_limit: typing.Optional[builtins.int] = None,
+    operation_limit: typing.Optional[builtins.int] = None,
+    path_format: typing.Optional[PathFormat] = None,
+) -> ExprValue: ...
+def evaluate_let_bindings(
+    bindings: typing.Sequence[builtins.str],
+    symtab: SymbolTable,
+    library: typing.Optional[FunctionLibrary] = None,
+) -> SymbolTable: ...
 def get_default_library() -> FunctionLibrary: ...
-
-def merge_job_parameter_definitions(*, job_template: JobTemplate, environment_templates: typing.Optional[typing.Sequence[EnvironmentTemplate]] = None) -> builtins.list[dict]: ...
-
+def merge_job_parameter_definitions(
+    *,
+    job_template: JobTemplate,
+    environment_templates: typing.Optional[typing.Sequence[EnvironmentTemplate]] = None,
+) -> builtins.list[dict]: ...
 def parse_expression(expr: builtins.str) -> ParsedExpression: ...
-
-def preprocess_job_parameters(*, job_template: JobTemplate, job_parameter_values: dict, environment_templates: typing.Optional[typing.Sequence[EnvironmentTemplate]] = None, job_template_dir: builtins.str | os.PathLike | pathlib.Path, current_working_dir: builtins.str | os.PathLike | pathlib.Path, allow_job_template_dir_walk_up: builtins.bool = False) -> dict: ...
-
+def preprocess_job_parameters(
+    *,
+    job_template: JobTemplate,
+    job_parameter_values: dict,
+    environment_templates: typing.Optional[typing.Sequence[EnvironmentTemplate]] = None,
+    job_template_dir: builtins.str | os.PathLike | pathlib.Path,
+    current_working_dir: builtins.str | os.PathLike | pathlib.Path,
+    allow_job_template_dir_walk_up: builtins.bool = False,
+) -> dict: ...

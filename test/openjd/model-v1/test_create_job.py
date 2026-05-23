@@ -21,8 +21,11 @@ from openjd.model._v1.types import (
 from openjd.model._v1.errors import (
     DecodeValidationError,
 )
+
+
 class _JobParamTypeCompat:
     """Wrapper to give Rust enum members a .value attribute like Python's enum.Enum."""
+
     def __init__(self, member):
         self._member = member
         self.value = member.as_str()
@@ -43,6 +46,7 @@ JobParameterType_2023_09 = [
 def _parameter_value_type_from_str(s: str) -> JobParameterType:
     """Look up a JobParameterType member by its string name."""
     return getattr(JobParameterType, s)
+
 
 minimal_steps_v2023_09 = [
     {"name": "step", "script": {"actions": {"onRun": {"command": "do thing"}}}}
@@ -634,10 +638,12 @@ class TestPreprocessJobParameters_2023_09:  # noqa: N801
             )
 
         # THEN — all errors collected (env template params processed first)
-        assert str(excinfo.value) == "\n".join([
-            "Parameter 'Bar': value length 3 is less than minimum 5",
-            "Parameter 'Foo': value length 3 exceeds maximum 1",
-        ])
+        assert str(excinfo.value) == "\n".join(
+            [
+                "Parameter 'Bar': value length 3 is less than minimum 5",
+                "Parameter 'Foo': value length 3 exceeds maximum 1",
+            ]
+        )
 
     def test_collects_multiple_errors(self) -> None:
         # Test that see all errors if we have multiple in the same run.
@@ -670,11 +676,13 @@ class TestPreprocessJobParameters_2023_09:  # noqa: N801
             )
 
         # THEN — all errors collected
-        assert str(excinfo.value) == "\n".join([
-            "Parameter 'Foo': value length 3 exceeds maximum 1",
-            "Job parameter values provided for parameters that are not defined in the template: Bar",
-            "Values missing for required job parameters: Buz",
-        ])
+        assert str(excinfo.value) == "\n".join(
+            [
+                "Parameter 'Foo': value length 3 exceeds maximum 1",
+                "Job parameter values provided for parameters that are not defined in the template: Bar",
+                "Values missing for required job parameters: Buz",
+            ]
+        )
 
 
 class TestCreateJob_2023_09:
@@ -823,4 +831,7 @@ class TestCreateJob_2023_09:
             )
 
         # THEN
-        assert str(excinfo.value) == "Associative combination: all members must have the same number of values, got 10 and 2"
+        assert (
+            str(excinfo.value)
+            == "Associative combination: all members must have the same number of values, got 10 and 2"
+        )

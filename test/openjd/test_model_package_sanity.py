@@ -70,9 +70,7 @@ def model_module(request):
 class TestModelPackageSanity:
     def test_public_symbols_are_present(self, model_module):
         missing = [n for n in _PUBLIC_NAMES if not hasattr(model_module, n)]
-        assert not missing, (
-            f"{model_module.__name__} is missing expected public names: {missing}"
-        )
+        assert not missing, f"{model_module.__name__} is missing expected public names: {missing}"
 
     def test_decode_job_template_returns_concrete_template(self, model_module):
         template = model_module.decode_job_template(template=_MINIMAL_JOB_TEMPLATE)

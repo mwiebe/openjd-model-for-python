@@ -140,7 +140,9 @@ class TestUnionTypes:
 
     def test_noreturn_collapses_with_multiple_types(self) -> None:
         # int | string | noreturn -> int | string
-        union = ExprType(TypeCode.UNION, [ExprType("int"), ExprType("string"), ExprType("noreturn")])
+        union = ExprType(
+            TypeCode.UNION, [ExprType("int"), ExprType("string"), ExprType("noreturn")]
+        )
         assert union.type_code == TypeCode.UNION
         assert ExprType("noreturn") not in union.type_params
         assert str(union) == "int | string"
@@ -441,10 +443,9 @@ class TestExprValue:
         assert ExprValue("3.14", type=ExprType("float")).item() == 3.14
         assert ExprValue("true", type=ExprType("bool")).item() is True
         assert ExprValue("false", type=ExprType("bool")).item() is False
-        assert (
-            ExprValue("/tmp", type=ExprType("path"), path_format=PathFormat.POSIX).type
-            == ExprType("path")
-        )
+        assert ExprValue(
+            "/tmp", type=ExprType("path"), path_format=PathFormat.POSIX
+        ).type == ExprType("path")
         assert list(ExprValue("1-3", type=ExprType("range_expr")).item()) == [1, 2, 3]
         assert ExprValue(["1", "2"], type=ExprType("list[int]")).item() == [1, 2]
 
@@ -493,7 +494,6 @@ class TestTypeVariables:
         list_t1 = ExprType(TypeCode.LIST, [T1])
         list_int = list_t1.substitute({TypeCode.TYPEVAR_T1: ExprType("int")})
         assert list_int == ExprType(TypeCode.LIST, [ExprType("int")])
-
 
 
 class TestUnknownType:
@@ -638,7 +638,9 @@ class TestUnknownType:
         assert ExprValue.unresolved(ExprType("int")) != ExprValue(None)
 
     def test_exprvalue_unknown_repr(self) -> None:
-        assert repr(ExprValue.unresolved(ExprType("int"))) == 'ExprValue.unresolved(ExprType("int"))'
+        assert (
+            repr(ExprValue.unresolved(ExprType("int"))) == 'ExprValue.unresolved(ExprType("int"))'
+        )
         assert (
             repr(ExprValue.unresolved("list[string]"))
             == 'ExprValue.unresolved(ExprType("list[string]"))'

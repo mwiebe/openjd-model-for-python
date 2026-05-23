@@ -34,7 +34,9 @@ class TestCopyUsedSymtabValues:
     def test_missing_symbol_no_error(self):
         src = SymbolTable()
         dest = SymbolTable()
-        FormatString("{{Param.Missing + Task.Param.Also.Missing}}").copy_used_symtab_values(src, dest)
+        FormatString("{{Param.Missing + Task.Param.Also.Missing}}").copy_used_symtab_values(
+            src, dest
+        )
 
         assert dest.keys == set()
 

@@ -154,9 +154,6 @@ class TestMergeTemplates_v2023_09:
         # THEN
         # Compare as sets of frozen items for order-agnostic comparison
         def _to_comparable(param_list):
-            return {
-                tuple(sorted(p.items()))
-                for p in param_list
-            }
+            return {tuple(sorted(p.items())) for p in param_list}
 
         assert _to_comparable(result) == _to_comparable(expected)

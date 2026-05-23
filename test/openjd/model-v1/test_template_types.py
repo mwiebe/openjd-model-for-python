@@ -94,11 +94,16 @@ class TestJobTemplateAccessors:
         assert steps[0].name == "S"
 
     def test_steps_with_multiple(self):
-        t = _job_template(steps=[
-            {"name": "A", "script": {"actions": {"onRun": {"command": "echo"}}}},
-            {"name": "B", "dependencies": [{"dependsOn": "A"}],
-             "script": {"actions": {"onRun": {"command": "echo"}}}},
-        ])
+        t = _job_template(
+            steps=[
+                {"name": "A", "script": {"actions": {"onRun": {"command": "echo"}}}},
+                {
+                    "name": "B",
+                    "dependencies": [{"dependsOn": "A"}],
+                    "script": {"actions": {"onRun": {"command": "echo"}}},
+                },
+            ]
+        )
         assert [s.name for s in t.steps] == ["A", "B"]
 
     def test_job_environments_none_when_absent(self):
@@ -107,10 +112,12 @@ class TestJobTemplateAccessors:
         assert t.jobEnvironments is None  # camelCase alias
 
     def test_job_environments_with_envs(self):
-        t = _job_template(jobEnvironments=[
-            {"name": "Env1", "variables": {"X": "1"}},
-            {"name": "Env2", "variables": {"Y": "2"}},
-        ])
+        t = _job_template(
+            jobEnvironments=[
+                {"name": "Env1", "variables": {"X": "1"}},
+                {"name": "Env2", "variables": {"Y": "2"}},
+            ]
+        )
         envs = t.jobEnvironments
         assert envs is not None
         assert len(envs) == 2
@@ -118,9 +125,11 @@ class TestJobTemplateAccessors:
         assert [e.name for e in envs] == ["Env1", "Env2"]
 
     def test_job_environments_camelcase_alias(self):
-        t = _job_template(jobEnvironments=[
-            {"name": "Env1", "variables": {"X": "1"}},
-        ])
+        t = _job_template(
+            jobEnvironments=[
+                {"name": "Env1", "variables": {"X": "1"}},
+            ]
+        )
         assert t.job_environments is not None
         assert t.jobEnvironments is not None
         # Same content (each call constructs new pyclass instances —
@@ -130,10 +139,12 @@ class TestJobTemplateAccessors:
 
 class TestEnvironmentTemplateAccessors:
     def test_environment_accessor(self):
-        et = decode_environment_template(template={
-            "specificationVersion": "environment-2023-09",
-            "environment": {"name": "EnvX", "variables": {"K": "v"}},
-        })
+        et = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "environment": {"name": "EnvX", "variables": {"K": "v"}},
+            }
+        )
         assert isinstance(et, EnvironmentTemplate)
         e = et.environment
         assert isinstance(e, Environment)
@@ -142,13 +153,15 @@ class TestEnvironmentTemplateAccessors:
 
 class TestStepTemplate:
     def test_basic_fields(self):
-        t = _job_template(steps=[
-            {
-                "name": "S",
-                "description": "a step",
-                "script": {"actions": {"onRun": {"command": "echo"}}},
-            }
-        ])
+        t = _job_template(
+            steps=[
+                {
+                    "name": "S",
+                    "description": "a step",
+                    "script": {"actions": {"onRun": {"command": "echo"}}},
+                }
+            ]
+        )
         s = t.steps[0]
         assert s.name == "S"
         assert s.description == "a step"
@@ -157,11 +170,16 @@ class TestStepTemplate:
         assert s.host_requirements is None
 
     def test_dependencies(self):
-        t = _job_template(steps=[
-            {"name": "A", "script": {"actions": {"onRun": {"command": "echo"}}}},
-            {"name": "B", "dependencies": [{"dependsOn": "A"}],
-             "script": {"actions": {"onRun": {"command": "echo"}}}},
-        ])
+        t = _job_template(
+            steps=[
+                {"name": "A", "script": {"actions": {"onRun": {"command": "echo"}}}},
+                {
+                    "name": "B",
+                    "dependencies": [{"dependsOn": "A"}],
+                    "script": {"actions": {"onRun": {"command": "echo"}}},
+                },
+            ]
+        )
         deps = t.steps[1].dependencies
         assert deps is not None
         assert len(deps) == 1
@@ -170,19 +188,21 @@ class TestStepTemplate:
         assert deps[0].dependsOn == "A"  # camelCase alias
 
     def test_host_requirements(self):
-        t = _job_template(steps=[
-            {
-                "name": "S",
-                "hostRequirements": {
-                    "amounts": [{"name": "amount.worker.vcpu", "min": "4", "max": "8"}],
-                    "attributes": [
-                        {"name": "attr.worker.os.family", "anyOf": ["linux"]},
-                        {"name": "attr.worker.cpu.arch", "allOf": ["x86_64"]},
-                    ],
-                },
-                "script": {"actions": {"onRun": {"command": "echo"}}},
-            }
-        ])
+        t = _job_template(
+            steps=[
+                {
+                    "name": "S",
+                    "hostRequirements": {
+                        "amounts": [{"name": "amount.worker.vcpu", "min": "4", "max": "8"}],
+                        "attributes": [
+                            {"name": "attr.worker.os.family", "anyOf": ["linux"]},
+                            {"name": "attr.worker.cpu.arch", "allOf": ["x86_64"]},
+                        ],
+                    },
+                    "script": {"actions": {"onRun": {"command": "echo"}}},
+                }
+            ]
+        )
         s = t.steps[0]
         hr = s.host_requirements
         assert isinstance(hr, HostRequirements)
@@ -204,15 +224,15 @@ class TestStepTemplate:
         assert attrs[1].all_of[0].raw() == "x86_64"
 
     def test_step_environments(self):
-        t = _job_template(steps=[
-            {
-                "name": "S",
-                "stepEnvironments": [
-                    {"name": "StepEnv", "variables": {"Y": "2"}}
-                ],
-                "script": {"actions": {"onRun": {"command": "echo"}}},
-            }
-        ])
+        t = _job_template(
+            steps=[
+                {
+                    "name": "S",
+                    "stepEnvironments": [{"name": "StepEnv", "variables": {"Y": "2"}}],
+                    "script": {"actions": {"onRun": {"command": "echo"}}},
+                }
+            ]
+        )
         s = t.steps[0]
         ses = s.step_environments
         assert ses is not None and len(ses) == 1
@@ -220,28 +240,32 @@ class TestStepTemplate:
         assert ses[0].name == "StepEnv"
 
     def test_simple_action_sugar(self):
-        t = _job_template(
-            extensions=["FEATURE_BUNDLE_1"],
-            steps=[
-                {
-                    "name": "S",
-                    "bash": {"script": "echo hi"},
-                }
-            ],
-            supported_extensions=["FEATURE_BUNDLE_1"],
-        ) if False else decode_job_template(
-            template={
-                "specificationVersion": "jobtemplate-2023-09",
-                "name": "T",
-                "extensions": ["FEATURE_BUNDLE_1"],
-                "steps": [
+        t = (
+            _job_template(
+                extensions=["FEATURE_BUNDLE_1"],
+                steps=[
                     {
                         "name": "S",
                         "bash": {"script": "echo hi"},
                     }
                 ],
-            },
-            supported_extensions=["FEATURE_BUNDLE_1"],
+                supported_extensions=["FEATURE_BUNDLE_1"],
+            )
+            if False
+            else decode_job_template(
+                template={
+                    "specificationVersion": "jobtemplate-2023-09",
+                    "name": "T",
+                    "extensions": ["FEATURE_BUNDLE_1"],
+                    "steps": [
+                        {
+                            "name": "S",
+                            "bash": {"script": "echo hi"},
+                        }
+                    ],
+                },
+                supported_extensions=["FEATURE_BUNDLE_1"],
+            )
         )
         s = t.steps[0]
         assert s.script is None
@@ -252,10 +276,12 @@ class TestStepTemplate:
 
 class TestEnvironment:
     def test_minimal(self):
-        et = decode_environment_template(template={
-            "specificationVersion": "environment-2023-09",
-            "environment": {"name": "E", "variables": {"X": "1"}},
-        })
+        et = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "environment": {"name": "E", "variables": {"X": "1"}},
+            }
+        )
         e = et.environment
         assert e.name == "E"
         assert e.description is None
@@ -264,17 +290,19 @@ class TestEnvironment:
         assert e.variables["X"].raw() == "1"
 
     def test_with_script(self):
-        et = decode_environment_template(template={
-            "specificationVersion": "environment-2023-09",
-            "environment": {
-                "name": "E",
-                "description": "an env",
-                "script": {
-                    "actions": {"onEnter": {"command": "echo", "args": ["enter"]}},
-                    "embeddedFiles": [{"name": "f", "type": "TEXT", "data": "hello"}],
+        et = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "environment": {
+                    "name": "E",
+                    "description": "an env",
+                    "script": {
+                        "actions": {"onEnter": {"command": "echo", "args": ["enter"]}},
+                        "embeddedFiles": [{"name": "f", "type": "TEXT", "data": "hello"}],
+                    },
                 },
-            },
-        })
+            }
+        )
         e = et.environment
         assert e.description == "an env"
         assert isinstance(e.script, EnvironmentScript)
@@ -287,17 +315,19 @@ class TestEnvironment:
 
 class TestStepScript:
     def test_actions_and_embedded_files(self):
-        t = _job_template(steps=[
-            {
-                "name": "S",
-                "script": {
-                    "actions": {"onRun": {"command": "echo"}},
-                    "embeddedFiles": [
-                        {"name": "f", "type": "TEXT", "data": "hello"},
-                    ],
-                },
-            }
-        ])
+        t = _job_template(
+            steps=[
+                {
+                    "name": "S",
+                    "script": {
+                        "actions": {"onRun": {"command": "echo"}},
+                        "embeddedFiles": [
+                            {"name": "f", "type": "TEXT", "data": "hello"},
+                        ],
+                    },
+                }
+            ]
+        )
         s = t.steps[0]
         assert isinstance(s.script, StepScript)
         assert isinstance(s.script.actions, StepActions)
@@ -320,24 +350,26 @@ class TestAction:
         assert on_run.cancelation is None
 
     def test_full(self):
-        t = _job_template(steps=[
-            {
-                "name": "S",
-                "script": {
-                    "actions": {
-                        "onRun": {
-                            "command": "echo",
-                            "args": ["a", "b"],
-                            "timeout": "60",
-                            "cancelation": {
-                                "mode": "NOTIFY_THEN_TERMINATE",
-                                "notifyPeriodInSeconds": "30",
-                            },
+        t = _job_template(
+            steps=[
+                {
+                    "name": "S",
+                    "script": {
+                        "actions": {
+                            "onRun": {
+                                "command": "echo",
+                                "args": ["a", "b"],
+                                "timeout": "60",
+                                "cancelation": {
+                                    "mode": "NOTIFY_THEN_TERMINATE",
+                                    "notifyPeriodInSeconds": "30",
+                                },
+                            }
                         }
-                    }
-                },
-            }
-        ])
+                    },
+                }
+            ]
+        )
         on_run = t.steps[0].script.actions.on_run
         assert on_run.command.raw() == "echo"
         assert [a.raw() for a in on_run.args] == ["a", "b"]

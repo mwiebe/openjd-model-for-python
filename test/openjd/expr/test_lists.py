@@ -74,6 +74,7 @@ class TestListLiteralTypeInference:
     def test_nested_path_string_coerces_values(self) -> None:
         """Inner list[path] elements must be coerced to list[string] (evaluator path)."""
         import sys
+
         result = evaluate_expression('[[path("/a")], ["b"]]')
         inner = result.item()
         assert isinstance(inner[0][0], str)

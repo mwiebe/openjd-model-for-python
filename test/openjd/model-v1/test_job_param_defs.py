@@ -37,9 +37,7 @@ def _decode_with_params(*params, extensions=None):
         "specificationVersion": "jobtemplate-2023-09",
         "name": "T",
         "parameterDefinitions": list(params),
-        "steps": [
-            {"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}
-        ],
+        "steps": [{"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}],
     }
     if extensions:
         template["extensions"] = extensions
@@ -51,13 +49,13 @@ def _decode_with_params(*params, extensions=None):
 
 class TestEmptyCase:
     def test_no_parameter_definitions_returns_none(self):
-        t = decode_job_template(template={
-            "specificationVersion": "jobtemplate-2023-09",
-            "name": "T",
-            "steps": [
-                {"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}
-            ],
-        })
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [{"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}],
+            }
+        )
         assert t.parameter_definitions is None
         assert t.parameterDefinitions is None  # camelCase alias
 
@@ -76,15 +74,17 @@ class TestJobStringParameterDefinition:
         assert d.description is None
 
     def test_full(self):
-        t = _decode_with_params({
-            "name": "S",
-            "type": "STRING",
-            "description": "a string",
-            "default": "hello",
-            "allowedValues": ["hello", "world"],
-            "minLength": 1,
-            "maxLength": 100,
-        })
+        t = _decode_with_params(
+            {
+                "name": "S",
+                "type": "STRING",
+                "description": "a string",
+                "default": "hello",
+                "allowedValues": ["hello", "world"],
+                "minLength": 1,
+                "maxLength": 100,
+            }
+        )
         d = t.parameter_definitions[0]
         assert isinstance(d, JobStringParameterDefinition)
         assert d.description == "a string"
@@ -99,14 +99,16 @@ class TestJobStringParameterDefinition:
 
 class TestJobIntParameterDefinition:
     def test_full(self):
-        t = _decode_with_params({
-            "name": "I",
-            "type": "INT",
-            "default": 42,
-            "minValue": 1,
-            "maxValue": 100,
-            "allowedValues": [1, 2, 42],
-        })
+        t = _decode_with_params(
+            {
+                "name": "I",
+                "type": "INT",
+                "default": 42,
+                "minValue": 1,
+                "maxValue": 100,
+                "allowedValues": [1, 2, 42],
+            }
+        )
         d = t.parameter_definitions[0]
         assert isinstance(d, JobIntParameterDefinition)
         assert d.type == JobParameterType.INT
@@ -120,13 +122,15 @@ class TestJobIntParameterDefinition:
 
 class TestJobFloatParameterDefinition:
     def test_full(self):
-        t = _decode_with_params({
-            "name": "F",
-            "type": "FLOAT",
-            "default": 3.14,
-            "minValue": 0.0,
-            "maxValue": 10.0,
-        })
+        t = _decode_with_params(
+            {
+                "name": "F",
+                "type": "FLOAT",
+                "default": 3.14,
+                "minValue": 0.0,
+                "maxValue": 10.0,
+            }
+        )
         d = t.parameter_definitions[0]
         assert isinstance(d, JobFloatParameterDefinition)
         assert d.type == JobParameterType.FLOAT
@@ -137,15 +141,17 @@ class TestJobFloatParameterDefinition:
 
 class TestJobPathParameterDefinition:
     def test_full(self):
-        t = _decode_with_params({
-            "name": "P",
-            "type": "PATH",
-            "default": "/tmp/x",
-            "minLength": 1,
-            "maxLength": 256,
-            "objectType": "FILE",
-            "dataFlow": "IN",
-        })
+        t = _decode_with_params(
+            {
+                "name": "P",
+                "type": "PATH",
+                "default": "/tmp/x",
+                "minLength": 1,
+                "maxLength": 256,
+                "objectType": "FILE",
+                "dataFlow": "IN",
+            }
+        )
         d = t.parameter_definitions[0]
         assert isinstance(d, JobPathParameterDefinition)
         assert d.type == JobParameterType.PATH
@@ -189,8 +195,13 @@ class TestExprBoolVariants:
 class TestExprRangeExprVariant:
     def test_full(self):
         t = _decode_with_params(
-            {"name": "R", "type": "RANGE_EXPR", "default": "1-10",
-             "minLength": 1, "maxLength": 100},
+            {
+                "name": "R",
+                "type": "RANGE_EXPR",
+                "default": "1-10",
+                "minLength": 1,
+                "maxLength": 100,
+            },
             extensions=["EXPR"],
         )
         d = t.parameter_definitions[0]
@@ -204,8 +215,13 @@ class TestExprRangeExprVariant:
 class TestExprListVariants:
     def test_list_string(self):
         t = _decode_with_params(
-            {"name": "LS", "type": "LIST[STRING]", "default": ["a", "b"],
-             "minLength": 1, "maxLength": 5},
+            {
+                "name": "LS",
+                "type": "LIST[STRING]",
+                "default": ["a", "b"],
+                "minLength": 1,
+                "maxLength": 5,
+            },
             extensions=["EXPR"],
         )
         d = t.parameter_definitions[0]
@@ -217,8 +233,13 @@ class TestExprListVariants:
 
     def test_list_path(self):
         t = _decode_with_params(
-            {"name": "LP", "type": "LIST[PATH]", "default": ["/x", "/y"],
-             "objectType": "DIRECTORY", "dataFlow": "OUT"},
+            {
+                "name": "LP",
+                "type": "LIST[PATH]",
+                "default": ["/x", "/y"],
+                "objectType": "DIRECTORY",
+                "dataFlow": "OUT",
+            },
             extensions=["EXPR"],
         )
         d = t.parameter_definitions[0]
@@ -296,14 +317,16 @@ class TestMultipleDefinitions:
 
 class TestEnvironmentTemplate:
     def test_parameter_definitions_accessor(self):
-        et = decode_environment_template(template={
-            "specificationVersion": "environment-2023-09",
-            "parameterDefinitions": [
-                {"name": "S", "type": "STRING", "default": "x"},
-                {"name": "I", "type": "INT", "default": 5},
-            ],
-            "environment": {"name": "E", "variables": {"v": "1"}},
-        })
+        et = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "parameterDefinitions": [
+                    {"name": "S", "type": "STRING", "default": "x"},
+                    {"name": "I", "type": "INT", "default": 5},
+                ],
+                "environment": {"name": "E", "variables": {"v": "1"}},
+            }
+        )
         defs = et.parameter_definitions
         assert defs is not None
         assert len(defs) == 2
@@ -313,8 +336,10 @@ class TestEnvironmentTemplate:
         assert et.parameterDefinitions is not None
 
     def test_parameter_definitions_none_when_absent(self):
-        et = decode_environment_template(template={
-            "specificationVersion": "environment-2023-09",
-            "environment": {"name": "E", "variables": {"v": "1"}},
-        })
+        et = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "environment": {"name": "E", "variables": {"v": "1"}},
+            }
+        )
         assert et.parameter_definitions is None
