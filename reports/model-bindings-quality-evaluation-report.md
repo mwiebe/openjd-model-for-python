@@ -1154,7 +1154,7 @@ fix should land, and (where applicable) suggests a
 
 ### Medium priority — surface visibility / wrapper module
 
-5. **Re-export `ModelValidationError` and `UnsupportedSchema`
+5. ~~**Re-export `ModelValidationError` and `UnsupportedSchema`
    at the `openjd.model._v1` top level.** The spec's example
    code uses `from openjd.model import ModelValidationError,
    UnsupportedSchema`. Today, only `DecodeValidationError`
@@ -1169,7 +1169,14 @@ fix should land, and (where applicable) suggests a
    )
    ```
 
-   and add to `__all__`.
+   and add to `__all__`.~~ **Resolved.** Both classes are now
+   re-exported from `openjd.model._v1` alongside
+   `DecodeValidationError`. The class objects are identical to
+   those in the `.errors` submodule, so an `except` on either
+   form catches the other. Spec's Module Layout table updated
+   to call out the new re-exports. Pinned by a new test in
+   `test/openjd/model_v1/test_importable.py::test_top_level_error_classes_re_exported`
+   (identity check + presence in `__all__`).
 
 6. ~~**Re-export `decode_job_template_str` and
    `decode_environment_template_str` through the wrapper.**

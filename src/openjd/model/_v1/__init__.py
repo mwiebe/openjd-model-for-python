@@ -63,9 +63,17 @@ from openjd._openjd_rs import (
     SpecificationRevision as _RsSpecificationRevision,
 )
 
-# Errors used in compat-shim function bodies below (e.g.
-# ``document_string_to_object`` re-raises as ``DecodeValidationError``)
-from openjd._openjd_rs import DecodeValidationError
+# Errors re-exported at top level for convenience. The full set lives
+# in ``openjd.model._v1.errors``; these three are the most commonly
+# referenced and appear directly in user code that catches decode and
+# validation failures. ``DecodeValidationError`` is also used by
+# compat-shim function bodies below (e.g. ``document_string_to_object``
+# re-raises as ``DecodeValidationError``).
+from openjd._openjd_rs import (
+    DecodeValidationError,
+    ModelValidationError,
+    UnsupportedSchema,
+)
 
 # Types/template/job submodules — re-export so users can do:
 #   from openjd.model._v1 import template, job, types, errors
@@ -562,8 +570,11 @@ __all__ = (
     "CallerLimits",
     "DocumentType",
     "ModelProfile",
-    # Errors raised by helper functions in this module
+    # Errors re-exported from ``openjd.model._v1.errors`` for
+    # top-level convenience (the full set lives in the submodule).
     "DecodeValidationError",
+    "ModelValidationError",
+    "UnsupportedSchema",
     # openjd.expr re-exports (legacy compat)
     "ExpressionError",
     "FormatString",
