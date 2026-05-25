@@ -10,7 +10,9 @@ import yaml
 from openjd.model._v1 import (
     OpenJDModel,
     decode_environment_template,
+    decode_environment_template_str,
     decode_job_template,
+    decode_job_template_str,
     decode_template,
     document_string_to_object,
 )
@@ -293,3 +295,115 @@ def test_template_extensions_list(template, template_type, decode_function) -> N
     # Multiple known extensions can be enabled simultaneously
     template["extensions"] = ["TASK_CHUNKING", "EXPR"]
     decode_function(template=template, supported_extensions=["TASK_CHUNKING", "EXPR"])
+
+
+class TestDecodeJobTemplateStr:
+    """``decode_job_template_str`` wrapper: parses YAML or JSON
+    directly, no intermediate dict. The wrapper lives on
+    ``openjd.model._v1`` (re-exported); the underlying Rust function
+    is in ``openjd._openjd_rs``."""
+
+    _VALID_YAML = """
+specificationVersion: jobtemplate-2023-09
+name: SimpleJob
+steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["hello"]
+"""
+    _VALID_JSON = json.dumps(
+        {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": "JsonJob",
+            "steps": [
+                {
+                    "name": "Step1",
+                    "script": {"actions": {"onRun": {"command": "echo", "args": ["hi"]}}},
+                }
+            ],
+        }
+    )
+
+    def test_yaml_default(self) -> None:
+        t = decode_job_template_str(self._VALID_YAML)
+        assert isinstance(t, JobTemplate)
+        assert t.name == "SimpleJob"
+
+    def test_yaml_explicit(self) -> None:
+        t = decode_job_template_str(self._VALID_YAML, DocumentType.YAML)
+        assert t.name == "SimpleJob"
+
+    def test_json_explicit(self) -> None:
+        t = decode_job_template_str(self._VALID_JSON, DocumentType.JSON)
+        assert t.name == "JsonJob"
+
+    def test_json_via_yaml_default(self) -> None:
+        # YAML is a JSON superset; JSON parses fine under the YAML
+        # default. Pin that.
+        t = decode_job_template_str(self._VALID_JSON)
+        assert t.name == "JsonJob"
+
+    def test_supported_extensions_forwarded(self) -> None:
+        # Template requests EXPR; supported_extensions allowlist must
+        # include it for decoding to succeed.
+        with_ext = """
+specificationVersion: jobtemplate-2023-09
+name: ExprJob
+extensions: ["EXPR"]
+steps:
+  - name: S
+    script:
+      actions:
+        onRun: {command: echo, args: ["hi"]}
+"""
+        # Allowed.
+        t = decode_job_template_str(with_ext, supported_extensions=["EXPR"])
+        assert t.name == "ExprJob"
+        # Rejected with empty allowlist.
+        with pytest.raises(ModelValidationError, match="Unsupported extension"):
+            decode_job_template_str(with_ext)
+
+    def test_invalid_yaml_raises(self) -> None:
+        with pytest.raises(DecodeValidationError):
+            decode_job_template_str("specificationVersion: nope")
+
+
+class TestDecodeEnvironmentTemplateStr:
+    """``decode_environment_template_str`` wrapper: parses YAML or
+    JSON directly. Mirrors ``decode_job_template_str`` for environment
+    templates."""
+
+    _VALID_YAML = """
+specificationVersion: environment-2023-09
+environment:
+  name: PythonVenv
+  script:
+    actions:
+      onEnter: {command: python, args: ["-m", "venv", ".venv"]}
+      onExit:  {command: rm, args: ["-rf", ".venv"]}
+"""
+    _VALID_JSON = json.dumps(
+        {
+            "specificationVersion": "environment-2023-09",
+            "environment": {
+                "name": "Env1",
+                "script": {"actions": {"onEnter": {"command": "echo", "args": ["enter"]}}},
+            },
+        }
+    )
+
+    def test_yaml_default(self) -> None:
+        e = decode_environment_template_str(self._VALID_YAML)
+        assert isinstance(e, EnvironmentTemplate)
+        assert e.environment.name == "PythonVenv"
+
+    def test_json_explicit(self) -> None:
+        e = decode_environment_template_str(self._VALID_JSON, DocumentType.JSON)
+        assert e.environment.name == "Env1"
+
+    def test_invalid_yaml_raises(self) -> None:
+        with pytest.raises(DecodeValidationError):
+            decode_environment_template_str(": not a mapping")

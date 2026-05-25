@@ -48,6 +48,8 @@ from openjd._openjd_rs import (
     # Decode functions (raw)
     decode_job_template_dict,
     decode_environment_template_dict,
+    decode_job_template_str as _rs_decode_job_template_str,
+    decode_environment_template_str as _rs_decode_environment_template_str,
     # Job creation
     create_job,
     preprocess_job_parameters,
@@ -364,6 +366,74 @@ def decode_environment_template(
     )
 
 
+def decode_job_template_str(
+    document: str,
+    format: DocumentType = DocumentType.YAML,
+    *,
+    supported_extensions: Optional[list[str]] = None,
+    caller_limits: "Optional[CallerLimits]" = None,
+) -> "template.JobTemplate":
+    """Decode and validate a job template from a YAML or JSON string.
+
+    Parses ``document`` as a YAML (default) or JSON document, then
+    validates it the same way :func:`decode_job_template` does. This is
+    a convenience wrapper around the dict-shaped entry point — pass
+    ``DocumentType.JSON`` to force JSON parsing instead of the
+    YAML-superset default.
+
+    Args:
+        document: The template source as a YAML or JSON string.
+        format: Document type. Defaults to ``DocumentType.YAML``
+            (which is also a superset of JSON).
+        supported_extensions: The caller's allowlist of OpenJD
+            extension names; see :func:`decode_job_template`.
+        caller_limits: Optional :class:`CallerLimits` to tighten
+            spec-defined limits.
+
+    Returns:
+        The parsed :class:`openjd.model._v1.template.JobTemplate`.
+    """
+    return _rs_decode_job_template_str(
+        document,
+        format,
+        supported_extensions=(
+            list(supported_extensions) if supported_extensions is not None else None
+        ),
+        caller_limits=caller_limits,
+    )
+
+
+def decode_environment_template_str(
+    document: str,
+    format: DocumentType = DocumentType.YAML,
+    *,
+    supported_extensions: Optional[list[str]] = None,
+) -> "template.EnvironmentTemplate":
+    """Decode and validate an environment template from a YAML or JSON string.
+
+    Parses ``document`` as a YAML (default) or JSON document, then
+    validates it the same way :func:`decode_environment_template` does.
+
+    Args:
+        document: The template source as a YAML or JSON string.
+        format: Document type. Defaults to ``DocumentType.YAML``
+            (which is also a superset of JSON).
+        supported_extensions: The caller's allowlist of OpenJD
+            extension names; see :func:`decode_job_template`.
+
+    Returns:
+        The parsed :class:`openjd.model._v1.template.EnvironmentTemplate`.
+        Environment templates do not accept caller limits.
+    """
+    return _rs_decode_environment_template_str(
+        document,
+        format,
+        supported_extensions=(
+            list(supported_extensions) if supported_extensions is not None else None
+        ),
+    )
+
+
 def parse_model(*, model: Any = None, obj: dict[str, Any]) -> Any:
     """Decode a template from a dict, auto-detecting the type.
 
@@ -463,7 +533,9 @@ __all__ = (
     # Decode + create entry points
     "create_job",
     "decode_environment_template",
+    "decode_environment_template_str",
     "decode_job_template",
+    "decode_job_template_str",
     "decode_template",
     "document_string_to_object",
     "merge_job_parameter_definitions",

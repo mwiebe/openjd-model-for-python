@@ -64,17 +64,11 @@ symbol from its canonical location.
 
 | Submodule | Contents |
 |---|---|
-| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_environment_template`, `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `parse_model`, `decode_template`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), Python-only compat (`SpecificationRevision`, `TemplateSpecificationVersion`, `ParameterValue`, `ValueReferenceConstants`, `RevisionExtensions`, `CancelationMethod*`, `IntRangeExpr`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`), capability-validation helpers, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`, `FormatStringError`). Also re-exports `DecodeValidationError`. |
+| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `parse_model`, `decode_template`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), Python-only compat (`SpecificationRevision`, `TemplateSpecificationVersion`, `ParameterValue`, `ValueReferenceConstants`, `RevisionExtensions`, `CancelationMethod*`, `IntRangeExpr`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`), capability-validation helpers, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`, `FormatStringError`). Also re-exports `DecodeValidationError`. |
 | `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the typed `JobParameterDefinition`/`TaskParameterDefinition`/`*UserInterface` variants, etc. |
 | `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, and the job-time `EmbeddedFile`. |
 | `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `TaskParameterType`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision` (Rust pyclass form), `CallerLimits`, `ValidationContext`. |
 | `openjd.model._v1.errors` | Exception classes raised by decode/create paths: `DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`. |
-
-Decode/create functions like `decode_job_template_str` and
-`decode_environment_template_str` that are not yet re-exported
-through the wrapper are accessed from `openjd._openjd_rs` directly;
-these will be re-exported through `openjd.model._v1` in a future
-release.
 
 ## Functions
 
@@ -157,10 +151,10 @@ Will be removed in a future release.
 #### `decode_job_template_str`
 
 Decode directly from a YAML or JSON string — no intermediate dict.
+Convenience wrapper around the dict-shaped entry point above.
 
 ```python
-from openjd._openjd_rs import decode_job_template_str
-from openjd.model._v1 import DocumentType
+from openjd.model._v1 import decode_job_template_str, DocumentType
 
 yaml_str = """
 specificationVersion: jobtemplate-2023-09
@@ -176,9 +170,18 @@ steps:
 template = decode_job_template_str(yaml_str, DocumentType.YAML)
 ```
 
-#### `decode_environment_template` / `decode_environment_template_str`
+The ``format`` argument defaults to ``DocumentType.YAML``, which is
+also a superset of JSON, so most callers can omit it. Pass
+``DocumentType.JSON`` to force strict JSON parsing — useful when
+the source is known to be JSON and the caller wants JSON-only
+diagnostics on parse failures.
 
-Same pattern for environment templates.
+``decode_job_template_str`` accepts the same ``supported_extensions``
+and ``caller_limits`` kwargs as :func:`decode_job_template`.
+
+#### `decode_environment_template`
+
+Decode and validate an environment template from a Python dict.
 
 ```python
 from openjd.model._v1 import decode_environment_template
@@ -196,6 +199,33 @@ env_template = decode_environment_template(template={
     }
 })
 ```
+
+``decode_environment_template`` accepts ``supported_extensions``
+with the same semantics as :func:`decode_job_template`. Environment
+templates do not accept ``caller_limits``.
+
+#### `decode_environment_template_str`
+
+Decode an environment template directly from a YAML or JSON string.
+
+```python
+from openjd.model._v1 import decode_environment_template_str, DocumentType
+
+yaml_str = """
+specificationVersion: environment-2023-09
+environment:
+  name: PythonVenv
+  script:
+    actions:
+      onEnter: {command: python, args: ["-m", "venv", ".venv"]}
+      onExit:  {command: rm, args: ["-rf", ".venv"]}
+"""
+env_template = decode_environment_template_str(yaml_str)
+```
+
+Same defaults as :func:`decode_job_template_str`: ``format``
+defaults to ``DocumentType.YAML``. Accepts ``supported_extensions``;
+environment templates do not accept ``caller_limits``.
 
 ### Job Creation
 

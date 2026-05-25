@@ -1075,12 +1075,30 @@ fix should land, and (where applicable) suggests a
 
    and add to `__all__`.
 
-6. **Re-export `decode_job_template_str` and
+6. ~~**Re-export `decode_job_template_str` and
    `decode_environment_template_str` through the wrapper.**
    Both are spec'd entry points. Today users must import them
    from `openjd._openjd_rs` directly — bypasses the wrapper's
    docstring helpers. Add the symbols to `__init__.py`'s
-   imports and `__all__`.
+   imports and `__all__`.~~ **Resolved.** Both functions are
+   now exposed as wrappers in `src/openjd/model/_v1/__init__.py`
+   that delegate to the underlying Rust functions. Each wrapper
+   carries a Sphinx-style docstring, accepts the same
+   ``supported_extensions`` (and ``caller_limits`` for the job
+   variant) kwargs as their dict-shaped peers, and returns the
+   appropriate `template.JobTemplate` /
+   `template.EnvironmentTemplate`. Both names are added to
+   ``__all__``. The spec gained two new dedicated subsections
+   (``decode_job_template_str`` and
+   ``decode_environment_template_str``) with examples, and the
+   "Module Layout" table no longer carries the workaround note
+   about importing from ``openjd._openjd_rs``. New regression
+   tests in
+   `test/openjd/model_v1/test_parse.py::TestDecodeJobTemplateStr`
+   (6 tests) and `…::TestDecodeEnvironmentTemplateStr` (3
+   tests) pin the YAML default, explicit YAML/JSON, JSON-via-YAML
+   default, ``supported_extensions`` forwarding, and invalid-input
+   error paths.
 
 7. ~~**Re-export structural pyclasses at the
    `openjd.model._v1` top level — or update the spec to use
