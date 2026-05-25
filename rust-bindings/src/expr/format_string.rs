@@ -100,6 +100,26 @@ impl PyFormatString {
         format!("FormatString(\"{}\")", self.inner.raw())
     }
 
+    /// Two `FormatString`s compare equal when their raw source
+    /// strings are equal. Lexically distinct inputs that would
+    /// resolve to the same value (e.g. `"{{ Param.X }}"` vs
+    /// `"{{Param.X}}"`) compare unequal — this preserves source
+    /// identity rather than canonicalising whitespace.
+    fn __eq__(&self, other: &Bound<'_, pyo3::PyAny>) -> PyResult<bool> {
+        let Ok(rhs) = other.extract::<PyRef<'_, PyFormatString>>() else {
+            return Ok(false);
+        };
+        Ok(self.inner.raw() == rhs.inner.raw())
+    }
+
+    /// Hash on the raw source string — same contract as `__eq__`.
+    fn __hash__(&self) -> u64 {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        self.inner.raw().hash(&mut h);
+        h.finish()
+    }
+
     /// Pickle support — round-trips through the raw input string.
     fn __reduce__<'py>(
         &self,

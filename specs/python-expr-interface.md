@@ -247,6 +247,17 @@ fully-qualified dotted leaf path. Both are sets and are documented
 alongside the Pydantic-based v0 reference whose contract this binding
 preserves.
 
+**Equality.** Two `SymbolTable`s compare equal when they contain the
+same set of dotted-path → value mappings. Insertion order in the
+underlying `HashMap` does not affect equality, and equality is
+recursive through nested subtables. `dict` is **not** auto-coerced
+for comparison — wrap it in `SymbolTable(...)` first if you want
+that.
+
+**Hashability.** `SymbolTable` is intentionally **not** hashable.
+`__setitem__` is supported, so the type is mutable; Python's hash/eq
+contract requires hashable types to be effectively immutable.
+
 `union(*others)` mirrors the v0 reference's combine-tables convenience.
 The Rust crate's underlying primitive is `SymbolTable::merge_from`,
 which mutates in place; `union` is the immutable equivalent built on
@@ -350,6 +361,20 @@ evaluate_expression("apply_path_mapping('/p')", profile=profile)
 # returns ExprValue.unresolved("path")
 ```
 
+**Equality and hashability.** Both `HostContext` and `ExprProfile`
+implement `__eq__` and `__hash__`.
+
+* `HostContext` compares variant-by-variant; `with_rules` carries a
+  list of `PathMappingRule`s and is compared by value (rule-by-rule
+  in order, not as a set — order is meaningful for path-mapping
+  resolution). Two distinct `with_rules` constructions with
+  identical rule lists are equal and hash equal.
+* `ExprProfile` compares on revision, extension set
+  (insertion-order independent), and host context. Profiles built
+  from the same arguments are equal and hash equal regardless of
+  construction path. The extension set is canonicalised (sorted
+  by debug repr) when hashing so set-equal extensions hash equal.
+
 ### `ParsedExpression`
 
 A parsed expression that can be inspected for symbol references and
@@ -412,6 +437,12 @@ d = rule.to_dict()
 # {"source_path_format": "POSIX", "source_path": "/mnt/shared", "destination_path": "/local/cache"}
 rule2 = PathMappingRule.from_dict(d)
 ```
+
+**Equality and hashability.** `PathMappingRule` implements `__eq__`
+and `__hash__` over the three fields. Two rules compare equal when
+they have identical `source_path_format`, `source_path`, and
+`destination_path`; equal rules hash equal so the type is suitable
+as a `set` / `dict` key.
 
 ### `RangeExpr`
 
@@ -479,6 +510,14 @@ result = fs.resolve(st)
 result.item()             # 43
 result.type.type_code     # TypeCode.INT
 ```
+
+**Equality and hashability.** `FormatString` implements `__eq__` and
+`__hash__` on the raw source string. Two format strings compare equal
+iff `a.raw() == b.raw()`; lexically distinct inputs that would
+resolve to the same value (e.g. `"{{ Param.X }}"` vs `"{{Param.X}}"`)
+compare unequal — this preserves source identity rather than
+canonicalising whitespace. Equal format strings hash equal, so the
+type is suitable as a `set` / `dict` key.
 
 ## Exceptions
 

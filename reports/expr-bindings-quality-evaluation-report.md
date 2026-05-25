@@ -19,15 +19,15 @@ longer exist — `apply_path_mapping` now flows through a `HostContext`
 that is part of `ExprProfile`, and target types are forwarded
 end-to-end.
 
-The remaining work is housekeeping rather than correctness: a small
-set of value/profile pyclasses (`FormatString`, `SymbolTable`,
-`PathMappingRule`, `HostContext`, `ExprProfile`) lack `__eq__`/`__hash__`
-implementations that the pure-Python reference inherits for free
-(frozen dataclass, `str` subclass, etc.), so pickle round-trips and
-direct value comparisons fall back to identity; the
-`FormatStringValidationError` exception class is registered but is not
-reachable from any public binding entry point today. The test-suite
-lint debt called out in the original draft of this report (16 ruff
+The remaining work is housekeeping rather than correctness. The
+five value/profile pyclasses that originally lacked
+`__eq__`/`__hash__` (`PathMappingRule`, `FormatString`,
+`HostContext`, `ExprProfile`, `SymbolTable`) all now compose
+value-shaped equality from their visible fields — see
+Recommendations 1-5. The `FormatStringValidationError` exception
+class is registered but is not reachable from any public binding
+entry point today. The test-suite lint debt called out in the
+original draft of this report (16 ruff
 errors under `test/openjd/expr/` plus 2 stragglers in a model_v1
 test file, totalling 18 workspace-wide) has been fully resolved
 (see Recommendation #10); `hatch run lint` is now clean.
@@ -225,7 +225,7 @@ symbol-by-symbol parity table.
 | `ParsedExpression` | class | class | ✓ |
 | `ParsedExpression.evaluate(*, values, library, target_type, …)` | method | method (adds `profile=`) | ✓ |
 | `PathFormat` | str enum | int enum (PyO3 `eq_int`) | ⚠ binding stores values as int; spec documents the difference indirectly |
-| `PathMappingRule(*, source_path_format, source_path, destination_path)` | frozen dataclass (gets `__eq__`/`__hash__` free) | pyclass | ⚠ binding lacks `__eq__`/`__hash__` (see §7) |
+| `PathMappingRule(*, source_path_format, source_path, destination_path)` | frozen dataclass (gets `__eq__`/`__hash__` free) | pyclass with composed `__eq__`/`__hash__` (Rec #1) | ✓ |
 | `PathMappingRule.apply(*, path, output_format=None) -> (bool, str)` | method | method | ✓ |
 | `PathMappingRule.to_dict / from_dict` | methods | methods | ✓ |
 | `RangeExpr(str)` | class | class | ✓ |
@@ -237,7 +237,7 @@ symbol-by-symbol parity table.
 | `ExpressionError.message_with_expr_prefix(prefix)` | method | method | ✓ |
 | `ExpressionTypeError` | subclass of `ExpressionError` | subclass | ✓ |
 | `DEFAULT_MEMORY_LIMIT / DEFAULT_OPERATION_LIMIT` | constants | constants | ✓ |
-| `FormatString` | reference: in `openjd.model._format_strings`, str-subclass with `__eq__`/`__hash__` | binding: in `openjd.expr`, no `__eq__`/`__hash__` | ⚠ moved into expr; binding lacks value equality (see §7) |
+| `FormatString` | reference: in `openjd.model._format_strings`, str-subclass with `__eq__`/`__hash__` | binding: in `openjd.expr`, composed `__eq__`/`__hash__` on `raw()` (Rec #2) | ✓ (location moved into `openjd.expr`) |
 | `FormatStringValidationError` | reference: `FormatStringError` in model | binding: registered, never raised from public API | ⚠ exception is unreachable (see §7) |
 | `FormatString.copy_used_symtab_values(source, dest)` | not in reference | method (new) | ⚠ binding-only; not in spec |
 | `ExprProfile`, `ExprRevision`, `ExprExtension`, `HostContext` | not in reference | classes (new) | ⚠ binding-only; the path-mapping API moved from per-call kwarg to profile-based |
@@ -346,56 +346,26 @@ spot-checks against `FormatString`, `ExprProfile`, and
 
 ### Equality and pickle round-trip gap on five types
 
-The pickle round-trip suite exercises every type listed in the spec's
-"Pickle Support" table, but for `FormatString`, `SymbolTable`,
-`PathMappingRule`, `HostContext`, and `ExprProfile` the test only
-verifies that the round-tripped object is well-formed — not that it
-compares equal to the original.
+(Resolved — see Recommendations 1-5.) The pickle round-trip suite
+originally exercised every type listed in the spec's "Pickle
+Support" table but only verified that the round-tripped object was
+well-formed, not that it compared equal to the original. The five
+gaps are now closed:
 
-```
->>> import openjd.expr as e, pickle
->>> r = e.PathMappingRule(source_path_format=e.PathFormat.POSIX,
-...                       source_path='/a', destination_path='/b')
->>> pickle.loads(pickle.dumps(r)) == r
-False
->>> e.FormatString('hello') == e.FormatString('hello')
-False
-```
+* `PathMappingRule` — composed `__eq__`/`__hash__` on the three
+  fields.
+* `FormatString` — composed on `raw()`.
+* `HostContext` — composed on the variant tag plus (for
+  `with_rules`) the rule list, walked by value so distinct `Arc`
+  allocations of the same rule list compare equal.
+* `ExprProfile` — composed on revision, extension set
+  (canonicalised), and host context.
+* `SymbolTable` — composed via recursive walk of the underlying
+  `openjd_expr::SymbolTable` tree. Intentionally not hashable.
 
-The reference's `PathMappingRule` is a `@dataclass(frozen=True)` and
-its `FormatString` is a `str` subclass, both of which have
-value-equality and hashing for free. The binding does not. This is the
-single largest behavioural gap between the binding and the reference
-today.
-
-A diagnostic landing in `test_known_gaps.py`:
-
-```python
-# test_known_gaps.py
-@pytest.mark.xfail(reason="PathMappingRule has no __eq__/__hash__ — see §7")
-def test_path_mapping_rule_value_equality() -> None:
-    a = PathMappingRule(source_path_format=PathFormat.POSIX,
-                        source_path="/a", destination_path="/b")
-    b = PathMappingRule(source_path_format=PathFormat.POSIX,
-                        source_path="/a", destination_path="/b")
-    assert a == b
-    assert hash(a) == hash(b)
-
-
-@pytest.mark.xfail(reason="FormatString has no __eq__/__hash__ — see §7")
-def test_format_string_value_equality() -> None:
-    a = FormatString("render --frame {{Param.Frame}}")
-    b = FormatString("render --frame {{Param.Frame}}")
-    assert a == b
-    assert hash(a) == hash(b)
-
-
-@pytest.mark.xfail(reason="HostContext has no __eq__ — see §7")
-def test_host_context_value_equality() -> None:
-    a = HostContext.unresolved()
-    b = HostContext.unresolved()
-    assert a == b
-```
+Tests live in `test/openjd/expr/test_equality.py` (43 tests).
+The pickle round-trip suite has been tightened to assert
+`loaded == original` end-to-end.
 
 ### `FormatStringValidationError` is unreachable
 
@@ -489,38 +459,81 @@ No correctness defects found in the current bindings.
 
 ### P1 — parity gaps
 
-1. **Implement `__eq__` and `__hash__` on `PathMappingRule`.** The
+All five P1 items have been resolved binding-side without any
+upstream change to the `openjd-rs` crates. The bindings compose
+each `__eq__`/`__hash__` from the visible field values rather
+than forwarding to `inner == inner` (which would require
+`PartialEq + Eq + Hash` on the underlying Rust types — additions
+that were prepared on a separate `expr-eq-hash` branch but
+deliberately not landed here, to keep this work
+independent of upstream review). Tests live in
+`test/openjd/expr/test_equality.py` (43 tests).
+
+1. ~~**Implement `__eq__` and `__hash__` on `PathMappingRule`.** The
    reference's `@dataclass(frozen=True)` provides both for free.
    Suggested location: `rust-bindings/src/expr/path_mapping.rs`,
    adding `#[pyclass(... eq, hash, frozen)]` and a `Hash` impl on
    `PyPathMappingRule` (the underlying `PathMappingRule` already
    derives `PartialEq, Eq, Hash`). Replace the `to_dict()`-based
    assertion in `test_pickle.py::test_path_mapping_rule_round_trip`
-   with a direct `loaded == rule` once the change lands.
+   with a direct `loaded == rule` once the change lands.~~
+   **Resolved.** `PyPathMappingRule` now has `__eq__` and
+   `__hash__` methods that compose on `source_path_format`,
+   `source_path`, and `destination_path`. `PathFormat` is hashed
+   by debug repr (it's a stable enum). The report claim that the
+   underlying `PathMappingRule` already derives `PartialEq, Eq,
+   Hash` was not actually true — composing on the visible fields
+   side-steps the need to land that derive upstream.
 
-2. **Implement `__eq__` and `__hash__` on `FormatString`.** Compare
+2. ~~**Implement `__eq__` and `__hash__` on `FormatString`.** Compare
    on `raw()`. The reference's `FormatString` (as a `str` subclass)
    compares via `str.__eq__`. Suggested location:
    `rust-bindings/src/expr/format_string.rs`, adding `__eq__(self,
    other) -> bool { self.inner.raw() == other.inner.raw() }` and a
-   matching `__hash__`.
+   matching `__hash__`.~~ **Resolved.** `PyFormatString.__eq__`
+   and `__hash__` compose on `inner.raw()`. Lexically distinct
+   inputs that would resolve to the same value (e.g.
+   `"{{ Param.X }}"` vs `"{{Param.X}}"`) compare unequal — this
+   preserves source identity rather than canonicalising
+   whitespace.
 
-3. **Implement `__eq__` on `HostContext`.**
+3. ~~**Implement `__eq__` on `HostContext`.**
    `HostContext.none() == HostContext.none()` should be `True`;
    `HostContext.with_rules(rules) == HostContext.with_rules(rules)`
    should compare the rules. The underlying `openjd_expr::HostContext`
    derives `PartialEq, Eq` so the implementation is a one-liner:
    `rust-bindings/src/expr/profile.rs`, `__eq__(self, other) -> bool
-   { self.inner == other.inner }`.
+   { self.inner == other.inner }`.~~ **Resolved.**
+   `PyHostContext.__eq__` and `__hash__` compose on the variant
+   tag plus (for `with_rules`) the rule list, walked by value —
+   distinct `Arc` allocations of the same rule list compare
+   equal. Helper functions `host_context_eq` / `host_context_hash`
+   in `profile.rs` are also reused by `ExprProfile.__eq__`. The
+   report claim about an upstream `PartialEq, Eq` derive on
+   `openjd_expr::HostContext` was likewise not true; composing
+   from the visible variant data avoids it.
 
-4. **Implement `__eq__` on `ExprProfile`.** Compare on the underlying
-   `inner == inner`. Same file as recommendation 3.
+4. ~~**Implement `__eq__` on `ExprProfile`.** Compare on the underlying
+   `inner == inner`. Same file as recommendation 3.~~
+   **Resolved.** `PyExprProfile.__eq__` composes on revision,
+   extension set (canonicalised order), and host context (via
+   `host_context_eq`). `__hash__` canonicalises the extension
+   set as a sorted-by-debug-repr tuple so profiles with the same
+   set hash equal regardless of `HashSet` insertion order.
 
-5. **Implement `__eq__` on `SymbolTable`.** Compare on the entries
+5. ~~**Implement `__eq__` on `SymbolTable`.** Compare on the entries
    exposed via `all_paths`. The reference doesn't have explicit
    `__eq__` either, but documenting the intent (and matching the
    pickle round-trip expectation in `test_pickle.py`) is valuable.
-   Suggested location: `rust-bindings/src/expr/symbol_table.rs`.
+   Suggested location: `rust-bindings/src/expr/symbol_table.rs`.~~
+   **Resolved.** `PySymbolTable.__eq__` walks the underlying
+   `openjd_expr::SymbolTable` recursively via the
+   `symbol_table_eq` helper, comparing keys at every level and
+   `ExprValue`s at the leaves. Insertion order in the underlying
+   `HashMap` does not affect equality. `SymbolTable` is
+   intentionally **not** hashable: `__setitem__` is supported, so
+   the type is mutable and Python's hash/eq contract requires
+   hashable types to be effectively immutable.
 
 ### P2 — housekeeping
 

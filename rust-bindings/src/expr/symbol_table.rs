@@ -162,4 +162,53 @@ impl PySymbolTable {
         }
         Ok(format!("SymbolTable({})", dict.repr()?))
     }
+
+    /// Two `SymbolTable`s compare equal when they contain the
+    /// same set of dotted-path → value mappings. Insertion order
+    /// in the underlying `HashMap` does not affect equality, and
+    /// equality is recursive through nested subtables. Returns
+    /// `False` for non-`SymbolTable` arguments — `dict` is **not**
+    /// auto-coerced (use the `SymbolTable(dict)` constructor for
+    /// that, then compare).
+    ///
+    /// `SymbolTable` is intentionally **not** hashable
+    /// (`__setitem__` is supported, so the contents can change
+    /// after construction — Python's hash/eq contract requires
+    /// hashable types to be effectively immutable).
+    fn __eq__(&self, other: &Bound<'_, pyo3::PyAny>) -> PyResult<bool> {
+        let Ok(rhs) = other.extract::<PyRef<'_, PySymbolTable>>() else {
+            return Ok(false);
+        };
+        Ok(symbol_table_eq(&self.inner, &rhs.inner))
+    }
+}
+
+/// Recursive value-equality on `openjd_expr::SymbolTable`. Two
+/// tables are equal iff they have the same keys at every level
+/// and equal leaf `ExprValue`s. The underlying crate does not
+/// derive `PartialEq` on `SymbolTable`, so we walk the tree.
+fn symbol_table_eq(a: &SymbolTable, b: &SymbolTable) -> bool {
+    use openjd_expr::symbol_table::SymbolTableEntry;
+    let a_keys: std::collections::HashSet<&str> = a.keys().collect();
+    let b_keys: std::collections::HashSet<&str> = b.keys().collect();
+    if a_keys != b_keys {
+        return false;
+    }
+    for key in a_keys {
+        match (a.get(key), b.get(key)) {
+            (Some(SymbolTableEntry::Value(va)), Some(SymbolTableEntry::Value(vb))) => {
+                if va != vb {
+                    return false;
+                }
+            }
+            (Some(SymbolTableEntry::Table(ta)), Some(SymbolTableEntry::Table(tb))) => {
+                if !symbol_table_eq(ta, tb) {
+                    return false;
+                }
+            }
+            // Type mismatch (Value vs Table) at the same key.
+            _ => return false,
+        }
+    }
+    true
 }

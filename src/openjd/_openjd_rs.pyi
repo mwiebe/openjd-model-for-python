@@ -621,6 +621,22 @@ class ExprProfile:
         """
 
     def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: typing.Any) -> builtins.bool:
+        r"""
+        Two `ExprProfile`s compare equal when they have the same
+        revision, the same extension set (insertion order
+        irrelevant — `extensions` is a `HashSet` internally), and
+        the same host context (per `HostContext.__eq__`).
+        """
+
+    def __hash__(self) -> builtins.int:
+        r"""
+        Hash on revision, extension set, and host context. The
+        extension set is hashed as a sorted-by-debug-repr tuple so
+        that profiles with the same set hash equal regardless of
+        `HashSet` insertion order.
+        """
+
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
         Pickle support — round-trips through `__init__(revision,
@@ -792,6 +808,20 @@ class FormatString:
 
     def __str__(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: typing.Any) -> builtins.bool:
+        r"""
+        Two `FormatString`s compare equal when their raw source
+        strings are equal. Lexically distinct inputs that would
+        resolve to the same value (e.g. `"{{ Param.X }}"` vs
+        `"{{Param.X}}"`) compare unequal — this preserves source
+        identity rather than canonicalising whitespace.
+        """
+
+    def __hash__(self) -> builtins.int:
+        r"""
+        Hash on the raw source string — same contract as `__eq__`.
+        """
+
     def __reduce__(self) -> tuple[type, tuple[builtins.str]]:
         r"""
         Pickle support — round-trips through the raw input string.
@@ -898,6 +928,21 @@ class HostContext:
         """
 
     def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: typing.Any) -> builtins.bool:
+        r"""
+        Two `HostContext`s compare equal when they are the same
+        variant and (for `with_rules`) carry identical rule lists in
+        the same order. Distinct `Arc` allocations of the same rule
+        list compare equal — comparison is by value, not by
+        allocation identity.
+        """
+
+    def __hash__(self) -> builtins.int:
+        r"""
+        Hash on the variant tag and (for `with_rules`) the rule
+        list. Equal host contexts hash equal.
+        """
+
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
         Pickle support — round-trips through one of the three
@@ -1591,6 +1636,20 @@ class PathMappingRule:
         destination_path: typing.Any,
     ) -> PathMappingRule: ...
     def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: typing.Any) -> builtins.bool:
+        r"""
+        Two `PathMappingRule`s compare equal when they have the
+        same `source_path_format`, `source_path`, and
+        `destination_path`. Returns `False` for non-rule
+        arguments.
+        """
+
+    def __hash__(self) -> builtins.int:
+        r"""
+        Hash on the same three fields used by `__eq__`. Equal
+        rules hash equal — required by Python's hash/eq contract.
+        """
+
     def apply(
         self, *, path: builtins.str, output_format: typing.Optional[PathFormat] = None
     ) -> tuple[builtins.bool, builtins.str]: ...
@@ -2167,6 +2226,22 @@ class SymbolTable:
         The dict shows each top-level key mapped to either an
         ``ExprValue`` (leaf) or a nested ``SymbolTable`` (subtable),
         recursing through nested subtables for free via Python's repr.
+        """
+
+    def __eq__(self, other: typing.Any) -> builtins.bool:
+        r"""
+        Two `SymbolTable`s compare equal when they contain the
+        same set of dotted-path → value mappings. Insertion order
+        in the underlying `HashMap` does not affect equality, and
+        equality is recursive through nested subtables. Returns
+        `False` for non-`SymbolTable` arguments — `dict` is **not**
+        auto-coerced (use the `SymbolTable(dict)` constructor for
+        that, then compare).
+
+        `SymbolTable` is intentionally **not** hashable
+        (`__setitem__` is supported, so the contents can change
+        after construction — Python's hash/eq contract requires
+        hashable types to be effectively immutable).
         """
 
 @typing.final
@@ -2902,8 +2977,7 @@ def preprocess_job_parameters(
 # `register_renamed_exception` / `m.add(...)` calls in `lib.rs` rather
 # than `#[pyclass]` / `#[pyfunction]` macros. Keep this block in sync
 # with the `mod_init` body whenever new exceptions or constants are
-# added. The `generate_stubs.sh` post-processor appends an identical
-# block on regeneration.
+# added.
 
 # openjd.expr exception classes (registered as ValueError subclasses).
 class ExpressionError(builtins.ValueError):

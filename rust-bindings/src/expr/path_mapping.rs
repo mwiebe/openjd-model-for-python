@@ -105,6 +105,31 @@ impl PyPathMappingRule {
         )
     }
 
+    /// Two `PathMappingRule`s compare equal when they have the
+    /// same `source_path_format`, `source_path`, and
+    /// `destination_path`. Returns `False` for non-rule
+    /// arguments.
+    fn __eq__(&self, other: &Bound<'_, pyo3::PyAny>) -> PyResult<bool> {
+        let Ok(rhs) = other.extract::<PyRef<'_, PyPathMappingRule>>() else {
+            return Ok(false);
+        };
+        Ok(self.inner.source_path_format == rhs.inner.source_path_format
+            && self.inner.source_path == rhs.inner.source_path
+            && self.inner.destination_path == rhs.inner.destination_path)
+    }
+
+    /// Hash on the same three fields used by `__eq__`. Equal
+    /// rules hash equal — required by Python's hash/eq contract.
+    fn __hash__(&self) -> u64 {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        // PathFormat is repr-stable; hash by Debug repr.
+        format!("{:?}", self.inner.source_path_format).hash(&mut h);
+        self.inner.source_path.hash(&mut h);
+        self.inner.destination_path.hash(&mut h);
+        h.finish()
+    }
+
     #[pyo3(signature = (*, path, output_format=None))]
     fn apply(&self, path: &str, output_format: Option<PyPathFormat>) -> (bool, String) {
         let result = match output_format {

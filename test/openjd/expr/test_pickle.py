@@ -99,6 +99,13 @@ def test_path_mapping_rule_round_trip():
         destination_path="/local/cache",
     )
     loaded = pickle.loads(pickle.dumps(rule))
+    # Per the equality contract pinned in test_equality.py, the
+    # round-tripped rule compares equal to the original (and hashes
+    # equal too).
+    assert loaded == rule
+    assert hash(loaded) == hash(rule)
+    # `to_dict` round-trip is now redundant but kept as a sanity
+    # check on the field-level reconstruction.
     assert loaded.to_dict() == rule.to_dict()
 
 
@@ -153,12 +160,15 @@ def test_range_expr_round_trip(spec):
 def test_format_string_round_trip(raw):
     fs = FormatString(raw)
     loaded = pickle.loads(pickle.dumps(fs))
+    assert loaded == fs
+    assert hash(loaded) == hash(fs)
     assert loaded.raw() == fs.raw()
 
 
 def test_symbol_table_round_trip_flat():
     st = SymbolTable({"a": 1, "b": "hello", "c": [1, 2, 3]})
     loaded = pickle.loads(pickle.dumps(st))
+    assert loaded == st
     assert loaded["a"].item() == 1
     assert loaded["b"].item() == "hello"
     assert loaded["c"][0].item() == 1
@@ -167,6 +177,7 @@ def test_symbol_table_round_trip_flat():
 def test_symbol_table_round_trip_nested():
     st = SymbolTable({"Param": {"Frame": 42, "Name": "test"}, "Task": {"Index": 5}})
     loaded = pickle.loads(pickle.dumps(st))
+    assert loaded == st
     assert loaded["Param.Frame"].item() == 42
     assert loaded["Param.Name"].item() == "test"
     assert loaded["Task.Index"].item() == 5
@@ -175,12 +186,15 @@ def test_symbol_table_round_trip_nested():
 def test_symbol_table_round_trip_empty():
     st = SymbolTable({})
     loaded = pickle.loads(pickle.dumps(st))
+    assert loaded == st
     assert loaded.symbols == set()
 
 
 def test_host_context_none_round_trip():
     h = HostContext.none()
     loaded = pickle.loads(pickle.dumps(h))
+    assert loaded == h
+    assert hash(loaded) == hash(h)
     assert not loaded.is_enabled()
     assert not loaded.is_unresolved()
 
@@ -188,6 +202,8 @@ def test_host_context_none_round_trip():
 def test_host_context_unresolved_round_trip():
     h = HostContext.unresolved()
     loaded = pickle.loads(pickle.dumps(h))
+    assert loaded == h
+    assert hash(loaded) == hash(h)
     assert loaded.is_enabled()
     assert loaded.is_unresolved()
 
@@ -200,6 +216,8 @@ def test_host_context_with_rules_round_trip():
     )
     h = HostContext.with_rules([rule])
     loaded = pickle.loads(pickle.dumps(h))
+    assert loaded == h
+    assert hash(loaded) == hash(h)
     assert loaded.is_enabled()
     assert not loaded.is_unresolved()
 
@@ -207,12 +225,16 @@ def test_host_context_with_rules_round_trip():
 def test_expr_profile_round_trip_default():
     p = ExprProfile()
     loaded = pickle.loads(pickle.dumps(p))
+    assert loaded == p
+    assert hash(loaded) == hash(p)
     assert loaded.revision == p.revision
 
 
 def test_expr_profile_round_trip_with_host_context():
     p = ExprProfile(host_context=HostContext.unresolved())
     loaded = pickle.loads(pickle.dumps(p))
+    assert loaded == p
+    assert hash(loaded) == hash(p)
     assert loaded.host_context.is_unresolved()
 
 

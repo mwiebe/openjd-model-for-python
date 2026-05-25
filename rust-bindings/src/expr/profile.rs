@@ -246,6 +246,24 @@ impl PyHostContext {
         }
     }
 
+    /// Two `HostContext`s compare equal when they are the same
+    /// variant and (for `with_rules`) carry identical rule lists in
+    /// the same order. Distinct `Arc` allocations of the same rule
+    /// list compare equal — comparison is by value, not by
+    /// allocation identity.
+    fn __eq__(&self, other: &Bound<'_, pyo3::PyAny>) -> PyResult<bool> {
+        let Ok(rhs) = other.extract::<PyRef<'_, PyHostContext>>() else {
+            return Ok(false);
+        };
+        Ok(host_context_eq(&self.inner, &rhs.inner))
+    }
+
+    /// Hash on the variant tag and (for `with_rules`) the rule
+    /// list. Equal host contexts hash equal.
+    fn __hash__(&self) -> u64 {
+        host_context_hash(&self.inner)
+    }
+
     /// Pickle support — round-trips through one of the three
     /// classmethod constructors (`none`, `unresolved`, `with_rules`).
     fn __reduce__<'py>(
@@ -275,6 +293,49 @@ impl PyHostContext {
             }
         }
     }
+}
+
+// ── HostContext value-shaped helpers ───────────────────────────────
+//
+// `openjd_expr::HostContext` does not implement `PartialEq`/`Hash`.
+// We synthesize value-shaped equality and hashing here so the
+// pyclass `__eq__`/`__hash__` impls (and `ExprProfile`'s, which
+// composes through this) have a single source of truth.
+
+fn host_context_eq(a: &HostContext, b: &HostContext) -> bool {
+    match (a, b) {
+        (HostContext::None, HostContext::None) => true,
+        (HostContext::Unresolved, HostContext::Unresolved) => true,
+        (HostContext::WithRules(la), HostContext::WithRules(lb)) => {
+            // Compare rule-by-rule; `Arc` identity is irrelevant.
+            la.len() == lb.len()
+                && la.iter().zip(lb.iter()).all(|(ra, rb)| {
+                    ra.source_path_format == rb.source_path_format
+                        && ra.source_path == rb.source_path
+                        && ra.destination_path == rb.destination_path
+                })
+        }
+        _ => false,
+    }
+}
+
+fn host_context_hash(hc: &HostContext) -> u64 {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    match hc {
+        HostContext::None => 0u8.hash(&mut h),
+        HostContext::Unresolved => 1u8.hash(&mut h),
+        HostContext::WithRules(rules) => {
+            2u8.hash(&mut h);
+            (rules.len() as u64).hash(&mut h);
+            for r in rules.iter() {
+                format!("{:?}", r.source_path_format).hash(&mut h);
+                r.source_path.hash(&mut h);
+                r.destination_path.hash(&mut h);
+            }
+        }
+    }
+    h.finish()
 }
 
 // ── ExprProfile ────────────────────────────────────────────────────
@@ -399,6 +460,41 @@ impl PyExprProfile {
             self.inner.extensions().len(),
             host,
         )
+    }
+
+    /// Two `ExprProfile`s compare equal when they have the same
+    /// revision, the same extension set (insertion order
+    /// irrelevant — `extensions` is a `HashSet` internally), and
+    /// the same host context (per `HostContext.__eq__`).
+    fn __eq__(&self, other: &Bound<'_, pyo3::PyAny>) -> PyResult<bool> {
+        let Ok(rhs) = other.extract::<PyRef<'_, PyExprProfile>>() else {
+            return Ok(false);
+        };
+        Ok(self.inner.revision() == rhs.inner.revision()
+            && self.inner.extensions() == rhs.inner.extensions()
+            && host_context_eq(self.inner.host_context(), rhs.inner.host_context()))
+    }
+
+    /// Hash on revision, extension set, and host context. The
+    /// extension set is hashed as a sorted-by-debug-repr tuple so
+    /// that profiles with the same set hash equal regardless of
+    /// `HashSet` insertion order.
+    fn __hash__(&self) -> u64 {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        format!("{:?}", self.inner.revision()).hash(&mut h);
+        // Canonicalise the extension set as a sorted Vec of debug
+        // strings — `HashSet` iteration order is not stable.
+        let mut exts: Vec<String> = self
+            .inner
+            .extensions()
+            .iter()
+            .map(|e| format!("{:?}", e))
+            .collect();
+        exts.sort();
+        exts.hash(&mut h);
+        host_context_hash(self.inner.host_context()).hash(&mut h);
+        h.finish()
     }
 
     /// Pickle support — round-trips through `__init__(revision,

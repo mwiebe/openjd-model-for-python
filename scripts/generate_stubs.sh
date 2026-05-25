@@ -67,12 +67,15 @@ for cls, item in iter_classes.items():
         f'    def __iter__(self) -> "{cls}": ...\n'
         f"    def __next__(self) -> {item}: ..."
     )
-    text = re.sub(
-        rf"@typing\.final\nclass {cls}: \.\.\.",
-        body,
-        text,
-        count=1,
-    )
+    # Match both the pyo3-stub-gen single-line form
+    # `class Foo: ...` and the black-expanded multi-line form
+    # `class Foo:\n    ...`. Use \s+ between `:` and `...` to
+    # cover both.
+    pattern = rf"@typing\.final\nclass {cls}:\s*\.\.\."
+    new_text, n = re.subn(pattern, body, text, count=1)
+    if n != 1:
+        raise SystemExit(f"PYI_FIXUP: failed to match {cls} marker class")
+    text = new_text
 
 p.write_text(text)
 PYI_FIXUP
@@ -137,5 +140,10 @@ class UnsupportedSchema(builtins.ValueError): ...
 DEFAULT_MEMORY_LIMIT: builtins.int
 DEFAULT_OPERATION_LIMIT: builtins.int
 PYI
+
+# Run black on the final .pyi so the file matches the project's
+# formatting conventions and `hatch run lint` doesn't flag it on
+# the next CI run.
+python3 -m black -q src/openjd/_openjd_rs.pyi || true
 
 echo "Generated src/openjd/_openjd_rs.pyi"
