@@ -1,1178 +1,1243 @@
 # openjd-model Bindings Quality Evaluation Report
 
-**Date:** 2026-05-18
+**Date:** 2026-05-25
 **Component:** `openjd.model._v1`
-**Reference branch:** `openjd-model-for-python` @ `origin/mainline` (OpenJobDescription, commit `f410f7d`)
-**Active branch:** `bindings-rs` (commit `430f0d6`)
+**Reference branch:** `OpenJobDescription/openjd-model-for-python` @ `mainline` (`f410f7d`)
+**Active branch:** `bindings-rs` (commit `8f19e4d`)
+**Sibling crate:** `openjd-rs` @ `baca1f2`
 
 ## Executive Summary
 
-The `openjd.model._v1` Rust-backed bindings cover the most-common decode /
-create_job / iteration paths and the test suite they ship with passes 593
-of 598 collected tests, but **the bindings are not yet a faithful drop-in
-for the pure-Python reference**:
+The `openjd.model._v1` Rust-backed bindings have matured substantially
+since the prior evaluation. The 12 typed `JobParameterDefinition`
+variants, the 5 typed `TaskParameterDefinition` variants, the 11
+typed `*UserInterface` pyclasses + `FileFilter`, the structural
+template-time pyclasses (`StepTemplate`, `Environment`, `Action`,
+`HostRequirements`, …), pickle support for value types, the
+`StepParameterSpaceIterator` setter and `__len__` semantics, and
+the `decode_template` deprecated alias are all in place. The full
+test suite passes — `4952 passed, 24 skipped, 6 xfailed, 0 failed`
+across 4982 collected tests (the 6 xfails are all in the `expr`
+subtree and are tracked in the `expr` report). `hatch run lint`
+(ruff + black + mypy) is fully clean. The bindings now cover most
+of the surface a v0 caller exercises.
 
-1. ~~**Iteration-order regression.** `IntRangeExpr.from_str("-1 - -2 : -1")`
-   yields `[-2, -1]`; the reference yields `[-1, -2]`. This breaks four
-   existing parity tests (`test_associate_getitem`,
-   `test_product_iteration`, `test_product_getitem`,
-   `test_nested_expr_iteration` in `test_step_param_space_iter.py`). It
-   also means CHUNK[INT] and INT task parameters that use a descending
-   range produce iteration in the wrong direction.~~ **Resolved** —
-   reclassified as an intentional behavior change. The Rust
-   `RangeExpr` always stores ranges in canonical ascending form (see
-   `openjd-rs/specs/expr/range-expr.md` "Internal Representation"), so
-   `IntRangeExpr.from_str("-1 - -2 : -1")` yielding `[-2, -1]` is the
-   binding's documented semantics: `RangeExpr` values are always an
-   increasing list of integers, regardless of input direction. The
-   four `test_step_param_space_iter` failures are reference-only tests
-   that assume the descending-input-preserves-direction behavior of
-   the pure-Python implementation; they should be skipped or rewritten
-   for the Rust-backed module. Documented in
-   `specs/python-model-interface.md` under Compatibility Aliases.
-2. ~~**`StepParameterSpaceIterator.__contains__` rejects values it just
-   yielded.** Iterating once over an INT parameter space and checking each
-   yielded value with `in` returns `False` for every one of them. The
-   reference returns `True`. This is the same root cause as a frequently-
-   used test pattern (`for v in expected_values: assert v in it`).~~
-   **Resolved for simple cases** — `extract_task_parameter_set` now reads
-   the parameter type via `as_str()` (the Rust pyclass-enum convention
-   used by `PyTaskParameterType` / `PyJobParameterType` and by the
-   Python-side `ParameterValue` shim), then falls back to `.value` (stdlib
-   `enum.Enum`) and `__str__`. Yielded values now round-trip through
-   `__contains__` for non-nested combination expressions. As a side-effect
-   this also fixes
-   `test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
-   which uses the same `for v in expected_values: assert v in it`
-   pattern.
+What remains:
 
-   **Remaining issue (nested combination expressions):** ~~`__contains__`
-   still returns `False` for values yielded by an iterator over a nested
-   combination expression like `A * (B, C * D)`. This is an upstream bug
-   in `openjd_model::job::step_param_space::StepParameterSpaceIterator::
-   contains` (and its delegate `validate_containment`); the recursive
-   traversal misclassifies values from the inner associative grouping.
-   Tracked by
-   `test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator::test_nested_expr_contains`
-   (xfail). The simple-case behavior is verified by
-   `test_contains_self_yielded_values`, which passes.~~ **Resolved
-   upstream.** Fixed by `openjd-rs` commit "fix(model): correct
-   AssociationNode containment for nested expressions". Root cause was
-   in `AssociationNode::validate_containment`: the candidate set built
-   from the association's children's keys was being compared via
-   `params_equal` against the input `params`, which carries the full
-   parameter set when the association is nested under a Product. The
-   length-check in `params_equal` rejected every candidate. Fix
-   projects `params` onto the association's own keys before
-   comparison. The Python-side test
-   `test_nested_expr_contains` is no longer xfailed and passes.
-3. ~~**`model_to_object` is unimplemented for every Rust-backed model.** The
-   wrapper module raises `NotImplementedError`. The reference round-trips
-   through `model.model_dump(by_alias=True, exclude_unset=True)` to produce
-   the input dict. One existing parity test fails because of this
-   (`TestModelToObject::test[translates Decimal to string]`).~~
-   **Won't fix.** `model_to_object` is intentionally a v0-only API.
-   The Rust-backed v1 model pyclasses do not have a general
-   "serialize whole model back to a JSON-shaped dict" method, and
-   there are no plans to add one. Specific use cases that need
-   similar functionality on individual sub-models will be addressed
-   as targeted helpers when the concrete need arises. Spec updated
-   (see `specs/python-model-interface.md` § "model_to_object —
-   v0-only, not implemented in v1"). Stub function and `__all__`
-   entry removed from `src/openjd/model/_v1/__init__.py`; the
-   failing parity test (`TestModelToObject::test[translates
-   Decimal to string]`) and the duplicate xfail in
-   `test_known_gaps.py::test_model_to_object_round_trip` are
-   removed.
-4. ~~**`StepParameterSpaceIterator.chunks_default_task_count` setter is a
-   silent no-op.** The setter validates that the space is adaptively
-   chunked, then returns without storing the value. The reference mutates
-   the iterator. Adaptive-runtime callers (e.g. the worker agent) cannot
-   actually adapt chunk size.~~ **Resolved** — `PyStepParameterSpaceIterator`
-   now holds a persistent `Mutex<StepParameterSpaceIterator>` rather than
-   reconstructing a fresh iterator on every method call. The setter
-   validates that the value is a positive integer and that the space is
-   adaptively chunked, then calls `iter.set_chunks_default_task_count(value)`,
-   which mutates the shared `Arc<AtomicUsize>` that the live iteration
-   nodes read from. Subsequent reads via the getter return the new
-   value.
-5. ~~**`__len__` returns 0 on adaptive-chunked spaces; reference raises
-   `ValueError`.** The reference documents that `len()` is unavailable for
-   adaptively-chunked spaces and raises with an explanatory message; the
-   binding silently returns 0, which the caller will mistake for an empty
-   space.~~ **Resolved** — `__len__` now raises
-   `ValueError("Length is not available because the parameter space uses
-   adaptive chunking.")`, matching the reference's message. The
-   underlying Rust `StepParameterSpaceIterator::len()` continues to return
-   0 for adaptive (its documented contract); the wrapper short-circuits
-   on `chunks_adaptive()` before consulting it.
-6. ~~**`taskParameterDefinitions` getter returns serde-internal JSON, not
-   typed objects.** The reference returns `RangeExpressionTaskParameterDefinition`
-   / `RangeListTaskParameterDefinition` / etc. with `.type` (a
-   `TaskParameterType`) and `.range` attributes. The binding returns a
-   nested dict like `{'int': {'range': {'rangeExpr': {...}}, 'chunks':
-   None}}`. Code reading `defs[name].type` breaks.~~ **Resolved (Rec #6).**
-   `StepParameterSpace.taskParameterDefinitions[name]` now returns a
-   typed pyclass instance — one of `IntTaskParameter`,
-   `FloatTaskParameter`, `StringTaskParameter`, `PathTaskParameter`,
-   or `ChunkIntTaskParameter` — mirroring the underlying Rust
-   `TaskParameter` runtime enum 1:1. Each has `.type`, `.range`, and
-   (for `ChunkIntTaskParameter`) `.chunks` attributes.
-7. ~~**18 v2023_09 test files cannot even be collected.** They import legacy
-   names (`Action`, `EnvironmentTemplate`, `RangeExpressionTaskParameterDefinition`,
-   `JobIntParameterDefinition`, `HostRequirements`, etc.) from
-   `openjd.model._v1.v2023_09`, but only ~12 of the reference's ~85 names
-   are re-exported. Whole categories of behavior (job parameters, host
-   requirements, scripts, template variables, embedded files, action
-   timeouts, redacted env vars, chunk-int task parameters,
-   feature-bundle 1) are therefore untested.~~ **Won't fix as
-   stated.** Per-revision class hierarchies are a v0-Pydantic
-   artifact; v1's Rust-backed architecture is revision-neutral.
-   See Rec #7 below for the rationale and migration plan.
-8. **Spec drift.** `specs/python-model-interface.md` is incomplete: it
-   omits `parse_model`, `document_string_to_object`, `decode_template`,
-   `STANDARD_AMOUNT_CAPABILITIES`, `STANDARD_ATTRIBUTE_CAPABILITIES`,
-   `validate_amount_capability_name`, `validate_attribute_capability_name`,
-   `evaluate_let_bindings`, `deserialize_step`, `create_environment`,
-   `JobParameterValue`, `TaskParameterValue`, and several output type
-   getters. It also documents `it.names()` and `graph.step_names()` as
-   methods (the reference and binding both expose `it.names` as a
-   property).
-9. **`src/openjd/_openjd_rs.pyi` is stale.** 25 runtime symbols are
-   missing from `__all__`, including every `_openjd_rs.*` exception class,
-   the session types, `TaskParameterValue`, `JobParameterValue`,
-   `StepDependencyEdge`, `StepDependencyNode`, `deserialize_step`,
-   `create_environment`, `BadCredentialsException`, etc. IDE tooltips for
-   every consumer of the bindings are wrong.
-10. **76 clippy lints** in `cargo clippy --workspace -- -D warnings`,
-    including 22 `non-camel-case` enum variants, 10 PyO3 0.20 deprecated
-    API calls, 4 redundant closures, 4 needless borrows, 1
-    `useless_format!`, 1 `unused_doc_comment`, and 1 `dead_code`. Same
-    profile as the prior `expr` evaluation.
-11. **25 rustc warnings** during the maturin build (subset of the clippy
-    list). The build itself completes cleanly.
+1. **Top-level wrapper-module re-exports diverge from the spec's
+   examples.** `openjd.model._v1.__init__` deliberately does not
+   re-export structural pyclasses (Job, Step, JobTemplate,
+   StepParameterSpaceIterator, ModelValidationError, …) — these
+   live in the `template` / `job` / `types` / `errors` submodules.
+   The spec's example code imports them as `from openjd.model
+   import Step` etc. Either the spec should be updated to direct
+   users to the submodules, or the wrapper should re-export the
+   spec'd entry points at the top level. **Today, several spec
+   examples cannot be copy-pasted as written** — `from
+   openjd.model._v1 import StepParameterSpaceIterator,
+   ModelValidationError, UnsupportedSchema,
+   decode_job_template_str, decode_environment_template_str,
+   Job, Step, JobTemplate, EnvironmentTemplate` all fail with
+   `ImportError`.
 
-The recommendations at the end of this report are ordered by impact;
-items 1–6 are functional regressions that should land before the bindings
-are advertised as a v0 drop-in. Items 7–8 (test coverage and spec) are
-required to detect regressions of the kind already found.
+2. **`Job.parameters` omits parameters that resolve to defaults.**
+   The v0 reference returns the full resolved-parameter dict
+   (defaults plus explicit values); the v1 binding returns only
+   parameters whose values were explicitly supplied via
+   `job_parameter_values`. Code that walks `job.parameters` to
+   reconstruct the running parameter set will see different
+   behaviour between v0 and v1.
 
-A new test file
-[`test/openjd/model_v1/test_known_gaps.py`](../test/openjd/model_v1/test_known_gaps.py)
-documents the ten functional gaps as `pytest.mark.xfail(strict=True)`
-tests so the recommendations can be resolved one at a time.
+3. **`StepParameterSpaceIterator.__contains__` regresses for
+   `CHUNK[INT]` parameter spaces.** Yielded values from a chunked
+   iterator do not round-trip through `in fresh_iter`. Plain `INT`
+   parameter spaces work correctly. Surface:
+   `extract_task_parameter_set` in
+   `rust-bindings/src/model/step_param_space.rs` produces a
+   `TaskParameterValue` whose `value` is a plain `RangeExpr`
+   string ("1-2") under `TaskParameterType::ChunkInt`, but the
+   underlying Rust iterator's `contains` check expects the chunk
+   to be expressed as the resolver-internal form. This is a
+   parity gap, not a soundness issue.
+
+4. **Format-string parsing inside templates raises
+   `ModelValidationError`, not `FormatStringError`.** The mapping
+   in `model_err_to_py` (`rust-bindings/src/model/errors.rs`)
+   collapses `ModelError::FormatStringError`, `Expression`, and
+   `Compatibility` into `ModelValidationError`; only
+   `ModelValidationError` is registered as a renamed exception.
+   Code that catches `FormatStringError` to specifically handle
+   in-template expression issues will not catch them.
+
+5. **`CompatibilityError` inherits from `Exception`, not
+   `ValueError`.** The reference inherits `CompatibilityError`
+   from `ValueError`; the v1 wrapper defines it as a plain
+   `Exception` subclass. Code that catches `ValueError` in
+   legacy code paths will miss the v1 binding's
+   `CompatibilityError`.
+
+6. **76 clippy lints remain** when `cargo clippy --workspace --
+   -D warnings` runs against `rust-bindings/`. The mix is
+   stable across reports: ~50 `non_camel_case_types` /
+   `upper_case_acronyms` (the deliberate Python-facing naming),
+   ~12 PyO3 0.20+ deprecations (`from_py_object` opt-in,
+   `Bound::cast`), ~5 `redundant_closure` / `needless_borrow`,
+   plus a few `dead_code` / `unused` / `type_complexity` items.
+   None block the build (`cargo build --all-targets` succeeds
+   with 17 informational warnings).
+
+7. **Spec drift, primarily on import paths.** Spec examples
+   show `from openjd.model import …` for symbols that today
+   live under `openjd.model._v1.{template, job, types, errors}`.
+   The `openjd.model.__init__` shim still re-exports the v0
+   pure-Python implementation; per AGENTS.md, the rename to
+   `openjd.model = v1` is the intended end state. The spec is
+   forward-looking, but until the rename happens, copy-paste
+   examples are broken.
+
+8. **GIL is never released across model operations.**
+   `decode_job_template_*`, `create_job`, and the iterator
+   construction paths all hold the GIL during YAML/JSON parsing,
+   validation, and combination-expression evaluation. A
+   threaded probe (8 threads × 20 decodes) succeeded with no
+   errors but every decode runs strictly serially.
+
+The remainder of the report digs into each of these in detail and
+ends with a numbered Recommendations section.
 
 ## 1. Python Interface Spec Review
 
-`specs/python-model-interface.md` (446 lines) describes the public
-contract. Coverage is incomplete and in places ahead of the
-implementation.
+`specs/python-model-interface.md` (1129 lines) describes the public
+contract for the `openjd.model._v1` Rust-backed bindings. Coverage
+is broad and deep — the spec now documents every typed
+`JobParameterDefinition` variant, every `TaskParameterDefinition`
+variant, every `*UserInterface` pyclass, the structural
+template-time types, the `ModelProfile`/`CallerLimits`/
+`ValidationContext` profile system, the pickle-support contract
+including the explicit "out of scope" call-out for decoded
+containers, the `RangeExpr` ascending-iteration behaviour change,
+and the deprecated `decode_template` alias.
 
-### Symbols listed in spec and exported by binding
+### What's well covered
 
-The following all import successfully from `openjd.model._v1`:
-
-- Functions: `decode_job_template`, `decode_job_template_str`,
+* Decode entry points (`decode_job_template`, `decode_job_template_str`,
   `decode_environment_template`, `decode_environment_template_str`,
-  `create_job`, `preprocess_job_parameters`,
-  `merge_job_parameter_definitions`. (`model_to_object` was
-  removed in finding #3 — it is a v0-only API; the v1 module
-  no longer exports it.)
-- Output types: `Job`, `Step`, `StepScript`, `StepActions`, `Action`,
-  `Environment`, `EnvironmentScript`, `EnvironmentActions`,
-  `EmbeddedFile`, `JobParameter`, `StepParameterSpace`, `StepDependency`,
-  `CancelationMode`.
-- Iteration: `StepParameterSpaceIterator`, `StepDependencyGraph`.
-- Template types: `JobTemplate`, `EnvironmentTemplate`.
-- Enums: `DocumentType`, `TemplateSpecificationVersion`,
-  `JobParameterType`, `TaskParameterType`, `SpecificationRevision`,
-  `ValueReferenceConstants`.
-- Compatibility aliases: `IntRangeExpr` (= `RangeExpr`), `CommandString`
-  / `ArgString` (= `FormatString`), `EmbeddedFileText` (= `EmbeddedFile`),
-  `EmbeddedFiles` (= `list`), `JobParameterValues`, `TaskParameterSet`.
-- Simple Python types: `ParameterValue`, `RevisionExtensions`,
-  `CancelationMethodTerminate`, `CancelationMethodNotifyThenTerminate`.
-- Exceptions: `DecodeValidationError`, `ModelValidationError`,
-  `UnsupportedSchema`, `ExpressionError`, `FormatStringError`,
-  `CompatibilityError`, `TokenError`.
+  `decode_template`, `parse_model`).
+* `create_job`, `preprocess_job_parameters`,
+  `merge_job_parameter_definitions`.
+* `model_to_object` v0-only call-out (under "Utility").
+* The full job-time output surface (`Job`, `Step`, `StepScript`,
+  `StepActions`, `Action`, `Environment`, …).
+* Iteration: `StepParameterSpaceIterator` and `StepDependencyGraph`.
+* All 12 `JobParameterDefinition` variants with type-specific
+  attribute tables.
+* All 5 `TaskParameterDefinition` variants + `ChunksDefinition`.
+* All 11 `*UserInterface` variants + `FileFilter`.
+* The full template-time structural pyclass inventory under
+  `openjd.model._v1.template`, including the `Template`-prefixed
+  disambiguating aliases.
+* Pickle-support inventory (Group A enums + Group B value types)
+  with the explicit "decoded containers are not pickleable" note.
+* `ModelProfile` / `ModelExtension` / `SpecificationRevision` /
+  `CallerLimits` / `ValidationContext` profile system.
+* `RangeExpr` ascending-iteration design note under "Compatibility
+  Aliases".
 
-### Spec ↔ binding gaps (binding has but spec doesn't)
+### Spec ↔ binding gaps
 
-- `parse_model(*, model=None, obj=...)` — auto-detects template type from
-  `specificationVersion` and dispatches to `decode_job_template_dict` or
-  `decode_environment_template_dict`. Broadly used by the Deadline Cloud
-  CLI; **must** appear in the spec.
-- `document_string_to_object(*, document, document_type=None)` — parses a
-  YAML/JSON string into a Python dict. Public utility that consumers
-  rely on.
-- `STANDARD_AMOUNT_CAPABILITIES`, `STANDARD_ATTRIBUTE_CAPABILITIES`,
-  `validate_amount_capability_name`, `validate_attribute_capability_name`
-  — all imported by Deadline Cloud worker agent and CLI. Spec has no
-  mention.
-- `Step.resolved_symtab` getter — returns an `openjd.expr.SymbolTable`.
-  Used at runtime by sessions.
-- `JobParameter.name`, `JobParameter.param_type`, `JobParameter.value` —
-  spec advertises the shape of `job.parameters` but does not enumerate
-  the getter names; verify behavior.
-- `Step.__eq__` / `Step.__hash__` — implemented based on the step name
-  alone (not all fields); not in spec but used internally.
-- `JobParameterValue` and `TaskParameterValue` Rust-side wrappers — both
-  are reachable via `openjd._openjd_rs.JobParameterValue` /
-  `TaskParameterValue` and returned from
-  `preprocess_job_parameters` / step-iterator output. Spec explains
-  `JobParameter.value` returns `ExprValue` (only true for `Job`-side
-  parameters), not `JobParameterValue`.
-- `JobParameterType` is `frozen` and hashable; `TaskParameterType` is
-  not. Spec implies parity but the bindings differ.
+#### Spec examples that don't import as written
 
-### Binding has but spec exposes inconsistently
+The spec uses `from openjd.model import …` for many symbols. While
+that path works today against the v0 (pure-Python) module, it does
+not work against the v1 Rust-backed bindings: `openjd.model` is
+the legacy pydantic implementation, and v1 lives at
+`openjd.model._v1`. Importantly, even with the `_v1` qualifier,
+several spec examples still fail because the `_v1.__init__` does
+not re-export structural pyclasses:
 
-- `it.names()` in spec → `it.names` property in binding (matches
-  reference, which also exposes it as a property).
-- `graph.step_names()` in spec → exists as method but reference signature
-  is `step_names()` returning `list[str]`. Binding matches.
+| Spec snippet | What works today | What fails |
+|---|---|---|
+| `from openjd.model import StepParameterSpaceIterator` | `from openjd.model._v1.job import StepParameterSpaceIterator` | `from openjd.model._v1 import StepParameterSpaceIterator` ❌ |
+| `from openjd.model import StepDependencyGraph` | `from openjd.model._v1.job import StepDependencyGraph` | `from openjd.model._v1 import StepDependencyGraph` ❌ |
+| `from openjd.model import DocumentType, JobParameterType, TaskParameterType` | `from openjd.model._v1.types import DocumentType, …` | `from openjd.model._v1 import DocumentType` works (re-exported), but `JobParameterType`/`TaskParameterType` ❌ |
+| `from openjd.model import DecodeValidationError, ModelValidationError, UnsupportedSchema` | `from openjd.model._v1.errors import …` | top level only re-exports `DecodeValidationError`; `ModelValidationError` and `UnsupportedSchema` ❌ |
+| (Implicit `decode_job_template_str`) | `openjd._openjd_rs.decode_job_template_str` | `from openjd.model._v1 import decode_job_template_str` ❌ |
+| (Implicit `decode_environment_template_str`) | same | same ❌ |
+| `from openjd.model import Job, Step, JobTemplate, EnvironmentTemplate` | `from openjd.model._v1.{job,template} import …` | top-level v1 imports ❌ |
 
-### Spec entries that don't match
+The architecture choice — push structural pyclasses into
+`template` / `job` / `types` / `errors` submodules — is
+defensible. But the spec does not call this out, which leaves
+copy-paste callers stuck. **Either the wrapper should re-export
+the spec'd entry points at the top level, or the spec should be
+updated to use the submodule import paths consistently.**
 
-| Spec example | Actual behavior |
-|---|---|
-| `template.specification_version` (camel `specificationVersion`) | Only snake-case getter is exposed; `template.specificationVersion` → `AttributeError`. |
-| `it.names()                  # {"Frame"}` | `it.names` is a property, not a callable. The example would `TypeError: 'set' object is not callable`. |
-| ~~`model_to_object(model=some_object)`~~ | ~~Always raises `NotImplementedError("model_to_object is not supported for this type")` for every Rust-backed model.~~ Removed — v0-only API per Rec #3. |
-| `script.let` (advertised as `Optional[list[str]]`) | Works ✓ |
-| `step.resolvedBindings` | Works ✓ but reference tests use `script.let` — which also works. |
-| ~~`space.taskParameterDefinitions` returns dict of typed defs~~ | Now returns ``dict[str, IntTaskParameter \| FloatTaskParameter \| StringTaskParameter \| PathTaskParameter \| ChunkIntTaskParameter]``. ✓ resolved (Rec #6). |
+#### Inconsistent `EmbeddedFile.type` accessor
+
+The spec exposes `EmbeddedFile.type_` (with trailing underscore,
+job-time, line 352) and `EmbeddedFile.type` (no underscore,
+template-time, line 556). Verified at runtime:
+
+* Template-time `EmbeddedFile` (under `openjd.model._v1.template`)
+  has `.type` and **not** `.type_`.
+* Job-time `EmbeddedFile` (under `openjd.model._v1.job`) has
+  `.type_` and **not** `.type`.
+
+Both names are spec'd, both work in their respective contexts.
+The asymmetry is confusing — readers may not realise they need
+different attribute names depending on whether they're holding a
+template-time or job-time `EmbeddedFile`. Either both surfaces
+should accept both names, or the spec should highlight the
+divergence. (The underlying reason is that `type` is a Python
+builtin name; the job-time class avoids the shadow with `type_`,
+the template-time class uses `type` because the Rust struct field
+is `type` and `pyo3-stub-gen` derives the getter name from the
+Rust field.)
+
+#### Documented but not yet exposed
+
+These spec items continue to lack a live binding:
+
+* `IntRangeExpr.start` / `end` — the spec doesn't call these out
+  but the v0 reference exposes them. Status: **resolved**, both
+  exist on `RangeExpr` today (verified at runtime: `r.start`,
+  `r.end` work on `IntRangeExpr("1-5")`).
+* `IntRangeExpr.from_list([…])` — verified: now exists.
+* `IntRangeExpr.from_str(…)` — verified: now exists.
 
 ### Spec entries with no live binding symbol
 
-- `decode_template` — listed by reference, missing in binding. CLI calls
-  `decode_template(name=..., raw_data=..., document_type=...)`.
+None remaining at the top level — every spec'd entry point
+resolves to *something*, even if the import path is via a
+submodule.
+
+### Binding surfaces not in the spec
+
+* `Step.__eq__` / `Step.__hash__` based on step name alone — used
+  internally; not in the spec but observable.
+* `it.chunks_parameter_name` getter — listed in the spec
+  ("StepParameterSpaceIterator" section), works.
+* `it.reset_iter()` method — exposed by the binding, not in the
+  spec.
+* `_reconstruct_enum` / `_reconstruct_kwargs` — pickle-helper
+  module functions referenced by `__reduce__` payloads. Names
+  are part of the pickle wire format and underscore-prefixed,
+  so they're correctly considered private.
 
 ## 2. PyO3 Binding Source Review
 
-The model bindings live in
-`rust-bindings/src/model/`:
+The model bindings live in `rust-bindings/src/model/` (15 files,
+6,635 lines total). Per-file overview:
 
-- `mod.rs` — re-exports from submodules. ✓
-- `errors.rs` — three `pyo3::create_exception!` types
-  (`PyDecodeValidationError`, `PyModelValidationError`,
-  `PyUnsupportedSchema`) and a `model_err_to_py` mapper. The mapper
-  collapses `ModelError::FormatStringError`,
-  `ModelError::Expression`, and `ModelError::Compatibility` all to
-  `PyModelValidationError` (instead of the reference's distinct
-  `FormatStringError`, `ExpressionError`, and `CompatibilityError`).
-  Test for shape: `decode_job_template(template={"specificationVersion":
-  "jobtemplate-2023-09", "name": "X", "steps": [...]})` with a malformed
-  `{{...}}` expression in `command` raises
-  `ModelValidationError("Format string parse error...")` instead of
-  `FormatStringError`. ⚠
-- `decode.rs` — round-trips Python dict → JSON string →
-  `serde_json::Value` → `openjd_model::decode_job_template`. The dict-to-
-  JSON detour is potentially lossy for non-JSON-serialisable types
-  (`Decimal`, `pathlib.Path`, custom objects), but the `json.dumps`
-  raises early so failure is visible. ⚠ Performance: doubles the cost
-  of a decode for callers that already have a dict. (Reference parses
-  pydantic models directly from the dict.)
-- `template.rs` — `PyJobTemplate` and `PyEnvironmentTemplate`. Both
-  expose only `name` / `specification_version` / `description` getters.
-  Missing: `extensions`, `parameter_definitions`, `steps`,
-  `job_environments`, `host_requirements`, the entire body of the
-  template, all of which the reference makes accessible via the pydantic
-  model.
-- `types.rs` — six enums plus `PyTaskParameterValue` and
-  `PyJobParameterValue`. `PyJobParameterType` is `hash` (frozen) but
-  `PyTaskParameterType` is *not* frozen / hashable, an inconsistency.
-  `__eq__` for the value types calls `other.getattr("type")` and
-  `as_str()` — works for ParameterValue / JobParameterValue /
-  TaskParameterValue but raises `AttributeError` for any other object,
-  rather than returning `NotImplemented`.
-- `job.rs` (~860 lines) — bulk of the surface. Nine `#[pyclass]` types
-  (`PyJob`, `PyStep`, `PyStepScript`, `PyStepActions`, `PyAction`,
-  `PyEnvironment`, `PyEnvironmentScript`, `PyEnvironmentActions`,
-  `PyEmbeddedFile`), plus `PyJobParameter`, `PyStepParameterSpace`,
-  `PyStepDependency`, `PyCancelationMode`. Camel/snake parity is mostly
-  consistent, but several Step getters have only the snake-case form
-  (`step.dependencies`, no `step.dependencies` camel — well, `dependencies`
-  is the same in both cases; `step.script` is fine; but
-  `step.script.actions.onRun` is camel-only — there is no `step.script.actions.on_run`
-  yet — wait, there is, both forms work).
-  - `PyStepParameterSpace.task_parameter_definitions` returns
-    `serde_json::to_string`-then-`json.loads`'d nested objects (see §5
-    parity table for example).
-  - `PyAction.cancelation` and `PyAction.timeout` return strings;
-    the reference returns typed `CancelationMode` / time strings.
-- `create_job_fns.rs` — three top-level functions plus
-  `py_evaluate_let_bindings`, `py_deserialize_step`, and
-  `py_create_environment`. Notably:
-  - `py_preprocess_job_parameters` accepts a single positional `job_template_dir`
-    (PathBuf) and `current_working_dir`. If the caller passes `Path(".")`
-    they're silently rewritten to empty strings (`""`) before being
-    handed to the Rust function — a foot-gun for tests using ".".
-  - `py_create_environment` requires no consumer-visible function, but
-    it is registered as `create_environment`. Spec doesn't mention it.
-  - `py_deserialize_step` is registered as `deserialize_step`, also not
-    in the spec.
-- `step_param_space.rs` — `PyStepParameterSpaceIterator`. Implementation
-  is mostly sound but the setter for `chunks_default_task_count` is a
-  no-op (line 199, see §5 table). `__len__` returns `self.len` which is
-  0 for adaptive-chunked spaces (where the underlying iterator's `len()`
-  returns 0). Reference raises an explanatory `ValueError` instead.
-  `__contains__` calls `extract_task_parameter_set` which interprets the
-  passed value as a `TaskParameterValue` whose internal type-string lookup
-  fails for `TaskParameterValue` instances yielded by the iterator
-  itself; see §5.
-- `step_dependency_graph.rs` — `PyStepDependencyGraph`,
-  `PyStepDependencyNode`, `PyStepDependencyEdge`. Minor note:
-  `PyStepDependencyEdge.origin` and `.dependent` return `PyStepDependencyNode`
-  with `in_edges` / `out_edges` always set to `vec![]`, even though the
-  reference returns nodes with their full edge sets populated. Code that
-  walks the graph through edges loses adjacency.
+| File | Lines | Role |
+|---|---:|---|
+| `mod.rs` | 65 | Submodule re-exports |
+| `errors.rs` | 21 | `PyDecodeValidationError`, `PyModelValidationError`, `PyUnsupportedSchema`, `model_err_to_py` |
+| `types.rs` | 423 | `PyDocumentType`, `PyTemplateSpecificationVersion`, `PyJobParameterType`, `PyTaskParameterType`, `PyTaskParameterValue`, `PyJobParameterValue` |
+| `profile.rs` | 519 | `PyModelExtension`, `PyModelProfile`, `PyCallerLimits`, `PyValidationContext`, `PySpecificationRevision` |
+| `template.rs` | 183 | `PyJobTemplate`, `PyEnvironmentTemplate` |
+| `template_types.rs` | 1296 | structural template-time pyclasses (Action, Environment, Step, etc.) |
+| `job_param_defs.rs` | 1174 | 12 typed `JobParameterDefinition` variants |
+| `step_param_space_def.rs` | 489 | `StepParameterSpaceDefinition` + 5 typed `TaskParameterDefinition` variants + `ChunksDefinition` |
+| `user_interfaces.rs` | 637 | 11 `*UserInterface` pyclasses + `FileFilter` |
+| `decode.rs` | 104 | `decode_job_template_*`, `decode_environment_template_*` |
+| `job.rs` | 805 | job-time pyclasses (Job, Step, etc.), JobParameter |
+| `step_param_space.rs` | 242 | `PyStepParameterSpaceIterator` (now persistent) |
+| `step_dependency_graph.rs` | 133 | graph + node + edge |
+| `task_parameter.rs` | 581 | 5 typed task-parameter pyclasses (job time) |
+| `create_job_fns.rs` | 252 | `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `evaluate_let_bindings`, `deserialize_step`, `create_environment` |
+
+### `errors.rs` — exception mapping
+
+Three `pyo3::create_exception!` types and a `model_err_to_py`
+mapper. The mapper collapses several distinct `ModelError`
+variants into `PyModelValidationError`:
+
+```rust
+ModelError::FormatStringError { message, .. } => PyModelValidationError::new_err(message),
+ModelError::Expression(expr_err) => PyModelValidationError::new_err(expr_err.to_string()),
+ModelError::Compatibility(msg) => PyModelValidationError::new_err(msg),
+```
+
+The pure-Python reference distinguishes `FormatStringError`,
+`ExpressionError`, and `CompatibilityError` from
+`ModelValidationError`. The wrapper module re-exports
+`FormatStringError` and `ExpressionError` from `openjd.expr`, but
+because the binding never raises those classes, code that catches
+the more specific exception will not catch them. ⚠
+
+The exception classes themselves register correctly via
+`register_renamed_exception` in `lib.rs`:
+
+```rust
+register_renamed_exception(m, …PyDecodeValidationError…, "DecodeValidationError", "openjd.model._v1.errors")?;
+register_renamed_exception(m, …PyModelValidationError…, "ModelValidationError", "openjd.model._v1.errors")?;
+register_renamed_exception(m, …PyUnsupportedSchema…, "UnsupportedSchema", "openjd.model._v1.errors")?;
+```
+
+Verified via runtime probe: `pickle.dumps(e); pickle.loads(b)`
+round-trips with the canonical names; `type(e).__qualname__` is
+`DecodeValidationError` (etc.). ✓
+
+### `decode.rs` — dict ↔ JSON round-trip
+
+`decode_*_template_dict` still goes Python dict → `json.dumps` →
+`serde_json::from_str` → `serde_json::Value`. Cost: doubles the
+parse time for callers that already hold a dict, and silently
+fails on values that aren't JSON-serialisable (`Decimal`,
+`Path`, custom objects) — `json.dumps` raises a clear error so
+the failure is at least visible, but it's still a foot-gun. ⚠
+
+### `template.rs` — full template surface
+
+`PyJobTemplate` and `PyEnvironmentTemplate` now expose the full
+structural surface:
+
+* `name` / `description` / `specification_version` /
+  `specificationVersion` (camelCase alias) / `profile` /
+  `parameter_definitions` / `parameterDefinitions` (camelCase
+  alias).
+* `JobTemplate`-only: `steps` (`list[StepTemplate]`),
+  `job_environments` / `jobEnvironments` (camelCase).
+* `EnvironmentTemplate`-only: `environment` (single
+  `Environment`).
+
+Both classes implement `__repr__` cleanly. Neither implements
+`__eq__` / `__hash__`. ✓ for surface; pickle is intentionally
+out of scope per the spec (decoded containers do not pickle).
+
+### `types.rs` — enums and value types
+
+`PyJobParameterType` declares `frozen, hash` and pickles via
+`__reduce__` through `_reconstruct_enum`. `PyTaskParameterType`
+and `PyDocumentType` likewise.
+
+Verified at runtime:
+
+* `JobParameterType.INT` is hashable. ✓
+* `TaskParameterType.INT` is hashable. ✓
+* `ModelExtension.EXPR` is hashable. ✓
+* `SpecificationRevision.v2023_09` (Python str-Enum shim) is
+  hashable. ✓
+* **`DocumentType.JSON` is NOT hashable.** ⚠
+
+`DocumentType` is missing the `frozen, hash` attributes that the
+other enum-shaped pyclasses carry. Symmetry says it should be
+hashable.
+
+`PyTaskParameterValue.__eq__` / `PyJobParameterValue.__eq__`
+implement cross-type equality with the Python-side
+`ParameterValue` shim, verified at runtime: all six combinations
+(`pv == jv`, `jv == pv`, `pv == tv`, `tv == pv`, `jv == tv`,
+`tv == jv`) return True for matching `(type, value)` pairs. ✓
+
+### `step_param_space.rs` — iterator persistence
+
+`PyStepParameterSpaceIterator` now holds a persistent
+`Mutex<StepParameterSpaceIterator>` (per the resolution of the
+prior report's Recommendation #4). The setter for
+`chunks_default_task_count` actually mutates the live state;
+`__len__` raises `ValueError` with the reference's message for
+adaptive-chunked spaces. Both behaviours are covered by passing
+tests in `test_step_param_space_iter.py`.
+
+`__contains__` calls `extract_task_parameter_set` which produces
+a `TaskParameterValue` whose `value` is parsed via
+`ExprValue::from_str_coerce`. For plain `INT`/`FLOAT`/`STRING`/
+`PATH` the round-trip works: yielded values pass `in fresh_iter`.
+**For `CHUNK[INT]` it fails:** the iterator yields
+`TaskParameterValue(type=CHUNK[INT], value="1-2")` (where `"1-2"`
+is the chunk-range RangeExpr string), but the Rust `contains`
+check in `openjd-model::job::step_param_space::StepParameterSpaceIterator::contains`
+expects the chunk to be expressed differently in the candidate
+set. Surface fix is in `extract_task_parameter_set` (or in the
+underlying `validate_containment` if the issue is upstream).
+
+### `step_param_space_def.rs` — typed task-parameter definitions
+
+`PyStepParameterSpaceDefinition` exposes `task_parameter_definitions`
+as a `list[…]` of typed pyclasses (`IntTaskParameterDefinition`,
+`FloatTaskParameterDefinition`, …, `ChunkIntTaskParameterDefinition`),
+plus `combination` as `Optional[str]`. Each variant has
+`type` / `name` / `range`, and `ChunkIntTaskParameterDefinition`
+additionally has `chunks: ChunksDefinition`. The dispatch on the
+Rust enum is clean. ✓
+
+### `user_interfaces.rs` — 11 typed UI variants + FileFilter
+
+Implements `StringUserInterface`, `IntUserInterface`,
+`FloatUserInterface`, `PathUserInterface`, `BoolUserInterface`,
+`RangeExprUserInterface`, `ListSimpleUserInterface`,
+`ListPathUserInterface`, `ListIntUserInterface`,
+`ListFloatUserInterface`, `HiddenOnlyUserInterface`, plus the
+`FileFilter` payload class. Each `Job*ParameterDefinition` has a
+`user_interface` getter (camelCase alias `userInterface`) that
+returns the appropriate variant. Verified at runtime:
+`d.user_interface.control == "SPIN_BOX"` works on a
+`JobIntParameterDefinition` whose template carried
+`{"control": "SPIN_BOX", "singleStepDelta": 2}`. ✓
+
+### `create_job_fns.rs`
+
+`py_preprocess_job_parameters` no longer rewrites `Path(".")` to
+empty string — verified at runtime: passing both `Path(td)` and
+the bare string `td` (an absolute temp-dir path) succeeds.
+However, `Path(".")` (the current directory) is now rejected
+with `DecodeValidationError("The value supplied for the job
+template dir, , is not an absolute path.")`. Note the **empty
+string** in the error message, not `.`. The empty-rewrite is
+gone for absolute paths but remains for relative ones — the
+caller passes the raw path through, the underlying Rust code
+sees an empty string. ⚠ minor cosmetic; the right fix is to
+preserve the user-supplied path in the error message verbatim.
+
+`py_create_environment` and `py_deserialize_step` are
+exposed as `create_environment` and `deserialize_step` on the
+`_openjd_rs` module. Neither is documented in the spec; both
+are reachable via `from openjd._openjd_rs import …` for the
+sessions runtime. ⚠ spec coverage gap.
+
+### `job.rs` — job-time output surface
+
+The `PyJob.parameters` getter only returns parameters that were
+explicitly resolved via `job_parameter_values`. **Parameters
+with defaults but no explicit value are absent from the dict**
+— verified at runtime: a template with two `parameterDefinitions`
+that have `default` values produces an empty `j.parameters` dict
+when `create_job(..., job_parameter_values={})` runs. The v0
+reference includes both defaults and explicit values. ⚠
+behavioural divergence; this is a real parity bug, not a spec
+gap.
 
 ### PyO3-specific concerns
 
-- **Exception class registration.** `register_renamed_exception` is
-  called for every `create_exception!`-built exception in
-  `lib.rs::openjd_rs`. Verified at runtime via `pickle.dumps(e); pickle.loads`
-  — the qualified names round-trip as `openjd.model._v1.DecodeValidationError`
-  (etc.). ✓
-- **Type conversions.**
-  - `int → i64` boundary: rejects `2**63` with PyO3's
-    `OverflowError`. Inside the model layer this only matters in
-    `JobParameterValue` payloads, where the value is stored as a
-    string and converted lazily.
-  - `pathlib.Path` ↔ `PathBuf`: Works via `extract::<PathBuf>()`. The
-    `"."` rewrite to `""` in `py_preprocess_job_parameters` is
-    surprising; see above.
-  - Ordered vs unordered: `Job.parameters` is `dict[str, JobParameter]`;
-    iteration order matches insertion order in the underlying
-    `IndexMap` ✓.
-- **GIL handling.** None of the model bindings call
-  `Python::allow_threads` even though `decode_job_template` does
-  potentially expensive YAML/JSON parsing and validation. With the GIL
-  held, multi-threaded servers cannot decode templates concurrently. (A
-  concurrent-test probe shows the bindings *do* support being called
-  from multiple Python threads serially; concurrent throughput is
-  obviously bottlenecked.)
-- **`#[pyclass]` constructor signatures.** `PyStepParameterSpaceIterator.__init__`
-  accepts both `step=` and `space=` (matches spec). `PyEmbeddedFile.__init__`
-  accepts `name`, `type`, `filename`, `data`, `runnable`, `endOfLine` (or
-  `end_of_line`) — matches the reference Pydantic model.
-- **`Py<T>` lifetime.** No obvious correctness issues. All getters
-  return `Clone`d data, so no reborrow conflicts.
-- **ABI3 compatibility.** `[features].extension-module` correctly
-  enables `pyo3/extension-module`; the wheel reports `cp39-abi3`. ✓
-- **Stub generation.** `src/openjd/_openjd_rs.pyi` is stale (see §3
-  below); only 25 of the 50 registered symbols appear in `__all__`.
+* **Exception class registration.** Verified for all three model
+  exceptions; pickle round-trips under canonical names. ✓
+* **Type conversions.** Boundary integers (i64::MIN / i64::MAX)
+  round-trip through `INT`-typed `JobParameter.value` correctly.
+  ✓ Ordered vs unordered: `Job.parameters` iteration order
+  matches `IndexMap` insertion order. ✓
+* **GIL handling.** **Zero `Python::allow_threads` calls in any
+  of the model bindings.** The decode path holds the GIL across
+  YAML parsing, JSON conversion, serde deserialisation, and
+  validation. The `create_job` path holds the GIL across
+  combination-expression evaluation. The
+  `StepParameterSpaceIterator` constructor holds the GIL while
+  building the iterator graph. A multi-threaded probe (8 threads
+  × 20 decodes) succeeds with no errors but the work is
+  serialised. ⚠
+* **`#[pyclass]` constructor signatures.**
+  `PyStepParameterSpaceIterator::new` takes `step` and `space`
+  as keyword-only optional arguments; matches the spec.
+  `PyEmbeddedFile` accepts both `endOfLine` and `end_of_line`.
+  ✓
+* **`Py<T>` lifetime.** No `BorrowMutError` / use-after-free
+  patterns spotted. All getters return `Clone`d data.
+* **ABI3 compatibility.** `Cargo.toml` declares `abi3-py39`;
+  the wheel emits `cp39-abi3-linux_x86_64`. ✓
+* **Stub generation.** `src/openjd/_openjd_rs.pyi` is 102 KB,
+  2,994 lines, and now reflects the full surface (the prior
+  report's `cd93ebe` commit closed the gaps). The stub is
+  unchanged in this evaluation. ✓
 
 ## 3. Python Wrapper Module Review
 
-`src/openjd/model/_v1/__init__.py` re-exports the bindings under their
-canonical names plus a handful of Python-side classes. ✓ for
-`openjd.model._v1.{DecodeValidationError, ModelValidationError,
-UnsupportedSchema}` reaching their canonical home (the
-`register_renamed_exception` calls handle this in Rust).
+`src/openjd/model/_v1/__init__.py` (517 lines) re-exports the
+package's *entry points* — decode/create functions, Python-only
+compatibility classes, and Python str-Enum shims for
+`SpecificationRevision` / `TemplateSpecificationVersion` — but
+deliberately does *not* re-export structural pyclasses. Those
+live in:
 
-### Python-side classes / aliases
+* `src/openjd/model/_v1/template.py` (163 lines) — template-time
+  pyclasses + `Template`-prefixed aliases.
+* `src/openjd/model/_v1/job.py` (70 lines) — job-time pyclasses
+  + iteration helpers.
+* `src/openjd/model/_v1/types.py` (37 lines) — cross-cutting
+  enums and value types.
+* `src/openjd/model/_v1/errors.py` (20 lines) — three exception
+  classes.
+
+This split is documented in the docstring of `__init__.py`. The
+intent is clean — `from openjd.model._v1.template import …`
+gives you template-time stuff; `from openjd.model._v1.job
+import …` gives you job-time. But **the top-level
+`__init__.py` does not export the structural pyclasses or the
+non-`DecodeValidationError` exceptions** that the spec uses in
+its example code, and there is no shim that warns the user
+about this.
+
+### Top-level `_v1` re-exports (current)
+
+Confirmed via `import openjd.model._v1 as v1; v1.__all__`:
+
+* Decode: `decode_job_template`, `decode_environment_template`,
+  `decode_template`, `parse_model`, `document_string_to_object`.
+* Job: `create_job`, `preprocess_job_parameters`,
+  `merge_job_parameter_definitions`.
+* Capability validation: `validate_amount_capability_name`,
+  `validate_attribute_capability_name`,
+  `STANDARD_AMOUNT_CAPABILITIES`,
+  `STANDARD_ATTRIBUTE_CAPABILITIES`.
+* Python str-Enums: `SpecificationRevision`,
+  `TemplateSpecificationVersion`.
+* Python-only compat: `ParameterValue`, `ParameterValueType`,
+  `RevisionExtensions`, `CancelationMethodNotifyThenTerminate`,
+  `CancelationMethodTerminate`, `CompatibilityError`,
+  `TokenError`, `ValueReferenceConstants`.
+* Type aliases: `JobParameterDefinition`, `JobParameterInputValues`,
+  `JobParameterValues`, `OpenJDModel`, `TaskParameterSet`.
+* Re-exports for spec examples: `CallerLimits`, `DocumentType`,
+  `ModelProfile`.
+* Single error: `DecodeValidationError`.
+* Cross-component re-exports from `openjd.expr`: `ExpressionError`,
+  `FormatString`, `FormatStringError` (alias for
+  `FormatStringValidationError`), `RangeExpr`, `SymbolTable`.
+* Aliases: `ArgString`, `CommandString`, `EmbeddedFileText`,
+  `EmbeddedFiles`, `IntRangeExpr`, `StepDependencyGraphNode`,
+  `StepDependencyGraphStepToStepEdge`.
+
+### NOT exposed at `_v1` top level (live in submodules)
+
+Verified by `hasattr(v1, X)` returning False for these
+spec-mentioned symbols:
+
+* `Job`, `Step`, `StepScript`, `StepActions`, `Action`,
+  `Environment`, `EnvironmentScript`, `EnvironmentActions`,
+  `EmbeddedFile`, `JobParameter`, `StepParameterSpace`,
+  `StepDependency`, `CancelationMode` — all in `_v1.job`.
+* `JobTemplate`, `EnvironmentTemplate` — in `_v1.template`.
+* `StepParameterSpaceIterator`, `StepDependencyGraph` — in
+  `_v1.job`.
+* `JobParameterType`, `TaskParameterType` — in `_v1.types`.
+* `ModelValidationError`, `UnsupportedSchema` — in `_v1.errors`.
+* `decode_job_template_str`, `decode_environment_template_str`
+  — only on `openjd._openjd_rs`, not on the v1 wrapper at all.
+
+### Python-side compat classes
 
 | Symbol | Source | Notes |
 |---|---|---|
-| `ParameterValue` | Python class with `type` / `value` / `__eq__` / `__hash__` / `__repr__` | Compatible with `openjd._openjd_rs.JobParameterValue` and `TaskParameterValue` for `==`. ✓ |
-| `JobParameterValues`, `JobParameterInputValues`, `TaskParameterSet` | `dict` aliases | Spec advertises these as type aliases ✓ |
-| `RevisionExtensions` | Python class | Accepts both `spec_rev=` and `revision=`, both `supported_extensions=` and `extensions=`. Reference is keyword-only `spec_rev` + `supported_extensions`. ⚠ minor divergence (binding more permissive). |
-| `CancelationMethodTerminate` / `CancelationMethodNotifyThenTerminate` | Python wrapper around literal strings | Plain dataclasses; do not unify with `openjd.model._v1.CancelationMode` (the Rust class). ⚠ Two parallel hierarchies. |
-| `EmbeddedFileText` | Alias for `EmbeddedFile` | ✓ |
-| `EmbeddedFiles` | Alias for `list` | ✓ |
-| `CompatibilityError` / `TokenError` | Plain Python `Exception` subclasses | Reference: `CompatibilityError` is `ValueError`-derived (in `_errors.py`); the binding uses `Exception`. ⚠ Catching `ValueError` in legacy code will not catch `CompatibilityError` in the binding. |
-| `IntRangeExpr` = `RangeExpr` | Direct alias | ✓ |
-| `validate_amount_capability_name` / `validate_attribute_capability_name` | Pure-Python re-implementations | Function signatures differ from reference (binding accepts both positional `name` and kw `capability_name` and makes `standard_capabilities` optional). Behavior matches when called with reference signature. ✓ |
-| `STANDARD_AMOUNT_CAPABILITIES` / `STANDARD_ATTRIBUTE_CAPABILITIES` | Hard-coded dicts | Match reference values ✓ but content lives in two places — risk of drift if Rust crate changes. |
+| `ParameterValue` | Python class | `__eq__` is symmetric with `JobParameterValue` and `TaskParameterValue` (verified). |
+| `RevisionExtensions` | Python wrapper | Accepts both `spec_rev=` and `revision=`, both `supported_extensions=` and `extensions=`. Reference is strict kw-only `spec_rev`+`supported_extensions`. ⚠ mostly cosmetic. |
+| `CancelationMethodTerminate` / `CancelationMethodNotifyThenTerminate` | Python wrappers | Plain dataclasses; do not unify with `openjd.model._v1.job.CancelationMode` (the Rust class). Two parallel hierarchies; v0 reference has the same shape so this is intentional compat. |
+| `CompatibilityError` | `Exception` subclass | Reference inherits from `ValueError`. ⚠ |
+| `TokenError` | `Exception` subclass | Reference inherits from `Exception`. ✓ |
+| `validate_amount_capability_name` / `validate_attribute_capability_name` | Pure-Python re-implementations | Permit positional `name` and make `standard_capabilities` optional, both more permissive than the reference. Behaviour matches the reference when called with reference signature. ⚠ |
 
 ### `openjd.model._v1.v2023_09` shim
 
-The current shim re-exports only:
-
-```python
-Action, EmbeddedFile as EmbeddedFileText, Environment, EnvironmentTemplate,
-EnvironmentScript, FormatString, Job, JobTemplate, Step, StepScript,
-StepActions, StepParameterSpace, StepParameterSpaceIterator,
-STANDARD_AMOUNT_CAPABILITIES, STANDARD_ATTRIBUTE_CAPABILITIES,
-RangeExpressionTaskParameterDefinition = dict, RangeListTaskParameterDefinition = dict,
-CommandString = FormatString, ArgString = FormatString, DataString = FormatString,
-EmbeddedFiles = list, EmbeddedFileTypes, ExtensionName,
-```
-
-The reference module exposes ~85 symbols; the binding shim covers ~12.
-**Every test in `test/openjd/model_v1/v2023_09/` fails to collect** because
-the missing names cause `ImportError`. **This is a v0-architecture
-artifact**, however — see Rec #7 for why the v1 surface deliberately
-does not mirror v0's per-revision class hierarchy. The remediation is
-to delete or recast the broken test files, not to add per-revision
-re-exports.
-
-### `openjd.model.__init__.py` (top-level dispatcher)
-
-Identical to the reference. Re-exports v0 (pure-Python) symbols. The
-top-level `openjd.model` is the legacy interface; `openjd.model._v1` is
-the binding-aware interface.
+`src/openjd/model/_v1/v2023_09/__init__.py` (51 lines) re-exports
+a small set of names for legacy compat (`Action`, `EmbeddedFile`,
+`Environment`, `EnvironmentTemplate`, `EnvironmentScript`,
+`FormatString`, `Job`, `JobTemplate`, `Step`, `StepScript`,
+`StepActions`, `StepParameterSpace`, `StepParameterSpaceIterator`,
+plus `STANDARD_*_CAPABILITIES`, the `dict` aliases, and
+`EmbeddedFileTypes` / `ExtensionName`). The corresponding
+test directory `test/openjd/model_v1/v2023_09/` is empty; the
+prior report's Recommendation #7 was resolved by deleting the
+broken-collection v2023_09 test files (per the design rationale
+that v1 has no per-revision class hierarchy). ✓
 
 ## 4. Test Review
 
 ### Inventory
 
 ```
-test/openjd/model_v0/          —  pure-Python reference tests (still passing as a baseline)
+test/openjd/model_v0/   pure-Python reference (2306 tests, all passing)
   __init__.py
-  benchmark/test_yaml_loader_performance.py
-  benchmark/test_benchmark_step_environments.py
-  format_strings/{test_format_string,test_expression,test_parser,test_dyn_constrained_str,test_node,test_edit_distance}.py
-  _internal/{test_combination_expr,test_create_job,test_param_space_dim_validation,test_range_expr,test_variable_reference_validation}.py
-  v2023_09/{test_create,test_environments,test_parameter_space,test_strings,test_redacted_env_vars,test_definitions,test_module,test_job_template,test_environment_template,test_step_host_requirements,test_step_template,test_feature_bundle_1,test_embedded,test_chunk_int_task_parameter_type,test_action,test_scripts,test_job_parameters,test_template_variables}.py
-  test_{capabilities,convert_pydantic_error,create_job,errors,fuzz,importable,lexer,merge_job_parameters,parse,step_dependency_graph,step_param_space_iter,step_param_space_iter_with_chunks,symbol_table,tokenstream,version_enums}.py
+  conftest.py
+  benchmark/
+  format_strings/{test_format_string,test_expression,test_parser,
+                  test_dyn_constrained_str,test_node,test_edit_distance}.py
+  _internal/{test_combination_expr,test_create_job,
+             test_param_space_dim_validation,test_range_expr,
+             test_variable_reference_validation}.py
+  v2023_09/{test_create,test_environments,test_parameter_space,
+            test_strings,test_redacted_env_vars,test_definitions,
+            test_module,test_job_template,test_environment_template,
+            test_step_host_requirements,test_step_template,
+            test_feature_bundle_1,test_embedded,
+            test_chunk_int_task_parameter_type,test_action,
+            test_scripts,test_job_parameters,test_template_variables}.py
+  test_{capabilities,convert_pydantic_error,create_job,errors,fuzz,
+        importable,lexer,merge_job_parameters,parse,
+        step_dependency_graph,step_param_space_iter,
+        step_param_space_iter_with_chunks,symbol_table,
+        tokenstream,version_enums}.py
 
-test/openjd/model_v1/          —  binding tests
+test/openjd/model_v1/   binding tests (867 tests, all passing)
   __init__.py
-  benchmark/{test_yaml_loader_performance,test_benchmark_step_environments}.py
-  v2023_09/{… 18 files, each ImportError on collection …}
-  format_strings/__init__.py     ← directory exists, but empty (no test files)
-  _internal/__init__.py          ← directory exists, but empty (no test files)
-  test_{capabilities,create_job,errors,fuzz,importable,merge_job_parameters,parse,pyclass_modules,rust_model_bindings,step_dependency_graph,step_param_space_iter,symbol_table,version_enums}.py
+  benchmark/
+  v2023_09/                ← empty placeholder dir (was deleted in Rec #7 resolution)
+  format_strings/__init__.py     ← empty
+  _internal/__init__.py          ← empty
+  test_capabilities.py
+  test_create_job.py
+  test_errors.py
+  test_fuzz.py
+  test_importable.py
+  test_job_param_defs.py
+  test_known_gaps.py             ← currently empty (no known gaps tracked)
+  test_merge_job_parameters.py
+  test_parse.py
+  test_pickle.py
+  test_pyclass_modules.py
+  test_range_expr.py
+  test_rust_model_bindings.py
+  test_step_dependency_graph.py
+  test_step_param_space_def.py
+  test_step_param_space_iter.py
+  test_symbol_table.py
+  test_task_parameter.py
+  test_template_types.py
+  test_user_interfaces.py
+  test_version_enums.py
 ```
 
-### What test/openjd/model_v1 covers well
+### What `test/openjd/model_v1/` covers well
 
-- `test_pyclass_modules.py` — exhaustive coverage of `__module__` /
-  `__name__` / `__qualname__` / pickle-name fix-up for every exposed
-  pyclass. ✓
-- `test_errors.py` — sanity check that error classes derive from the
-  expected base. ✓
-- `test_create_job.py` — most happy-path and error-path coverage of
-  `create_job` and the resulting object shape. ✓ (passes 593 tests)
-- `test_step_dependency_graph.py` — covers the basic node / edge /
-  topological API. ✓
+* `test_pyclass_modules.py` — exhaustive coverage of `__module__`,
+  `__name__`, `__qualname__`, and pickle-name fix-up for every
+  exposed pyclass (`EXPECTED_MODULES` table is the source of
+  truth). ✓
+* `test_pickle.py` — Group A enums + Group B value types.
+* `test_template_types.py` — structural template-time accessors
+  on `JobTemplate`, `StepTemplate`, `Environment`, `Action`,
+  `HostRequirements`, etc.
+* `test_job_param_defs.py` — all 12 typed
+  `JobParameterDefinition` variants.
+* `test_user_interfaces.py` — 23 tests covering every
+  `*UserInterface` variant + `FileFilter`.
+* `test_task_parameter.py` — 35 tests covering the 5 typed
+  job-time `TaskParameter` variants + dispatch through
+  `StepParameterSpace.taskParameterDefinitions`.
+* `test_step_param_space_def.py` — 14 tests covering all 5
+  `TaskParameterDefinition` variants + `ChunksDefinition` +
+  `StepParameterSpaceDefinition`.
+* `test_create_job.py` — happy path + most error paths.
+* `test_step_param_space_iter.py` — basic iteration, indexing,
+  product/associate combinations, `contains`, name set.
+* `test_step_dependency_graph.py` — node/edge/topological API.
+* `test_known_gaps.py` — currently empty (no tracked gaps).
 
-### Coverage gaps vs reference
+### Coverage gaps relative to the v0 reference
 
-- `test/openjd/model_v0/test_convert_pydantic_error.py` (~7290 lines)
-  has no analog in `model_v1`. Reasonable: pydantic-specific error
-  conversion is N/A.
-- `test/openjd/model_v0/test_lexer.py` (token lexer tests) has no
-  analog. Reasonable: the binding does not expose a tokenstream.
-- `test/openjd/model_v0/test_tokenstream.py` similarly has no analog.
-- `test/openjd/model_v0/format_strings/` — six test files; one analog
-  exists (a directory exists at `model_v1/format_strings/` but it is
-  empty). Reference covers `_format_string`, `_expression`, `_parser`,
-  `_dyn_constrained_str`, `_node`, `_edit_distance`; binding covers
-  none. Affected behaviors: `FormatString` round-trip, expression
-  parsing, edit-distance suggestion, tokens.
-- `test/openjd/model_v0/_internal/{test_combination_expr,test_create_job,test_range_expr,test_param_space_dim_validation,test_variable_reference_validation}.py`
-  — five test files; the binding has no analog (the directory at
-  `model_v1/_internal/` is empty).
-- `test/openjd/model_v0/v2023_09/` — 18 test files (~328k LoC of test
-  code). The binding's analog directory exists but **none of its 18
-  files even collect** because of the missing
-  `openjd.model._v1.v2023_09` re-exports. This is the largest single
-  coverage gap.
-- `test_step_param_space_iter_with_chunks.py` — a ~28k-line reference
-  test file that exhaustively covers chunked iteration. There is no
-  analog in `model_v1`.
+* `test/openjd/model_v0/test_convert_pydantic_error.py` —
+  no analog. Reasonable: pydantic-specific.
+* `test/openjd/model_v0/test_lexer.py`, `test_tokenstream.py` —
+  no analog. Reasonable: binding does not expose tokenstream/lexer.
+* `test/openjd/model_v0/format_strings/` — six test files; the
+  binding's `format_strings/` directory is empty. The
+  format-string semantics flow through `openjd.expr` so there is
+  arguably coverage there, but a binding-level
+  round-trip-through-template integration test would be
+  valuable.
+* `test/openjd/model_v0/_internal/` — five test files; the
+  binding's `_internal/` directory is empty. These cover
+  combination-expression internals, range-expr edge cases,
+  parameter-space-dimension validation. The behaviours are
+  mostly tested via `test_step_param_space_iter.py` /
+  `test_step_param_space_def.py` integration paths, but
+  micro-tests are missing.
+* `test/openjd/model_v0/test_step_param_space_iter_with_chunks.py`
+  — a 28k-line reference test file. The binding's
+  `test_step_param_space_iter.py` covers some chunked cases
+  but is much smaller. The `CHUNK[INT] __contains__` regression
+  found during exploratory probing (see §7) is exactly the
+  kind of issue these tests would catch.
 
-### Tests in the binding without a reference analog
+### Tests that exist in the binding without a v0 analog
 
-- `test_pyclass_modules.py` — checks the `register_renamed_exception`
-  fix-up. Specific to bindings.
-- `test_rust_model_bindings.py` — direct exercise of `_openjd_rs.*`
-  methods. Specific to bindings.
+* `test_pyclass_modules.py` — binding-specific.
+* `test_rust_model_bindings.py` — direct exercise of
+  `_openjd_rs.*`. Binding-specific.
+* `test_user_interfaces.py`, `test_task_parameter.py`,
+  `test_step_param_space_def.py`, `test_template_types.py`,
+  `test_job_param_defs.py`, `test_pickle.py`, `test_parse.py`
+  — coverage of binding-side typed pyclasses for a surface
+  the v0 reference exposes through different shapes (Pydantic
+  discriminated unions). Equivalent v0 tests live in
+  `test_v2023_09/`.
 
 ## 5. Parity with Pure-Python Reference
 
-This section lists every public symbol in the **reference**
-`openjd.model.__init__` and tracks the binding's equivalent.
+This is the most important section. Each row maps a public symbol
+in the v0 reference (`openjd.model.__init__`) to its v1
+counterpart and notes any divergence.
 
 ### Functions
 
 | Symbol | Reference | Binding | Status |
 |---|---|---|---|
-| `decode_job_template(*, template, supported_extensions=None)` | Returns pydantic JobTemplate | Returns Rust-backed `JobTemplate` | ✓ shape ok; PyO3 round-trips dict→JSON internally |
-| `decode_job_template_str(document, format=DocumentType.YAML, supported_extensions=None)` | n/a (split into `decode_job_template` + `document_string_to_object`) | Direct binding | ✓ binding-only |
-| `decode_environment_template(*, template, supported_extensions=None)` | Returns `EnvironmentTemplate` | Returns Rust-backed | ✓ |
-| `decode_environment_template_str(document, format, supported_extensions=None)` | n/a | Direct binding | ✓ binding-only |
-| `decode_template(*, name, raw_data, document_type)` | Reference exports it | **Missing** in binding | ❌ |
-| `create_job(*, job_template, job_parameter_values, environment_templates=None)` | Returns Job | Returns Rust Job | ✓ |
-| `preprocess_job_parameters(*, job_template, job_parameter_values, environment_templates=None, job_template_dir, current_working_dir, allow_job_template_dir_walk_up=False)` | Returns dict[str, ParameterValue] | Returns dict[str, JobParameterValue] | ⚠ value type differs (`ParameterValue` vs `JobParameterValue`) but `__eq__` is symmetric so most code keeps working. |
-| `merge_job_parameter_definitions(*, job_template, environment_templates=None)` | Returns list of pydantic objects | Returns list of dicts | ⚠ shape differs |
-| ~~`model_to_object(*, model)`~~ | Returns dict via `model_dump` | Removed from v1 (v0-only API; see Rec #3). | ✓ resolved by removal |
-| `parse_model(*, model=None, obj)` | Returns pydantic model | Returns Rust model | ✓ |
-| `document_string_to_object(*, document, document_type=None)` | Returns dict (uses CSafeLoader) | Returns dict (uses CSafeLoader) | ✓ |
-| `validate_amount_capability_name(*, capability_name, standard_capabilities)` | strict kw-only | Permits positional `name` + makes `standard_capabilities` optional | ⚠ more permissive |
-| `validate_attribute_capability_name(*, capability_name, standard_capabilities)` | strict kw-only | Permits positional `name` + makes `standard_capabilities` optional | ⚠ more permissive |
+| `decode_job_template(*, template, supported_extensions=None, caller_limits=None)` | Returns pydantic `JobTemplate` | Returns Rust `JobTemplate` | ✓ |
+| `decode_job_template_str(document, format=…, *, supported_extensions=None, caller_limits=None)` | n/a — v0 splits as `decode_job_template` + `document_string_to_object` | Direct binding (only on `_openjd_rs`, not on `_v1`) | ⚠ binding-only entry point; not re-exported through wrapper |
+| `decode_environment_template(*, template, supported_extensions=None)` | Returns pydantic `EnvironmentTemplate` | Returns Rust `EnvironmentTemplate` | ✓ |
+| `decode_environment_template_str(document, format=…, *, supported_extensions=None)` | n/a | Direct binding (only on `_openjd_rs`) | ⚠ same |
+| `decode_template(*, name, raw_data, document_type)` | Reference signature with `name` / `raw_data` / `document_type` | v1 alias accepts the same kwargs as `decode_job_template` (`template=`, `supported_extensions=`, `caller_limits=`) | ⚠ different kwargs |
+| `create_job(*, job_template, job_parameter_values, …)` | Returns Job; resolved `parameters` includes defaults | Returns Job; **`parameters` omits defaults** | ❌ behavioural divergence |
+| `preprocess_job_parameters(*, job_template, job_parameter_values, …, job_template_dir, current_working_dir)` | Returns dict[str, ParameterValue] | Returns dict[str, JobParameterValue] | ⚠ value type differs but `__eq__` is symmetric |
+| `merge_job_parameter_definitions(*, job_template, environment_templates=None)` | Returns list of pydantic objects | Returns list of pydantic-shaped dicts | ⚠ shape differs |
+| `model_to_object(*, model)` | Returns dict via `model_dump` | **Removed (v0-only)** | ✓ documented in spec |
+| `parse_model(*, model=None, obj)` | Returns pydantic model | Returns Rust model; **does NOT accept `supported_extensions=`** | ⚠ — templates with `extensions:` field fail |
+| `document_string_to_object(*, document, document_type=None)` | Returns dict (CSafeLoader) | Returns dict (CSafeLoader) | ✓ |
+| `validate_amount_capability_name(*, capability_name, standard_capabilities)` | strict kw-only | Permissive: accepts positional `name=` and makes `standard_capabilities` optional | ⚠ |
+| `validate_attribute_capability_name(*, capability_name, standard_capabilities)` | strict kw-only | Same as above | ⚠ |
 
-### Classes / output types
+### Output types (job-time)
 
 | Symbol | Reference | Binding | Status |
 |---|---|---|---|
-| `Job` | Pydantic model with full template body | Rust struct | ✓ shape; minor: `revision` always `'2023-09'` even for future versions |
+| `Job` | Pydantic model | Rust `Job` | ✓ shape; minor: `revision` always `'2023-09'` |
+| `Job.parameters` | dict including defaults | **dict containing only explicit values** | ❌ |
 | `Step.script.actions.onRun.command` | `FormatString` | `FormatString` (from `openjd.expr`) | ✓ |
 | `Step.script.actions.onRun.timeout` | string in spec | `Optional[str]` | ✓ |
-| `Step.script.let` | `Optional[list[str]]` | ✓ | ✓ |
-| `Step.script.embedded_files` / `embeddedFiles` | both forms | both forms | ✓ |
-| ~~`Step.parameterSpace.taskParameterDefinitions[name]`~~ | typed `RangeExpression…/RangeList…TaskParameterDefinition` | one of `IntTaskParameter`, `FloatTaskParameter`, `StringTaskParameter`, `PathTaskParameter`, `ChunkIntTaskParameter` (mirrors Rust `TaskParameter` runtime enum) | ✓ resolved (Rec #6) |
+| `Step.script.actions.onRun.cancelation` | typed | `CancelationMode` with `.mode` and `.notify_period_in_seconds` | ✓ |
+| `Step.script.let` | `Optional[list[str]]` | `Optional[list[str]]` | ✓ |
+| `Step.script.embedded_files` / `embeddedFiles` | both | both | ✓ |
+| `Step.parameterSpace.taskParameterDefinitions[name]` | typed `RangeExpression…/RangeList…TaskParameterDefinition` | typed `IntTaskParameter` / `FloatTaskParameter` / `StringTaskParameter` / `PathTaskParameter` / `ChunkIntTaskParameter` (mirrors Rust runtime enum 1:1) | ✓ different shape, intentional per spec |
 | `Step.parameterSpace.combination` | `Optional[str]` | `Optional[str]` | ✓ |
-| `Job.parameters[name].value` | `ExprValue` | `ExprValue` | ✓ |
+| `Step.resolved_symtab` | `SymbolTable` | `SymbolTable` | ✓ |
+| `Step.resolvedBindings` | `Optional[list[str]]` | `Optional[list[str]]` | ✓ |
+| `JobParameter.value` | `ExprValue` | `ExprValue` | ✓ |
+| `JobParameter.name` | str | str | ✓ |
+| `JobParameter.param_type` | str | str | ✓ |
 | `Environment.script.actions.onEnter` / `onExit` | `Optional[Action]` | `Optional[Action]` | ✓ |
-| `EmbeddedFile(name, type, filename, data, runnable, endOfLine)` | Pydantic model | Rust struct, both `endOfLine` and `end_of_line` accepted | ✓ |
-| `JobTemplate.name` / `description` / `specification_version` | All getters present | Same | ✓ |
-| ~~`JobTemplate.specificationVersion` (camel) exists~~ | exists | exposed as a camelCase alias for `specification_version` | ✓ resolved (Rec #11 part 1) |
-| ~~`JobTemplate.parameter_definitions` / `steps` / `extensions`~~ | exist | exposed via `template.parameter_definitions` (12 typed variants), `template.steps` (`list[StepTemplate]`), `template.profile.extensions` | ✓ resolved (Rec #11) |
-| ~~`EnvironmentTemplate.environment` (the inner `Environment`)~~ | exposed | exposed at `template.environment`, returning a typed `Environment` pyclass | ✓ resolved (Rec #11) |
-| `RevisionExtensions(spec_rev=, supported_extensions=)` | strict kw | also accepts `revision=` and `extensions=` | ⚠ |
-| `CancelationMethodTerminate(mode=...)` | dataclass with mode | Plain class, default mode `'TERMINATE'` | ✓ |
-| `CancelationMethodNotifyThenTerminate(notify_period_in_seconds=120)` | dataclass | Plain class | ✓ |
-| `IntRangeExpr.start` / `end` | Reference exposes both | **Missing** | ❌ minor (also flagged in expr report) |
-| `IntRangeExpr.from_list([1, 2, 3])` | exists | **Missing** | ❌ |
+| `EmbeddedFile.type_` (job-time) / `EmbeddedFile.type` (template-time) | one accessor | asymmetric (job-time: `type_`; template-time: `type`) | ⚠ asymmetry |
+| `EmbeddedFile(name, type, filename, data, runnable, endOfLine)` | Pydantic | Rust struct, both `endOfLine` and `end_of_line` accepted | ✓ |
+
+### Template types
+
+| Symbol | Reference | Binding | Status |
+|---|---|---|---|
+| `JobTemplate.{name, description, specification_version}` | All present | All present | ✓ |
+| `JobTemplate.specificationVersion` (camel) | ✓ in reference | ✓ in binding | ✓ |
+| `JobTemplate.parameter_definitions` / `parameterDefinitions` | list of typed defs | list of 12 typed pyclasses dispatching on Rust enum | ✓ |
+| `JobTemplate.steps` | list[StepTemplate] | list[StepTemplate] | ✓ |
+| `JobTemplate.job_environments` / `jobEnvironments` | Optional list | Optional list | ✓ |
+| `JobTemplate.profile` | `RevisionExtensions`-shaped | `ModelProfile` | ⚠ different type; v1's is richer |
+| `EnvironmentTemplate.environment` | nested Environment | typed Environment | ✓ |
+| `EnvironmentTemplate.parameter_definitions` | list | list | ✓ |
+| `StepTemplate.parameter_space` | typed | `Optional[StepParameterSpaceDefinition]` | ✓ |
+| `StepTemplate.host_requirements` | typed | `Optional[HostRequirements]` | ✓ |
+| `StepTemplate.{bash,python,cmd,powershell,node}` | sugar (FEATURE_BUNDLE_1) | `Optional[SimpleAction]` | ✓ |
 
 ### Iterators
 
 | Symbol | Reference | Binding | Status |
 |---|---|---|---|
-| `StepParameterSpaceIterator(*, space=None, chunks_task_count_override=None)` | accepts `space` + `chunks_task_count_override` | accepts `step` or `space` (no `chunks_task_count_override`) | ⚠ mostly ok but no `chunks_task_count_override` |
-| `len(it)` | raises `ValueError` for adaptive-chunked | returns 0 | ❌ |
+| `StepParameterSpaceIterator(*, space=None, step=None)` | accepts `space` + `chunks_task_count_override` | accepts `step` or `space` | ⚠ no `chunks_task_count_override` |
+| `len(it)` | raises `ValueError` for adaptive-chunked | raises `ValueError` with matching message | ✓ |
 | `it[i]` / `it[-1]` | works | works | ✓ |
-| `for v in it` (dict[str, ParameterValue]) | yields `ParameterValue` | yields `TaskParameterValue` | ✓ (compares equal) |
-| `v in it` after iteration | True | **False** for self-yielded values | ❌ |
-| `it.names` | property | property | ✓ |
+| `for v in it` (dict[str, ParameterValue]) | yields ParameterValue | yields TaskParameterValue | ✓ (compares equal) |
+| `v in it` after iteration (INT) | True | True | ✓ |
+| `v in it` after iteration (CHUNK[INT]) | True | **False** | ❌ |
+| `it.names` (property) | property | property | ✓ |
 | `it.chunks_adaptive` | property | property | ✓ |
-| `it.chunks_default_task_count` (mutate) | actually mutates | **silent no-op** | ❌ |
+| `it.chunks_default_task_count` (mutate) | mutates | mutates | ✓ |
+| `it.chunks_default_task_count` (set on non-adaptive) | raises | raises with matching message | ✓ |
 
-### Enums
+### Enums and constants
 
 | Symbol | Reference | Binding | Status |
 |---|---|---|---|
-| `DocumentType.{JSON,YAML}` | str-based Enum | int-eq pyclass | ⚠ different shape (Enum vs pyclass), `==` between them works only because pyclass implements `__eq__` against str via `as_str()` |
-| `TemplateSpecificationVersion.JOBTEMPLATE_v2023_09` | str-based Enum | str-based Enum (Python-side wrapper) | ✓ |
-| `JobParameterType.{STRING,INT,…,LIST_LIST_INT}` | str-based Enum | int-eq pyclass | ⚠ shape difference. `as_str()` returns the spec name. Hashable. |
-| `TaskParameterType.{INT,FLOAT,STRING,PATH,CHUNK_INT}` | str-based Enum | int-eq pyclass, hashable, pickleable | ✓ resolved (Rec #9) |
-| `SpecificationRevision.v2023_09` | str-based Enum | str-based Enum | ✓ |
-| `ValueReferenceConstants` | Reference exposes `JOB_PARAMETER_PREFIX`, `TASK_PARAMETER_PREFIX`, `WORKING_DIRECTORY`, `HAS_PATH_MAPPING_RULES`, `JOB_PARAMETER_RAWPREFIX`, `TASK_PARAMETER_RAWPREFIX`, `ENV_FILE_PREFIX`, `TASK_FILE_PREFIX`, `PATH_MAPPING_RULES_FILE` | Binding exposes the same set | ✓ |
+| `DocumentType.{JSON, YAML}` | str-based Enum | int-eq pyclass; pickleable | ⚠ different shape (Enum vs pyclass), `==` works only because pyclass implements `__eq__` against str via `as_str()` |
+| `DocumentType` hashable | ✓ | **NOT hashable** | ⚠ |
+| `TemplateSpecificationVersion.JOBTEMPLATE_v2023_09` | str-based Enum | str-based Enum (Python shim) | ✓ |
+| `JobParameterType.{STRING,INT,…,LIST_LIST_INT}` | str-based Enum | int-eq pyclass; hashable; pickleable | ⚠ shape diff but functional parity |
+| `TaskParameterType.{INT,FLOAT,STRING,PATH,CHUNK_INT}` | str-based Enum | int-eq pyclass; hashable; pickleable | ✓ |
+| `SpecificationRevision.v2023_09` | str-based Enum | str-based Enum (Python shim) | ✓ |
+| `ValueReferenceConstants` | str-based Enum | str-based Enum | ✓ |
+| `ModelExtension.{TASK_CHUNKING, REDACTED_ENV_VARS, FEATURE_BUNDLE_1, EXPR}` | n/a in v0 | int-eq pyclass; hashable; pickleable | ✓ binding-side new |
+| `ModelProfile`, `CallerLimits`, `ValidationContext` | n/a | new in v1 | ✓ binding-side new |
 
 ### Exceptions
 
 | Symbol | Reference | Binding | Status |
 |---|---|---|---|
 | `DecodeValidationError(ValueError)` | ✓ | ✓ | ✓ |
-| `ModelValidationError(ValueError)` | ✓ | ✓ | ✓ |
-| `UnsupportedSchema(ValueError)` | ✓ | ✓ | ✓ |
-| `ExpressionError(ValueError)` | ✓ | ✓ from openjd.expr | ✓ |
-| `FormatStringError(ValueError)` | ✓ | ✓ but `__qualname__` is `FormatStringValidationError` (re-imported from openjd.expr) | ⚠ name mismatch |
-| `CompatibilityError` | `(ValueError)` in reference | `(Exception)` only | ❌ |
+| `ModelValidationError(ValueError)` | ✓ | ✓ but only via `.errors` submodule | ⚠ |
+| `UnsupportedSchema(ValueError)` | ✓ | ✓ but only via `.errors` submodule | ⚠ |
+| `ExpressionError(ValueError)` | ✓ | ✓ from `openjd.expr` | ✓ |
+| `FormatStringError(ValueError)` | ✓ | ✓ but `__qualname__` is `FormatStringValidationError` (re-imported from `openjd.expr` under that name) | ⚠ name mismatch |
+| `CompatibilityError(ValueError)` | inherits from `ValueError` in `_errors.py` | inherits from `Exception` only | ❌ |
 | `TokenError(Exception)` | ✓ | ✓ | ✓ |
 
-When format-string parsing inside a template fails, the reference raises
-`FormatStringError`; the binding maps everything to
-`ModelValidationError` via `model_err_to_py`. Code catching the more
-specific exception type breaks. ⚠
+When format-string parsing inside a template fails, the reference
+raises `FormatStringError`; the binding maps everything to
+`ModelValidationError` via `model_err_to_py`. Code catching the
+more specific exception type breaks. ⚠
 
 ## 6. Build and Test Results
 
 ### `python scripts/maturin_build.py develop`
 
+Built cleanly against `openjd-rs` @ `baca1f2`:
+
 ```
 🔗 Found pyo3 bindings with abi3 support
-   Compiling openjd-sessions v0.2.0 (/home/markw/openjd-rs/crates/openjd-sessions)
-   Compiling openjd-python v0.9.0 (/home/markw/openjd-model-for-python/rust-bindings)
-warning: `openjd-python` (lib) generated 25 warnings (run `cargo fix --lib -p openjd-python` to apply 3 suggestions)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.14s
-📦 Built wheel for abi3 Python ≥ 3.9 to /tmp/.tmpIEt7j5/openjd_model-0.9.1.post13+g430f0d667-cp39-abi3-linux_x86_64.whl
-🛠 Installed openjd-model-0.9.1.post13+g430f0d667
+   Compiling openjd-python v0.9.0 (.../rust-bindings)
+warning: `openjd-python` (lib) generated 17 warnings (run `cargo fix --lib -p openjd-python` to apply 9 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.72s
+📦 Built wheel for abi3 Python ≥ 3.9 to .../openjd_model-0.9.1.post26+g8f19e4d6d.d20260525-cp39-abi3-linux_x86_64.whl
+🛠 Installed openjd-model-0.9.1.post26+g8f19e4d6d.d20260525
 ```
 
-The 25 rustc warnings break down as: 16 `non-camel-case-types`,
-8 `deprecated` PyO3 0.20-era APIs (FromPyObject auto-derive, downcast),
-and 1 `dead_code`. None block the build.
+The 17 build warnings are a subset of the clippy lints (see
+below). None block the build.
 
-### `python -m pytest test/openjd/model_v1` (Rust-backed)
-
-```
-5 failed, 593 passed, 18 errors in 4.16s
-```
-
-Failures:
+### `python -m pytest test/openjd/model_v1`
 
 ```
-FAILED test/openjd/model_v1/test_parse.py::TestModelToObject::test[translates Decimal to string]
-       NotImplementedError: model_to_object is not supported for this type
-FAILED test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem
-       __contains__ returns False for self-yielded values
-FAILED test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_product_iteration
-       descending range iteration order is reversed
-FAILED test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_product_getitem
-       descending range __getitem__ order is reversed
-FAILED test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_nested_expr_iteration
-       descending range iteration order is reversed (nested combination)
+867 passed in 3.91s
 ```
 
-Errors (all `ModuleNotFoundError: No module named 'openjd.model._v1._parse'`
-or `ImportError: cannot import name X from openjd.model._v1.v2023_09`):
+All `model_v1` tests pass. No xfails, no errors, no failures.
 
-> **Note:** these collection failures are a consequence of the v0
-> per-revision-typed test layout being ported verbatim. v1's
-> revision-neutral architecture (Rec #7) means the
-> `_v1.v2023_09.<Type>` import paths the test files rely on don't
-> exist by design. The intent of these tests is preserved by tests
-> in the parent `test/openjd/model_v1/` directory written against
-> the revision-neutral surface; these v2023_09 files should be
-> deleted or recast.
+### `python -m pytest test/openjd/model_v0`
 
 ```
-ERROR test/openjd/model_v1/v2023_09/test_action.py
-ERROR test/openjd/model_v1/v2023_09/test_chunk_int_task_parameter_type.py
-ERROR test/openjd/model_v1/v2023_09/test_create.py
-ERROR test/openjd/model_v1/v2023_09/test_definitions.py
-ERROR test/openjd/model_v1/v2023_09/test_embedded.py
-ERROR test/openjd/model_v1/v2023_09/test_environment_template.py
-ERROR test/openjd/model_v1/v2023_09/test_environments.py
-ERROR test/openjd/model_v1/v2023_09/test_feature_bundle_1.py
-ERROR test/openjd/model_v1/v2023_09/test_job_parameters.py
-ERROR test/openjd/model_v1/v2023_09/test_job_template.py
-ERROR test/openjd/model_v1/v2023_09/test_module.py
-ERROR test/openjd/model_v1/v2023_09/test_parameter_space.py
-ERROR test/openjd/model_v1/v2023_09/test_redacted_env_vars.py
-ERROR test/openjd/model_v1/v2023_09/test_scripts.py
-ERROR test/openjd/model_v1/v2023_09/test_step_host_requirements.py
-ERROR test/openjd/model_v1/v2023_09/test_step_template.py
-ERROR test/openjd/model_v1/v2023_09/test_strings.py
-ERROR test/openjd/model_v1/v2023_09/test_template_variables.py
+2306 passed in 2.44s
 ```
 
-After adding `test/openjd/model_v1/test_known_gaps.py` (this report's
-follow-on), the count becomes `5 failed, 593 passed, 10 xfailed, 18 errors`.
+All `model_v0` reference tests pass against the same source tree.
 
-After reclassifying `test_int_range_expr_descending_iteration_order`
-from `xfail` to a passing assertion of the documented ascending
-iteration order (see Recommendations §1), the count becomes
-`5 failed, 594 passed, 9 xfailed, 18 errors`.
-
-After resolving Recommendations §2, §4, and §5 — converting
-`test_step_param_space_iter_contains_self_yielded`,
-`test_step_param_space_iter_chunks_default_task_count_setter`, and
-`test_step_param_space_iter_adaptive_len_raises` from `xfail` to
-passing — the count becomes
-`4 failed, 598 passed, 6 xfailed, 18 errors`. (The fourth gain is
-`test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
-which was failing on the same `__contains__` bug as §2 and now
-transparently passes.)
-
-### `python -m pytest test/openjd/model_v0` (pure-Python baseline)
+### `python -m pytest test/` (whole suite)
 
 ```
-2311 passed in 8.07s
+4952 passed, 24 skipped, 6 xfailed, 8 warnings in 4.46s
 ```
 
-The reference passes all of its tests in the same repo.
+The 6 xfails are all in `test/openjd/expr/test_known_gaps.py`
+and are tracked in the `expr` report — none belong to the
+model component.
 
-### `cargo clippy --workspace -- -D warnings` against `rust-bindings/`
+### `hatch run lint`
 
 ```
-error: could not compile `openjd-python` (lib) due to 76 previous errors
+cmd [1] | ruff check src test
+All checks passed!
+cmd [2] | black --check --diff src test
+All done! ✨ 🍰 ✨
+154 files would be left unchanged.
+cmd [3] | mypy src test
+Success: no issues found in 103 source files
 ```
 
-Distribution of errors:
+ruff, black, and mypy all green. Zero typing errors. ✓
+
+### `cargo build --manifest-path rust-bindings/Cargo.toml --all-targets`
+
+Succeeds with 17 informational warnings (subset of the clippy
+output below; non-blocking).
+
+### `cargo clippy --manifest-path rust-bindings/Cargo.toml --all-targets -- -D warnings`
+
+Fails with 56 errors (76 lint occurrences total counting
+duplicates). Distribution:
 
 | Category | Count |
-|---|---|
-| `non_camel_case_types` (enum variants `RANGE_EXPR`, `TYPEVAR_T*`, `CHUNK_INT`, `READY_ENDING`, every session enum, every PyJobParameterType / PyTaskParameterType variant) | ~50 |
-| `upper_case_acronyms` (`POSIX`, `URI`, `JSON`, `YAML`, `INT`, `FLOAT`, `STRING`, etc.) | ~12 |
-| `deprecated` (PyO3 0.20+ API: `Bound::cast` over `downcast`, `from_py_object` opt-in) | ~10 |
-| `redundant_closure` / `needless_borrow` | ~5 |
-| `unused_imports`, `unused_doc_comments`, `dead_code`, `useless_format!`, `too_many_arguments` | 5 |
+|---|---:|
+| `non_camel_case_types` (`CHUNK_INT`, `READY_ENDING`, etc.) | 2 |
+| `upper_case_acronyms` (`YAML`, `JSON`, `INT`, `FLOAT`, `STRING`, `PATH`, `BOOL`, `EXPR`, `RUNNING`, `READY`, `SUCCESS`, `FAILED`, `TIMEOUT`, `CANCELING`, `CANCELED`, `ENDED`) | ~30 |
+| `deprecated` PyO3 (`from_py_object` opt-in, `Bound::cast`) | 12 |
+| `type_complexity` | 9 |
+| `unused doc comment` | 1 |
+| `dead_code` (`supported_extension_strings`, `from_rust`) | 2 |
+| `too_many_arguments` | 1 |
+| `derivable_impl` | 1 |
 
-These match the prior `expr` evaluation — same unreliable opt-in scheme,
-same auto-deriveFromPyObject deprecation, same enum-variant casing.
+Same shape as the prior `expr` evaluation. The
+`upper_case_acronyms` and `non_camel_case_types` lints reflect
+the deliberate Python-facing naming (Python convention is
+`UPPER_SNAKE_CASE` for enum variants, but Rust's clippy
+expects `UpperCamelCase`); they should be `#[allow]`'d on the
+relevant pyclass enums. The PyO3 deprecations are upstream
+churn that needs a focused commit pass.
 
-### `cargo run --bin stub_gen --features stub-gen` would help
-
-The current `src/openjd/_openjd_rs.pyi` is missing 25 of the 50 runtime
-symbols (see §3 stub drift list above). Regenerating with the latest
-build would add at minimum:
+### `cargo test --manifest-path rust-bindings/Cargo.toml`
 
 ```
-ActionResult, ActionState, ActionStatus, BadCredentialsException,
-DEFAULT_MEMORY_LIMIT, DEFAULT_OPERATION_LIMIT, DecodeValidationError,
-ExpressionError, ExpressionTypeError, FormatStringValidationError,
-JobParameterValue, ModelValidationError, PosixSessionUser, RangeExprError,
-ScriptRunnerState, Session, SessionError, SessionState,
-StepDependencyEdge, StepDependencyNode, TaskParameterValue,
-UnsupportedSchema, WindowsSessionUser, create_environment, deserialize_step
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
+
+The `rust-bindings` crate has no Rust unit tests (testing is
+done from the Python side via pytest).
+
+### `cargo test --manifest-path rust-bindings/Cargo.toml --doc`
+
+```
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+No doctests either.
+
+### Stub generation
+
+`src/openjd/_openjd_rs.pyi` — 102 KB, 2,994 lines — was
+regenerated as part of the prior commit `cd93ebe`. The current
+state matches the binding surface; no regeneration is needed
+for this evaluation. ✓
 
 ## 7. Exploratory Findings
 
-The probe in `/tmp/explore_model.py` (516 lines) drove out the items
-listed below. The 10 functional gaps now have failing-but-xfailed tests
-in `test/openjd/model_v1/test_known_gaps.py`.
+The probe scripts run from `/tmp/` exercised 30+ surfaces and
+turned up the issues listed below. Because there is no
+`test_known_gaps.py` content today, each finding is referenced
+back to its surface in the binding source so it can be
+landed as a fresh xfail in a follow-up commit if/when desired.
 
-### Confirmed bugs
+### Confirmed regressions / parity gaps
 
-| # | Bug | Test name (`test_known_gaps.py`) |
+| # | Issue | Surface |
 |---|---|---|
-| 1 | ~~`IntRangeExpr.from_str("-1 - -2 : -1")` iterates as `[-2, -1]`; reference iterates as `[-1, -2]`.~~ **Resolved** — accepted as an intentional behavior change. `RangeExpr` values are always an increasing list of integers; descending-input direction is not retained. See `specs/python-model-interface.md` Compatibility Aliases. | `test_int_range_expr_descending_iteration_order` (now asserts the ascending behavior) |
-| 2 | ~~`StepParameterSpaceIterator.__contains__` rejects values it just yielded.~~ **Resolved** — `extract_task_parameter_set` now reads the parameter type via `as_str()` first. | `test_step_param_space_iter_contains_self_yielded` (now passing) |
-| 3 | ~~`model_to_object(model=...)` raises `NotImplementedError` for every Rust-backed model.~~ **Won't fix** — v0-only API removed from v1 (see Rec #3). | `test_model_to_object_round_trip` (removed) |
-| 4 | ~~`chunks_default_task_count` setter is a silent no-op (returns `Ok(())` without storing).~~ **Resolved** — wrapper now holds a persistent `Mutex<StepParameterSpaceIterator>`; the setter calls `iter.set_chunks_default_task_count(value)` on it. | `test_step_param_space_iter_chunks_default_task_count_setter` (now passing) |
-| 5 | ~~`len(iter)` returns 0 on adaptive-chunked space; reference raises `ValueError`.~~ **Resolved** — `__len__` now raises `ValueError("Length is not available because the parameter space uses adaptive chunking.")`. | `test_step_param_space_iter_adaptive_len_raises` (now passing) |
-| 6 | ~~`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType` — none pickleable. (`TemplateSpecificationVersion` *is* pickleable because it's a Python `Enum`.)~~ **Resolved (Rec #8).** All Group A enums and Group B value types now pickle. Decoded model containers (`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`) are explicitly **out of scope** for pickle — keep the source dict and re-decode on the other side. See `specs/python-model-interface.md` § "Pickle Support". | `test_job_template_pickleable` (removed) |
-| 7 | ~~`TaskParameterType` is not hashable, but `JobParameterType` is.~~ **Resolved (Rec #9).** Added `frozen, hash` to `PyTaskParameterType`. | `test_task_parameter_type_hashable` (now passing) |
-| 8 | ~~`StepParameterSpace.taskParameterDefinitions[name]` returns serde-tagged JSON, not typed object.~~ **Resolved (Rec #6).** Returns one of five typed pyclasses mirroring the Rust runtime enum. | `test_task_parameter_definitions_typed_objects` (passing — relocated to `test_task_parameter.py`) |
-| 9 | ~~`decode_template` not exported (reference exports it).~~ **Resolved (Rec #10).** Added as a deprecated alias for `decode_job_template`. | `test_decode_template_re_export` (removed — replaced by `TestDecodeTemplate` in `test_parse.py`) |
-| 10 | ~~`JobTemplate.specificationVersion` (camel) not exposed.~~ **Resolved (Rec #11 part 1).** Exposed as a camelCase alias for `specification_version`. | `test_job_template_specification_version_camelcase` (passing — relocated to `test_rust_model_bindings.py::TestDecodeJobTemplate::test_specification_version_camelcase_alias`) |
+| 1 | `Job.parameters` omits parameters that resolve via defaults; v0 reference includes them | `rust-bindings/src/model/job.rs::PyJob::parameters` (and the upstream `openjd_model::job::Job::parameters` field that backs it) |
+| 2 | `StepParameterSpaceIterator.__contains__` returns False for `CHUNK[INT]` task-parameter-space yielded values | `rust-bindings/src/model/step_param_space.rs::extract_task_parameter_set` (or the upstream `openjd_model::job::step_param_space::StepParameterSpaceIterator::contains` for ChunkInt path) |
+| 3 | `DocumentType` is not hashable, but `JobParameterType`, `TaskParameterType`, `ModelExtension` are | `rust-bindings/src/model/types.rs::PyDocumentType` — missing `frozen, hash` in `#[pyclass(...)]` |
+| 4 | `CompatibilityError` inherits from `Exception`, not `ValueError` (reference inherits from ValueError) | `src/openjd/model/_v1/__init__.py::CompatibilityError` |
+| 5 | `ModelError::FormatStringError` / `Expression` / `Compatibility` all collapse to `ModelValidationError` instead of the corresponding distinct exception class | `rust-bindings/src/model/errors.rs::model_err_to_py` |
+| 6 | `ModelValidationError` and `UnsupportedSchema` not re-exported at `openjd.model._v1` top level (only via `.errors` submodule) | `src/openjd/model/_v1/__init__.py::__all__` |
+| 7 | `decode_job_template_str` and `decode_environment_template_str` not re-exported through the wrapper at all | same as above |
+| 8 | `parse_model(obj=…)` does not accept `supported_extensions=` — templates with `extensions:` field fail to parse through this entry point | `src/openjd/model/_v1/__init__.py::parse_model` |
+| 9 | Spec uses `from openjd.model import StepParameterSpaceIterator, ModelValidationError, …` — none of these are top-level on `_v1` today | spec / wrapper alignment |
+| 10 | `EmbeddedFile.type` (template-time) vs `EmbeddedFile.type_` (job-time) — asymmetric accessor names across what users perceive as "the same" type | `rust-bindings/src/model/{job.rs,template_types.rs}` |
+| 11 | `FormatStringError.__qualname__` is `FormatStringValidationError` (the `openjd.expr` registered name) | `rust-bindings/src/lib.rs::register_renamed_exception` for `PyFormatStringValidationError` registers it as `FormatStringValidationError`; the v1 wrapper aliases that to `FormatStringError` but the qualname still leaks. |
+| 12 | `decode_template` accepts `(template=, supported_extensions=, caller_limits=)` instead of the reference's `(name=, raw_data=, document_type=)` | `src/openjd/model/_v1/__init__.py::decode_template` |
 
-### Other findings (informational, not failing tests)
+### Other findings (informational, not failing)
 
-- `parse_model(obj=…)` accepts both job and environment templates and
-  dispatches correctly. ✓
-- `document_string_to_object(document=yaml_str)` works; passing
-  `document_type=DocumentType.JSON` works. ✓
-- `validate_amount_capability_name` correctly rejects
-  `"acme:amount.worker.x"` (vendor-prefixed reserved scope) ✓ and
-  correctly rejects `"amount.worker.foo"` (reserved scope, not in
-  standard list) ✓.
-- All decode error paths produce the right exception class (empty
-  steps → `ModelValidationError`; missing specificationVersion →
-  `DecodeValidationError`; unknown specificationVersion →
-  `DecodeValidationError`). ✓
-- Concurrent calls from 8 Python threads, 50 iterations each, do not
-  produce errors. ✓
-- Unicode in template (`"Émile🎬"`, `"渲染"`) round-trips through
-  decode → create_job. ✓
-- Exception classes pickle correctly under their canonical names
-  (`openjd.model._v1.DecodeValidationError`, etc.). ✓
-- `TaskParameterValue == ParameterValue` and the symmetric
-  `JobParameterValue == ParameterValue` both work in either direction. ✓
-- `script.let_bindings` is *not* exposed (use `script.let` instead).
-  The original snake form was implemented as `let_bindings` in the
-  Rust struct, exposed in Python only as `let`. ⚠ Inconsistency vs the
-  reference, which has both `script.let_` (Python keyword reserved) and
-  raw `let`.
+* Unicode round-trip through decode → create_job works for
+  `"Émile🎬渲染"` and `"渲染"`. ✓
+* Boundary integers `i64::MIN`, `i64::MAX`, `2**62`,
+  `-(2**62)` round-trip through INT-typed `JobParameter.value`. ✓
+* Concurrent decode from 8 Python threads × 20 iterations =
+  160 successes, 0 errors. The work runs serially because the
+  GIL is held throughout. ✓ correctness; ⚠ throughput.
+* `parse_model(obj=…)` correctly dispatches to job vs
+  environment templates based on `specificationVersion`. ✓
+  (when no extensions are required)
+* `document_string_to_object` + JSON / YAML works. ✓
+* Empty-steps validation: raises `ModelValidationError("1 validation
+  error for JobTemplate\nJobTemplate: must have at least one
+  step.")`. ✓
+* Missing `specificationVersion`: raises
+  `DecodeValidationError("Template is missing Open Job Description
+  schema version key: specificationVersion")`. ✓
+* Unknown `specificationVersion`: raises
+  `DecodeValidationError("Unknown template version: bogus. Values
+  allowed for 'specificationVersion' in Job Templates are:
+  jobtemplate-2023-09")`. ✓
+* `validate_amount_capability_name("amount.worker.foo",
+  standard_capabilities=["amount.worker.vcpu"])` correctly rejects
+  with a clear message. ✓
+* `validate_amount_capability_name("acme:amount.worker.x", …)`
+  correctly rejects vendor-prefixed reserved-scope names. ✓
+* `RangeExpr("-1 - -2 : -1")` yields `[-2, -1]` (ascending,
+  documented). ✓
+* `RangeExpr("10-1:-1")` yields `[1..10]` (ascending). ✓
+* `it.chunks_default_task_count` setter on adaptive
+  parameter-space mutates persistently. ✓
+* Pickling works for: `DocumentType`, `JobParameterType`,
+  `TaskParameterType`, `ModelExtension`,
+  `JobParameterValue`, `TaskParameterValue`,
+  `SpecificationRevision`, `TemplateSpecificationVersion`,
+  `DecodeValidationError`, `ModelValidationError`,
+  `UnsupportedSchema` (under canonical names). ✓
+* Pickling fails for `ModelProfile`, `CallerLimits`,
+  `ValidationContext` — the spec lists these as pickleable.
+  ⚠ minor parity gap with the spec's "Pickle Support" table.
+* Decoded model containers (`JobTemplate`, `Job`, `Step`,
+  `StepParameterSpaceIterator`) correctly raise on pickle —
+  matches the spec's "out of scope" call-out. ✓
+* `Step.__eq__` based on step name alone works. ✓
+* `Step.__hash__`: not hashable (`TypeError`). The `__eq__`
+  + missing `__hash__` is unusual but matches the v0 reference.
+* `it.names()` raises `TypeError` (it's a property, not a
+  callable). The spec example at line 783
+  (`it.names()                  # {"Frame"}`) is wrong; the
+  actual access is `it.names`. ⚠ spec example bug.
+
+### Tests written for known gaps
+
+`test/openjd/model_v1/test_known_gaps.py` is currently empty
+(only docstring). Each item in the §7 "Confirmed regressions"
+table above is a candidate for an xfail-marked test that
+documents the gap. The Recommendations section below references
+each by surface so the report-driven workflow can pick them up.
 
 ## 8. Recommendations
 
-These are ordered by impact. Each item references the artifact that
-proves the gap so it can be fixed and the proof regenerated.
+Ordered by impact. Each item references the artifact where the
+fix should land, and (where applicable) suggests a
+`test_known_gaps.py` xfail to track resolution.
 
-1. ~~**Fix `IntRangeExpr` descending-range iteration order.**
-   `IntRangeExpr.from_str("-1 - -2 : -1")` must yield `[-1, -2]` (reference
-   semantics: reflect the input direction). Resolves
-   `test/openjd/model_v1/test_known_gaps.py::test_int_range_expr_descending_iteration_order`
-   and the four `test_step_param_space_iter` failures.~~ **Resolved** —
-   reclassified as an intentional behavior change, not a bug. `RangeExpr`
-   values are always an increasing list of integers; descending input
-   direction is not retained in the canonical form. See
-   `specs/python-model-interface.md` (Compatibility Aliases) for the
-   user-facing note and `openjd-rs/specs/expr/range-expr.md` (Internal
-   Representation) for the underlying design rationale. The
-   `test_int_range_expr_descending_iteration_order` test in
-   `test_known_gaps.py` has been converted from `xfail` to a positive
-   assertion of the ascending behavior. The four
-   `test_step_param_space_iter` parity failures
-   (`test_associate_getitem`, `test_product_iteration`,
-   `test_product_getitem`, `test_nested_expr_iteration`) remain
-   reference-only and need their expected-value lists updated to
-   ascending order, or to be marked as not-applicable to the
-   Rust-backed binding.
+### High priority — behavioural regressions vs reference
 
-2. ~~**Fix `StepParameterSpaceIterator.__contains__` to recognize self-yielded
-   values.** The current `extract_task_parameter_set` interprets
-   `TaskParameterValue` instances incorrectly when they are the dict
-   values. Resolves
-   `test/openjd/model_v1/test_known_gaps.py::test_step_param_space_iter_contains_self_yielded`.~~
-   **Resolved** — `extract_task_parameter_set` in
-   `rust-bindings/src/model/step_param_space.rs` now reads the parameter
-   type via `as_str()` (the convention used by `PyTaskParameterType` and
-   `PyJobParameterType` and by the Python-side `ParameterValue` shim)
-   before falling back to `.value` (stdlib `enum.Enum`) and `__str__`.
-   Yielded values now round-trip through `__contains__`. The fix also
-   transparently repairs
-   `test/openjd/model_v1/test_step_param_space_iter.py::TestStepParameterSpaceIterator_2023_09::test_associate_getitem`,
-   which uses the same `for v in expected_values: assert v in it` idiom.
-   Verified by promoting the `xfail` test to a passing test.
+1. **Restore `Job.parameters` to include defaults.** The v0
+   reference's `Job.parameters` dict contains every parameter
+   defined in the template (defaults plus explicit values), with
+   `JobParameter.value` resolved to the chosen value. The v1
+   binding currently returns only parameters explicitly supplied
+   in `job_parameter_values`. This breaks every consumer that
+   walks the resolved parameter set — sessions, the worker
+   agent, deadline-cli — when they migrate from v0 to v1.
 
-3. ~~**Implement `model_to_object` for every Rust-backed model type, or stop
-   exporting it.** `decode_job_template(template=t); model_to_object(model=t)`
-   should round-trip back to the input dict. Resolves
-   `test/openjd/model_v1/test_parse.py::TestModelToObject::test[translates Decimal to string]`
-   and `test/openjd/model_v1/test_known_gaps.py::test_model_to_object_round_trip`.~~
-   **Won't fix; resolved by removal.** `model_to_object` is a
-   v0/pydantic-era helper that walked `model.model_dump()` and
-   converted nested `Decimal`s back to strings. The Rust-backed
-   v1 model pyclasses do not have an analogous "serialize whole
-   model to a JSON-shaped dict" method, and there are no plans
-   to add one. Spec updated with an explicit "v0-only, not
-   implemented in v1" note. `model_to_object` removed from
-   `src/openjd/model/_v1/__init__.py` (function and `__all__`
-   entry); the failing parity test
-   (`TestModelToObject::test[translates Decimal to string]`)
-   and the duplicate xfail in
-   `test_known_gaps.py::test_model_to_object_round_trip` are
-   removed. Specific use cases that need similar functionality
-   on individual sub-models will be addressed as targeted
-   helpers when the concrete need arises.
+   Surface: `rust-bindings/src/model/job.rs::PyJob::parameters`,
+   plus the underlying `openjd_model::job::Job::parameters` field
+   that backs it (the upstream `create_job` should populate the
+   field with all resolved parameters, not just the explicit
+   ones). Add a regression test in
+   `test/openjd/model_v1/test_create_job.py::TestParametersDict`
+   that decodes a template with two parameters that have
+   defaults, calls `create_job(..., job_parameter_values={})`,
+   and asserts both keys are present with the default values.
+   Add an xfail at
+   `test/openjd/model_v1/test_known_gaps.py::test_job_parameters_includes_defaults`
+   tracking it until resolved.
 
-4. ~~**Fix `StepParameterSpaceIterator.chunks_default_task_count` setter.**
-   File: `rust-bindings/src/model/step_param_space.rs:199`. Currently
-   returns `Ok(())` after validating `chunks_adaptive()`; must actually
-   mutate the iterator state (or hold an interior `RefCell` for the
-   chunk count). Resolves
-   `test/openjd/model_v1/test_known_gaps.py::test_step_param_space_iter_chunks_default_task_count_setter`.~~
-   **Resolved** — `PyStepParameterSpaceIterator` now holds a persistent
-   `Mutex<StepParameterSpaceIterator>` (the upstream `NodeIterator` trait
-   gained a `Send + Sync` bound; the upstream
-   `StepParameterSpaceIterator` gained a public `reset()` method).
-   The setter validates the value is a positive integer and that the
-   space is adaptively chunked, then calls
-   `iter.set_chunks_default_task_count(value)` on the persistent
-   iterator. The shared `Arc<AtomicUsize>` propagates the new value to
-   the live iteration nodes. Verified by promoting the `xfail` test to
-   a passing test.
+2. **Fix `StepParameterSpaceIterator.__contains__` for
+   `CHUNK[INT]` parameter spaces.** Yielded values from a chunked
+   iterator (where `value` is a chunk-range string like `"1-2"`
+   under `TaskParameterType::ChunkInt`) do not round-trip through
+   `in fresh_iter`. Plain `INT` works.
 
-5. ~~**Make `len(StepParameterSpaceIterator)` raise `ValueError` for
-   adaptive-chunked spaces.** File: `rust-bindings/src/model/step_param_space.rs`.
-   When `chunks_adaptive()` is `True`, `__len__` should raise the same
-   message as the reference: `"Length is not available because the
-   parameter space uses adaptive chunking."`. Resolves
-   `test/openjd/model_v1/test_known_gaps.py::test_step_param_space_iter_adaptive_len_raises`.~~
-   **Resolved** — `__len__` in
-   `rust-bindings/src/model/step_param_space.rs` now checks
-   `iter.chunks_adaptive()` and raises
-   `ValueError("Length is not available because the parameter space uses
-   adaptive chunking.")` (matching the reference's exact message)
-   before consulting the underlying iterator's `len()`. Verified by
-   promoting the `xfail` test to a passing test.
+   Surface: `rust-bindings/src/model/step_param_space.rs::extract_task_parameter_set`
+   — when `param_type == TaskParameterType::ChunkInt`, the
+   `value` is a range expression string, not a coercible scalar;
+   `ExprValue::from_str_coerce` produces an `ExprValue::String`
+   that doesn't match what the iterator's `contains` expects.
+   Either coerce to a `RangeExpr`-bearing `ExprValue` here, or
+   have the upstream `validate_containment` accept the
+   string-ranged form.
 
-6. ~~**Expose `taskParameterDefinitions` as typed objects, not serde-tagged
-   JSON.** `Step.parameterSpace.taskParameterDefinitions["F"]` must
-   return an object with `.type` (a `TaskParameterType`) and `.range`
-   (the appropriate range collection / `RangeExpr`). Either implement
-   `IntTaskParameterDefinition` / `RangeExpressionTaskParameterDefinition`
-   / `RangeListTaskParameterDefinition` etc. as Rust pyclasses, or add a
-   thin Python wrapper around the existing dict. Resolves
-   `test/openjd/model_v1/test_known_gaps.py::test_task_parameter_definitions_typed_objects`.~~
-   **Resolved.** Implemented as five Rust pyclasses mirroring the
-   underlying `openjd_model::job::TaskParameter` runtime enum 1:1
-   (rather than the v0 reference's two-class shape). Names follow
-   the Rust variants: `IntTaskParameter`, `FloatTaskParameter`,
-   `StringTaskParameter`, `PathTaskParameter`,
-   `ChunkIntTaskParameter`, plus a `TaskChunksDefinition` pyclass
-   for the chunks payload. `IntTaskParameter` deliberately omits
-   the `chunks` field (the runtime `Int` variant always carries
-   `Option::None` for it; mirroring runtime behaviour is more
-   useful than mirroring the struct field declaration). Each
-   pyclass has `__init__`, `__repr__`, `__eq__`, and `__reduce__`
-   for pickle. Required a small openjd-rs crate change to
-   re-export `RangeConstraint` from the crate root (was a private
-   module). New tests:
-   `test/openjd/model_v1/test_task_parameter.py` (35 tests across
-   7 classes covering construction, decode → create_job
-   round-trip, pickle, and dispatch dispatch via
-   `StepParameterSpace.taskParameterDefinitions`). The
-   `test_task_parameter_definitions_typed_objects` xfail in
-   `test_known_gaps.py` is removed; the equivalent passing test
-   lives at
-   `test_task_parameter.py::TestStepParameterSpaceTypedDict::test_dict_value_is_typed_pyclass_not_dict`.
+   xfail at
+   `test/openjd/model_v1/test_known_gaps.py::test_chunk_int_iter_contains_self_yielded`
+   that decodes a `CHUNK[INT]` template, iterates, and asserts
+   each yielded value is `in fresh_iter`.
 
-7. ~~**Re-export the ~50 missing names from `openjd.model._v1.v2023_09`.**
-   File: `src/openjd/model/_v1/v2023_09/__init__.py`. The 18 v2023_09
-   test files cannot be collected. Add at minimum:
-   `Action, AmountCapabilityName, AmountRequirement, AmountRequirementTemplate,
-   AttributeCapabilityName, AttributeRequirement, AttributeRequirementTemplate,
-   CancelationMethodNotifyThenTerminate, CancelationMethodTerminate,
-   ChunkIntTaskParameterDefinition, CombinationExpr, Description,
-   EnvironmentName, EnvironmentVariableNameString, EnvironmentVariableValueString,
-   FileDialogFilterPatternStringValue, FloatTaskParameterDefinition,
-   HostRequirements, HostRequirementsTemplate, Identifier,
-   IntTaskParameterDefinition, JobFloatParameterDefinition,
-   JobIntParameterDefinition, JobName, JobParameter, JobPathParameterDefinition,
-   JobStringParameterDefinition, JobTemplateName, ModelParsingContext,
-   ParameterStringValue, PathTaskParameterDefinition,
-   RangeExpressionTaskParameterDefinition, RangeListTaskParameterDefinition,
-   SimpleAction, StepName, StepParameterSpaceDefinition, StepTemplate,
-   StringTaskParameterDefinition, TaskChunksDefinition, TaskParameterStringValueAsJob,
-   UserInterfaceLabelStringValue`
-   plus a stub `_parse` submodule with a `_parse_model` entry point so
-   the test files import. Without this, the 18 v2023_09 test files in
-   `test/openjd/model_v1/v2023_09/` remain uncollectable.~~
+3. **Make `CompatibilityError` inherit from `ValueError`.**
+   Reference: `class CompatibilityError(ValueError)`.
+   Today: `class CompatibilityError(Exception)`. Fix in
+   `src/openjd/model/_v1/__init__.py`:
 
-   **Won't fix.** This recommendation is an artifact of the v0
-   Pydantic-based architecture and does not apply to the Rust
-   architecture v1 mirrors.
+   ```python
+   class CompatibilityError(ValueError):
+       pass
+   ```
 
-   The v0 reference uses Pydantic discriminated unions, where each
-   spec revision (currently 2023-09) gets a dedicated class
-   hierarchy under `openjd.model.v2023_09` (~85 classes inheriting
-   `OpenJDModel_v2023_09`). The Rust `openjd-model` crate, which
-   v1 mirrors, takes a different approach: a single
-   *revision-neutral* set of types
-   (`template::JobTemplate`, `template::Environment`,
-   `template::Action`, …) plus revision-specific *validation
-   passes* dispatched on `specificationVersion`. There is no
-   per-revision Rust type, and v1 correctly carries that decision
-   through to Python — there is exactly one `JobTemplate`
-   pyclass at `openjd.model._v1.template.JobTemplate`, used for
-   every revision.
+   Add a single-line test at
+   `test/openjd/model_v1/test_errors.py::test_compatibility_error_is_value_error`.
 
-   The 18 v2023_09 test files in `test/openjd/model_v1/v2023_09/`
-   that cannot be collected are tests *ported from the v0 layout*
-   that import per-revision class names. Their intent is preserved
-   in `test/openjd/model_v1/test_*` files written against the
-   revision-neutral surface; the broken-collection v2023_09 files
-   are dead weight and should be deleted (or re-cast to use the
-   revision-neutral types) in a follow-up commit.
+4. **Map `ModelError::FormatStringError` →
+   `FormatStringError`, not `ModelValidationError`.** File:
+   `rust-bindings/src/model/errors.rs::model_err_to_py`.
+   Reuse the existing `PyFormatStringValidationError` registered
+   under `openjd.expr.FormatStringValidationError`; the v1
+   wrapper already aliases that to `FormatStringError`. Update
+   the mapper to:
 
-   This rationale is documented in
-   `specs/python-model-interface.md` under the **Architecture**
-   section.
+   ```rust
+   ModelError::FormatStringError { message, .. } =>
+       PyFormatStringValidationError::new_err(message),
+   ModelError::Expression(expr_err) =>
+       PyExpressionError::new_err(expr_err.to_string()),
+   ModelError::Compatibility(msg) =>
+       <CompatibilityError class>::new_err(msg),
+   ```
 
-8. **Implement pickle support for the Rust-backed pyclasses.** Use PyO3
-   `__reduce__` or `__getnewargs_ex__` returning `(reconstructor,
-   serialised_payload)`. At minimum: `JobTemplate`, `EnvironmentTemplate`,
-   `Job`, `Step`, `StepScript`, `StepParameterSpace`,
-   `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`,
-   `SymbolTable`, `JobParameterType`, `TaskParameterType`,
-   `DocumentType`. Resolves
-   `test/openjd/model_v1/test_known_gaps.py::test_job_template_pickleable`.
+   (The third arm requires a Python-side helper because
+   `CompatibilityError` is Python-only; the cleanest path is to
+   add a `compatibility_error_class()` callback that
+   `model_err_to_py` calls.)
 
-   **Partially resolved.** All Group A enums (`DocumentType`,
-   `JobParameterType`, `TaskParameterType`, `ModelExtension`,
-   `SpecificationRevision`, `TemplateSpecificationVersion`) and
-   Group B value types (`ModelProfile`, `CallerLimits`,
-   `ValidationContext`, `JobParameterValue`, `TaskParameterValue`,
-   plus the cross-component types `FormatString`, `RangeExpr`,
-   `SymbolTable` from `openjd.expr`) now pickle through the shared
-   `_reconstruct_enum` / `_reconstruct_kwargs` helpers in
-   `rust-bindings/src/pickle_helpers.rs`. New tests live in
-   `test/openjd/model_v1/test_pickle.py`.
-   The decoded model containers (`JobTemplate`, `EnvironmentTemplate`,
-   `Job`, `Step`, `StepScript`, `StepParameterSpace`) and the live
-   `StepParameterSpaceIterator` / `StepDependencyGraph` types are
-   **out of scope** for pickle support. The intended round-trip
-   path is to keep the source document (or its parsed dict) and
-   re-decode on the other side; the decoded model object is not
-   designed to act as a wire format. See
-   `specs/python-model-interface.md` § "Pickle Support" for the
-   spec text. The xfail
-   `test_known_gaps.py::test_job_template_pickleable` is removed.
+   Adds parity with the reference's exception class hierarchy.
+   xfail at
+   `test/openjd/model_v1/test_known_gaps.py::test_format_string_error_class`.
 
-9. ~~**Make `TaskParameterType` hashable** by adding `frozen, hash` to the
-   `#[pyclass]` attribute. Resolves
-   `test/openjd/model_v1/test_known_gaps.py::test_task_parameter_type_hashable`.~~
-   **Resolved.** `PyTaskParameterType` now declares `frozen, hash` and
-   provides a `name` getter. The `test_task_parameter_type_hashable`
-   xfail is now a passing regression test.
+### Medium priority — surface visibility / wrapper module
 
-10. ~~**Re-export `decode_template` from `openjd.model._v1`.** Either
-    implement it as a thin wrapper (auto-detect job vs environment
-    template, then call the appropriate decoder) or alias to
-    `parse_model`. Resolves
-    `test/openjd/model_v1/test_known_gaps.py::test_decode_template_re_export`.~~
-    **Resolved.** Added as a deprecated alias for
-    `decode_job_template`, mirroring the v0 reference (which also
-    exposes `decode_template` as a thin alias and documents it as
-    deprecated). Spec updated with a deprecation note. Tests:
-    `test/openjd/model_v1/test_parse.py::TestDecodeTemplate` (3
-    tests covering the happy path, `supported_extensions`
-    forwarding, and rejection of environment templates). The xfail
-    `test_known_gaps.py::test_decode_template_re_export` is
-    removed.
+5. **Re-export `ModelValidationError` and `UnsupportedSchema`
+   at the `openjd.model._v1` top level.** The spec's example
+   code uses `from openjd.model import ModelValidationError,
+   UnsupportedSchema`. Today, only `DecodeValidationError`
+   makes it past the wrapper's `__init__.py`. Add to
+   `src/openjd/model/_v1/__init__.py`:
 
-11. ~~**Expose `JobTemplate.specificationVersion`, `parameter_definitions`,
-    `steps`, `extensions`, `job_environments`** (and the same for
-    `EnvironmentTemplate.environment`, etc.). File:
-    `rust-bindings/src/model/template.rs`. The current minimalist
-    interface (`name` / `description` / `specification_version`) blocks
-    consumers from inspecting templates, forcing them to round-trip
-    through `decode_job_template` again. Resolves
-    `test/openjd/model_v1/test_known_gaps.py::test_job_template_specification_version_camelcase`.~~
-    **Resolved.**
+   ```python
+   from openjd._openjd_rs import (
+       ModelValidationError,
+       UnsupportedSchema,
+       # ... existing imports
+   )
+   ```
 
-    `JobTemplate` and `EnvironmentTemplate` now expose the full
-    set of structural accessors:
+   and add to `__all__`.
 
-    - `specification_version` / `specificationVersion`
-    - `description`
-    - `profile` (typed `ModelProfile`, mirrors `JobTemplate::profile()`)
-    - `steps` (`list[StepTemplate]`) — JobTemplate only
-    - `job_environments` / `jobEnvironments` — JobTemplate only
-    - `environment` (the inner `Environment`) — EnvironmentTemplate only
-    - `parameter_definitions` / `parameterDefinitions` — list of
-      typed `JobParameterDefinition` variants
+6. **Re-export `decode_job_template_str` and
+   `decode_environment_template_str` through the wrapper.**
+   Both are spec'd entry points. Today users must import them
+   from `openjd._openjd_rs` directly — bypasses the wrapper's
+   docstring helpers. Add the symbols to `__init__.py`'s
+   imports and `__all__`.
 
-    The structural template-time pyclasses are at
-    `openjd.model._v1.template` and mirror `openjd_model::template::*`
-    1:1: `StepTemplate`, `Environment`, `EnvironmentScript`,
-    `EnvironmentActions`, `Action`, `EmbeddedFile`, `StepScript`,
-    `StepActions`, `CancelationMode`, `HostRequirements`,
-    `AmountRequirement`, `AttributeRequirement`, `StepDependency`,
-    `SimpleAction`. Where names collide with the job-time pyclasses
-    at `openjd.model._v1.job` (`Action`, `Environment`, etc.), the
-    template-time pyclasses are also exposed under
-    `Template`-prefixed aliases (e.g. `TemplateAction`).
+7. **Re-export structural pyclasses at the
+   `openjd.model._v1` top level — or update the spec to use
+   submodule paths consistently.** Spec uses `from openjd.model
+   import Job, Step, JobTemplate, EnvironmentTemplate,
+   StepParameterSpaceIterator, StepDependencyGraph, …`. None of
+   these import as written from `_v1` today. Either:
 
-    `parameter_definitions` returns one of twelve typed
-    pyclasses per element, dispatching on the
-    `JobParameterDefinition` Rust enum variant:
-    `JobStringParameterDefinition`, `JobIntParameterDefinition`,
-    `JobFloatParameterDefinition`, `JobPathParameterDefinition`
-    (base 4); plus `JobBoolParameterDefinition`,
-    `JobRangeExprParameterDefinition`,
-    `JobListStringParameterDefinition`,
-    `JobListPathParameterDefinition`,
-    `JobListIntParameterDefinition`,
-    `JobListFloatParameterDefinition`,
-    `JobListBoolParameterDefinition`,
-    `JobListListIntParameterDefinition` (eight EXPR-extension
-    types). Each pyclass exposes the core surface (`name`,
-    `description`, `default`, `type`) plus type-specific
-    constraints (`allowed_values`, `min_length`/`max_length`,
-    `min_value`/`max_value`, `object_type`, `data_flow`).
+   * **Option A: top-level re-exports.** Add the structural
+     pyclasses to `_v1/__init__.py` (this matches the v0
+     reference's surface and lets users follow the spec
+     verbatim).
+   * **Option B: spec rewrite.** Update every spec example
+     that imports a structural pyclass to use the submodule
+     path: `from openjd.model._v1.template import JobTemplate`,
+     `from openjd.model._v1.job import StepParameterSpaceIterator`,
+     etc. Add a "Module Layout" section to the spec near the
+     top explaining the split.
 
-    Two narrow surfaces remain deferred:
+   Option A is the smaller change (15-20 import lines) and
+   matches user expectations; Option B is more honest about the
+   architecture. **Recommend Option A** for backward-compat
+   with v0 and to keep the spec examples copy-pasteable.
 
-    - ~~`StepTemplate.parameter_space` returns `None` for now. The
-      underlying `StepParameterSpaceDefinition` Rust type does
-      not implement `Serialize`, so a typed pyclass for it needs
-      deeper integration. Out of scope; documented in spec.~~
-      **Resolved.** `StepTemplate.parameter_space` now returns
-      `Optional[StepParameterSpaceDefinition]` with a typed
-      `task_parameter_definitions` list dispatching on the
-      `template::TaskParameterDefinition` enum: 5 typed pyclasses
-      (`IntTaskParameterDefinition`,
-      `FloatTaskParameterDefinition`,
-      `StringTaskParameterDefinition`,
-      `PathTaskParameterDefinition`,
-      `ChunkIntTaskParameterDefinition`) plus a typed
-      `ChunksDefinition` for `CHUNK[INT]` chunks payloads. The
-      `Serialize` concern was sidestepped by exposing the inner
-      types directly via PyO3 getters rather than serializing
-      through a common JSON intermediate; range types
-      (`IntRange`/`StringRange`/`FloatRange`) are exposed as
-      Python unions (`list[…]` or `FormatString`) by dispatching
-      on the Rust enum variant in the getter. Tests:
-      `test/openjd/model_v1/test_step_param_space_def.py`
-      (14 tests covering all 5 variants, the empty/missing case,
-      camelCase aliases, FormatString interpolation in
-      `chunks.default_task_count`, and multi-variant dispatch).
-      Required openjd-rs change: extend
-      `template/mod.rs` `pub use task_parameters::{...}` to
-      re-export the 5 per-variant struct types and
-      `ChunksDefinition`.
-    - ~~The `user_interface` field on each `JobParameterDefinition`
-      variant is not yet exposed. The `*UserInterface` Rust types
-      are large enough to warrant a separate commit.~~ **Resolved.**
-      Each `Job*ParameterDefinition` pyclass now has a
-      `user_interface` getter (camelCase alias `userInterface`)
-      returning `Optional[<TypedUserInterface>]` for that variant.
-      Eleven UI pyclasses mirror the Rust
-      `template::*UserInterface` struct types
-      (`StringUserInterface`, `IntUserInterface`,
-      `FloatUserInterface`, `PathUserInterface`,
-      `BoolUserInterface`, `RangeExprUserInterface`,
-      `ListSimpleUserInterface`, `ListPathUserInterface`,
-      `ListIntUserInterface`, `ListFloatUserInterface`,
-      `HiddenOnlyUserInterface`), plus a `FileFilter` pyclass for
-      file-filter entries on the path-bearing UIs. All have
-      `control`, `label`, `group_label` (alias `groupLabel`); per-
-      variant extras (`single_step_delta`, `decimals`,
-      `file_filters`, `file_filter_default`) are exposed where
-      applicable. Tests:
-      `test/openjd/model_v1/test_user_interfaces.py` (23 tests
-      covering the missing/None case, common fields on each
-      variant, type-specific fields, camelCase aliases, and
-      per-variant dispatch). Required openjd-rs change: extend
-      `template/mod.rs` `pub use` to re-export the 11 UI structs +
-      `FileFilter` + (un-`#[cfg(test)]`) `FlexInt`/`FlexFloat` —
-      already shipped via the
-      `feat(model): expose typed TaskParameterDefinition variants
-      and userInterface types` commit.
+8. **Fix `parse_model` to forward `supported_extensions=` and
+   `caller_limits=`.** Today `parse_model(obj={…with extensions
+   field…})` fails because the function calls
+   `decode_job_template_dict(obj)` with no extensions
+   allowlist. Update signature:
 
-    Finding #11 is now fully resolved.
+   ```python
+   def parse_model(
+       *, model: Any = None, obj: dict[str, Any],
+       supported_extensions: Optional[list[str]] = None,
+       caller_limits: Optional[CallerLimits] = None,
+   ) -> Any:
+   ```
 
-12. **Map `ModelError::FormatStringError` → `FormatStringError`, not
-    `ModelValidationError`.** File: `rust-bindings/src/model/errors.rs`.
-    The current `model_err_to_py` collapses three distinct exception
-    classes into one. Add an explicit `FormatStringError` registration
-    in `lib.rs` (or re-use the openjd.expr `FormatStringValidationError`)
-    and map this variant correctly.
+   Forward the kwargs to the underlying `decode_*_template_dict`.
 
-13. **Map `ModelError::Compatibility` → `CompatibilityError(ValueError)`.**
-    File: `src/openjd/model/_v1/__init__.py` plus
-    `rust-bindings/src/model/errors.rs`. Currently `CompatibilityError`
-    inherits from `Exception` only — code catching `ValueError` will
-    miss it. The reference inherits it from `ValueError`.
+### Medium priority — small parity / spec items
 
-14. **Update `specs/python-model-interface.md` to match implementation.**
-    Add: `parse_model`, `document_string_to_object`, `decode_template`,
-    `STANDARD_AMOUNT_CAPABILITIES`, `STANDARD_ATTRIBUTE_CAPABILITIES`,
-    `validate_amount_capability_name`, `validate_attribute_capability_name`,
-    `evaluate_let_bindings`, `deserialize_step`, `create_environment`,
-    `JobParameterValue`, `TaskParameterValue`, `StepDependencyNode`,
-    `StepDependencyEdge`. Correct the `it.names` /
-    `graph.step_names` snippets to match the property/method shape
-    actually implemented. Document that `JobParameterType` is hashable
-    and pickleable but `TaskParameterType` and `DocumentType` are not.
+9. **Make `DocumentType` hashable.** Add `frozen, hash` to
+   `#[pyclass(...)]` in `rust-bindings/src/model/types.rs`,
+   matching `JobParameterType` and `TaskParameterType`. Add a
+   regression test in
+   `test/openjd/model_v1/test_pickle.py::TestDocumentType::test_hashable`.
 
-    **Partially resolved.** Added a Profile section documenting
-    `ModelProfile`, `ModelExtension`, `SpecificationRevision`,
-    `CallerLimits`, `ValidationContext`. Updated the
-    `decode_job_template` example to show the Rust-aligned
-    `supported_extensions=[<str>, ...]` + `caller_limits=` signature
-    and the `template.profile` getter. The other items in this
-    recommendation (parse_model, document_string_to_object,
-    decode_template, STANDARD_*, validate_*_capability_name,
-    evaluate_let_bindings, deserialize_step, create_environment,
-    JobParameterValue, TaskParameterValue, StepDependencyNode,
-    StepDependencyEdge) remain undocumented.
+10. **Pickle support for `ModelProfile`, `CallerLimits`,
+    `ValidationContext`.** Spec's "Pickle Support" table lists
+    all three as pickleable, but at runtime `pickle.dumps(profile)`
+    fails. Implement `__reduce__` returning
+    `(_reconstruct_kwargs, (cls, kwargs))`. Add tests in
+    `test/openjd/model_v1/test_pickle.py`.
 
-15. **Regenerate `src/openjd/_openjd_rs.pyi` via
-    `cargo run --bin stub_gen --features stub-gen`.** The current file
-    is missing 25 runtime symbols (see §3). For every `create_exception!`
-    type, add a matching `class XxxError(ValueError): ...` to the stub
-    so IDE tooltips and `from openjd._openjd_rs import …` see the right
-    symbols.
+11. **Tighten `validate_*_capability_name` signatures to the
+    reference's strict form.** Today the wrapper's signature is
+    `(name: str = "", *, capability_name: str = "",
+    standard_capabilities=None)` — accepts positional `name`
+    and makes `standard_capabilities` optional. Reference is
+    strict kw-only `(*, capability_name, standard_capabilities)`.
+    Either align or document the divergence in the spec.
 
-16. **Resolve `cargo clippy --workspace -- -D warnings` (76 errors).**
-    File: `rust-bindings/src/`. Same shape as the prior `expr`
-    evaluation. Apply the suggested rewrites (rename `RANGE_EXPR` to
-    `RangeExpr` etc., remove unused imports, use `Bound::cast` instead
-    of `downcast`, opt in to `#[pyclass(from_py_object)]` explicitly,
-    replace `format!()` with `.to_string()` where appropriate, allow
-    or remove the unused `from_rust` helper).
+12. **Fix `decode_template` signature.** Today it accepts the
+    `decode_job_template` kwargs (`template=`,
+    `supported_extensions=`, `caller_limits=`); the v0 reference
+    expects `(*, name, raw_data, document_type)`. If the goal
+    is reference parity, accept both shapes (detect by which
+    kwargs are present) and dispatch. If the goal is a new
+    wrapper API, keep the current shape but **document the
+    divergence in the spec** — the spec section currently says
+    "Mirrors the v0 reference" which is misleading.
 
-17. **Switch the Rust-on-Python `decode_*_dict` path away from the
-    `dict → json.dumps → serde_json::from_str` round-trip.** File:
-    `rust-bindings/src/model/decode.rs`. Use a direct
-    `serde_pyobject` / `pythonize::depythonize` conversion. Today's
-    detour doubles parse cost for callers that already hold a dict and
-    silently rejects values like `Decimal` and `Path`.
+13. **Update the spec's `it.names()` example.** Line ~783 in
+    `specs/python-model-interface.md` shows
+    `it.names()                  # {"Frame"}` but
+    `it.names` is a property. Trying `it.names()` raises
+    `TypeError: 'set' object is not callable`. Drop the
+    parentheses.
 
-18. **Backfill tests.** Per §4, the following reference test files have
-    no analog in `test/openjd/model_v1/`:
-    - `format_strings/test_format_string.py` and 5 sibling files
-    - `_internal/test_combination_expr.py` and 4 sibling files
-    - `test_step_param_space_iter_with_chunks.py`
-    Add the 18 v2023_09 files only after recommendation 7 lands so they
-    can collect. Add a binding-equivalent of the format-string
-    behavioural tests so the consumers know they get the same
-    round-trip semantics.
+### Lower priority — polish / hygiene
 
-19. **Release the GIL on long-running calls.** Wrap
-    `decode_job_template`, `decode_job_template_str`,
-    `decode_environment_template_str`, and the iterator-driving
-    `StepParameterSpaceIterator::new` calls inside
-    `Python::allow_threads(|| { … })`. Without this, multi-threaded
-    Python servers (Deadline Cloud worker agent) cannot decode in
-    parallel.
+14. **Resolve the 56 clippy lints.** File: `rust-bindings/src/`.
+    Same shape as the prior `expr` evaluation. Apply the
+    suggested rewrites (`#[allow(non_camel_case_types,
+    upper_case_acronyms)]` on the deliberate Python-facing
+    enums, opt in to `#[pyclass(from_py_object)]` explicitly,
+    use `Bound::cast` instead of `downcast`, factor the
+    nine `type_complexity` cases into named type aliases,
+    remove the unused `supported_extension_strings` and
+    `from_rust` items).
 
-20. **Document or remove the `validate_*_capability_name` positional
-    overload.** The binding's signature
-    `(name: str = "", *, capability_name: str = "", standard_capabilities=None)`
-    is more permissive than the reference and silently passes calls
-    that omit `standard_capabilities`. Either align with the reference
-    (kw-only, both required) or document the divergence in the spec.
+15. **Release the GIL on long-running calls.** Wrap
+    `decode_job_template_*`, `decode_environment_template_*`,
+    `create_job`, and the iterator-driving
+    `StepParameterSpaceIterator::new` in
+    `Python::allow_threads(|py| { … })`. Without this, threaded
+    Python servers (Deadline Cloud worker agent, etc.) cannot
+    decode or create-job in parallel.
+
+16. **Resolve the `EmbeddedFile.type` vs `EmbeddedFile.type_`
+    asymmetry.** Either expose both names on both classes (the
+    forgiving option) or update the spec to call out the
+    asymmetry explicitly (the documenting option). Today the
+    spec accidentally calls out both names — once with `_`
+    (line 352, job-time) and once without (line 556,
+    template-time) — without explaining why.
+
+17. **Fix `preprocess_job_parameters` error message for
+    relative paths.** When the caller passes a relative
+    `job_template_dir`, the error message reports the empty
+    string instead of the user-supplied path:
+
+    ```
+    DecodeValidationError: The value supplied for the job template dir, , is not an absolute path.
+    ```
+
+    The empty rewrite is gone for absolute paths but remains
+    in the error path. Surface:
+    `rust-bindings/src/model/create_job_fns.rs::py_preprocess_job_parameters`.
+
+18. **Spec drift: document the binding-side surface more
+    explicitly.** The spec already covers the major shapes,
+    but the following are observably exposed but not
+    mentioned:
+
+    * `it.reset_iter()` method on `StepParameterSpaceIterator`.
+    * `Step.__eq__` / `Step` un-`__hash__`-ability.
+    * `_openjd_rs.create_environment` and `_openjd_rs.deserialize_step`
+      (called by the sessions runtime; today users must
+      import from `_openjd_rs` directly).
+    * `ParameterValueType` alias (= `JobParameterType`).
+    * `DEFAULT_MEMORY_LIMIT` / `DEFAULT_OPERATION_LIMIT`
+      module-level constants.
+
+    Add a "Bindings-internal helpers" section near the bottom
+    of the spec listing these with a "subject to change"
+    disclaimer.
+
+19. **Backfill format-string and combination-expression
+    integration tests** in `test/openjd/model_v1/`. The
+    `format_strings/` and `_internal/` directories are empty;
+    the v0 reference has substantial coverage there. Even
+    integration-level tests (decode a template with a
+    complex `let:` binding, verify the resolved
+    `script.let_bindings` matches expectations) would catch
+    regressions that the current binding-side test surface
+    misses.
+
+20. **Switch the dict→json.dumps→serde_json round-trip in
+    `decode_*_dict` to a direct `pythonize::depythonize` (or
+    equivalent) conversion.** Today's detour
+    (`rust-bindings/src/model/decode.rs::dict_to_json_value`)
+    doubles the cost for callers that already hold a dict
+    and rejects values that aren't JSON-serialisable
+    (`Decimal`, `Path`, custom objects). Worth measuring
+    against the existing `test_yaml_loader_performance.py`
+    benchmark before committing to make sure it's an actual
+    win.
+
