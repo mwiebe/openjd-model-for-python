@@ -561,3 +561,92 @@ class TestStepParameterSpaceIterator:
         assert it.chunks_adaptive is True
         with pytest.raises(ValueError, match="adaptive chunking"):
             len(it)
+
+
+class TestChunkIntContains:
+    """``__contains__`` must round-trip values yielded by a chunked
+    iterator. The iterator yields ``TaskParameterValue`` instances
+    whose ``value`` is a chunk-range string (e.g. ``"1-5"``) under
+    ``TaskParameterType.CHUNK_INT``. When the value is fed back into
+    a fresh iterator's ``__contains__`` check, the binding must
+    parse the string as a ``RangeExpr`` (matching what the upstream
+    ``validate_containment`` expects structurally) — a plain INT
+    coercion produces an ``ExprValue::String`` that doesn't match
+    and silently returns ``False``."""
+
+    @staticmethod
+    def _chunked_step() -> Any:
+        # Build via decode + create so we exercise the full path
+        # the worker agent / sessions hit at runtime.
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "extensions": ["TASK_CHUNKING"],
+                "steps": [
+                    {
+                        "name": "S",
+                        "parameterSpace": {
+                            "taskParameterDefinitions": [
+                                {
+                                    "name": "Frame",
+                                    "type": "CHUNK[INT]",
+                                    "range": "1-10",
+                                    "chunks": {
+                                        "defaultTaskCount": 5,
+                                        "rangeConstraint": "CONTIGUOUS",
+                                    },
+                                }
+                            ]
+                        },
+                        "script": {
+                            "actions": {
+                                "onRun": {
+                                    "command": "echo",
+                                    "args": ["{{Task.Param.Frame}}"],
+                                }
+                            }
+                        },
+                    }
+                ],
+            },
+            supported_extensions=["TASK_CHUNKING"],
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        return j.steps[0]
+
+    def test_yielded_chunks_round_trip(self) -> None:
+        """Every value yielded by an iterator over a CHUNK[INT]
+        space must report ``in fresh_iter`` as ``True``."""
+        step = self._chunked_step()
+        it = StepParameterSpaceIterator(step=step)
+        fresh = StepParameterSpaceIterator(step=step)
+        yielded = list(it)
+        assert len(yielded) == 2  # 1-10 / 5-task default → 2 chunks
+        for params in yielded:
+            assert params in fresh, (
+                f"{params} should round-trip through __contains__ " f"but didn't"
+            )
+
+    def test_nonexistent_chunk_not_in_iter(self) -> None:
+        """A chunk-range value that doesn't appear in the space
+        must report ``in iter`` as ``False`` — confirms the fix
+        doesn't accidentally return ``True`` for everything that
+        parses as a ``RangeExpr``."""
+        step = self._chunked_step()
+        it = StepParameterSpaceIterator(step=step)
+        # The space yields {1-5, 6-10}; 3-7 is a valid range but not
+        # one of the canonical chunks.
+        non_existing = {"Frame": TaskParameterValue(type=TaskParameterType.CHUNK_INT, value="3-7")}
+        assert non_existing not in it
+
+    def test_explicit_chunk_value_round_trip(self) -> None:
+        """A user-constructed ``TaskParameterValue`` with a chunk
+        string that *does* match a yielded chunk reports ``in iter``
+        as ``True`` even when not obtained via iteration."""
+        step = self._chunked_step()
+        it = StepParameterSpaceIterator(step=step)
+        # Construct fresh — this is the consumer use-case where a
+        # caller wants to check whether a known chunk is in the space.
+        existing = {"Frame": TaskParameterValue(type=TaskParameterType.CHUNK_INT, value="1-5")}
+        assert existing in it

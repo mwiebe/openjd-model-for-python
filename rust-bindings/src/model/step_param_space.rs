@@ -60,11 +60,24 @@ fn extract_task_parameter_set(dict: &Bound<'_, PyDict>) -> PyResult<TaskParamete
             let param_type = TaskParameterType::from_spec_str(&type_str)
                 .unwrap_or(TaskParameterType::String);
             let value_str: String = val.getattr("value")?.extract()?;
-            let value = openjd_expr::ExprValue::from_str_coerce(
-                &value_str,
-                &param_type_to_expr_type(param_type),
-                openjd_expr::path_mapping::PathFormat::host(),
-            ).unwrap_or(openjd_expr::ExprValue::String(value_str));
+            let value = if param_type == TaskParameterType::ChunkInt {
+                // CHUNK[INT] values are range expression strings like
+                // `"1-5"` (produced by the iterator's `to_display_string`).
+                // Parse to ExprValue::RangeExpr so that the iterator's
+                // `validate_containment` — which matches structurally
+                // against ExprValue::RangeExpr — can compare yielded
+                // chunks. A plain INT coercion produces an
+                // ExprValue::String that doesn't match.
+                value_str.parse::<openjd_expr::range_expr::RangeExpr>()
+                    .map(openjd_expr::ExprValue::RangeExpr)
+                    .unwrap_or(openjd_expr::ExprValue::String(value_str))
+            } else {
+                openjd_expr::ExprValue::from_str_coerce(
+                    &value_str,
+                    &param_type_to_expr_type(param_type),
+                    openjd_expr::path_mapping::PathFormat::host(),
+                ).unwrap_or(openjd_expr::ExprValue::String(value_str))
+            };
             result.insert(name, TaskParameterValue { param_type, value });
         } else {
             let value = py_to_expr_value(&val)?;

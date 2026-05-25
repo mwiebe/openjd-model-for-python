@@ -1038,7 +1038,7 @@ fix should land, and (where applicable) suggests a
    constraint-check-via-`create_job` (no separate
    `preprocess_job_parameters` call required).
 
-2. **Fix `StepParameterSpaceIterator.__contains__` for
+2. ~~**Fix `StepParameterSpaceIterator.__contains__` for
    `CHUNK[INT]` parameter spaces.** Yielded values from a chunked
    iterator (where `value` is a chunk-range string like `"1-2"`
    under `TaskParameterType::ChunkInt`) do not round-trip through
@@ -1056,7 +1056,21 @@ fix should land, and (where applicable) suggests a
    xfail at
    `test/openjd/model_v1/test_known_gaps.py::test_chunk_int_iter_contains_self_yielded`
    that decodes a `CHUNK[INT]` template, iterates, and asserts
-   each yielded value is `in fresh_iter`.
+   each yielded value is `in fresh_iter`.~~ **Resolved.** Fixed
+   at the binding boundary in
+   `rust-bindings/src/model/step_param_space.rs::extract_task_parameter_set`
+   by adding a dedicated branch for `TaskParameterType::ChunkInt`:
+   the value string (e.g. `"1-5"`) is parsed as a
+   `RangeExpr` via `str::parse::<RangeExpr>` and wrapped as
+   `ExprValue::RangeExpr`, matching what the upstream
+   `validate_containment` expects structurally. Plain INT and
+   other types continue to use the existing
+   `from_str_coerce` path. New regression tests in
+   `test/openjd/model_v1/test_step_param_space_iter.py::TestChunkIntContains`
+   (3 tests): yielded chunks round-trip, non-existent chunks
+   correctly report `not in iter`, and explicit
+   `TaskParameterValue` instances with matching chunk strings
+   are recognised.
 
 3. **Make `CompatibilityError` inherit from `ValueError`.**
    Reference: `class CompatibilityError(ValueError)`.
