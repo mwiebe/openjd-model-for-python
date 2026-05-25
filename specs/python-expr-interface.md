@@ -198,6 +198,27 @@ v[-1].item()                              # 30
 [e.item() for e in v]                     # [10, 20, 30]
 ```
 
+**Unresolved values.** `ExprValue.unresolved(T)` constructs a typed
+placeholder used during static type checking when a symbol's
+concrete value isn't yet known. The placeholder participates in
+type checking but has no extractable Python value:
+
+```python
+v = ExprValue.unresolved("int")
+v.type                                    # ExprType("unresolved[int]")
+v.item()                                  # raises ExpressionTypeError
+str(v)                                    # raises ExpressionTypeError
+repr(v)                                   # 'ExprValue.unresolved(ExprType("int"))'
+                                          # (repr is for debugging — never raises)
+```
+
+`item()` and `str()` raise `ExpressionTypeError` on an unresolved
+value because there's no real value to extract or render. `repr()`
+is the documented exception: it returns a debug-friendly string and
+never raises (Python convention). This makes unresolved values
+safe to inspect in debuggers and tracebacks while still failing
+loudly anywhere a real value is expected.
+
 ### `SymbolTable`
 
 Hierarchical key-value store providing variable bindings for expression

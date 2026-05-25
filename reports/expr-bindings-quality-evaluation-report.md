@@ -579,10 +579,15 @@ workflow in `~/openjd-rs/AGENTS.md` can resolve it precisely.
    classmethod removes a small porting friction for code coming
    from `openjd.expr` v0. If adopted, document in the spec under
    `ExprValue` as a "Special constructors" entry.
-8. **Document the binding's behaviour for unresolved value `.item()` / `str()` once #2/#3 are resolved.**
+8. ~~**Document the binding's behaviour for unresolved value `.item()` / `str()` once #2/#3 are resolved.**
    The spec's ExprValue section currently shows `.item()` returning
    the native Python value but doesn't explicitly cover the
    unresolved case. Once the behaviour is unified with the
    reference (raises `ExpressionTypeError`), add a one-line note in
    the `ExprValue` section calling out the contract: "`.item()` and
-   `str()` on an unresolved value raise `ExpressionTypeError`."
+   `str()` on an unresolved value raise `ExpressionTypeError`."~~
+   **Resolved.** Added an "Unresolved values" subsection to the
+   `ExprValue` section in `specs/python-expr-interface.md` covering
+   the three contracts: `.item()` raises, `str(...)` raises, and
+   `repr(...)` returns a debug-friendly string without raising
+   (Python convention).
