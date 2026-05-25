@@ -1241,7 +1241,7 @@ fix should land, and (where applicable) suggests a
    mapping each submodule to its canonical contents. All 24 spec
    imports were verified to import successfully at runtime.
 
-8. **Fix `parse_model` to forward `supported_extensions=` and
+8. ~~**Fix `parse_model` to forward `supported_extensions=` and
    `caller_limits=`.** Today `parse_model(obj={…with extensions
    field…})` fails because the function calls
    `decode_job_template_dict(obj)` with no extensions
@@ -1255,7 +1255,22 @@ fix should land, and (where applicable) suggests a
    ) -> Any:
    ```
 
-   Forward the kwargs to the underlying `decode_*_template_dict`.
+   Forward the kwargs to the underlying `decode_*_template_dict`.~~
+   **Resolved by removal.** `parse_model` was a v0 backward-compat
+   shim that the v1 spec has never documented as a public entry
+   point. The right resolution is to remove it from the v1
+   surface, not to extend it. Removed from
+   `src/openjd/model/_v1/__init__.py` (function body and
+   `__all__` entry) and from the Module Layout table in
+   `specs/python-model-interface.md`. v1 callers that need the
+   "auto-detect template type from `specificationVersion`"
+   behaviour can construct a one-line dispatch themselves over
+   `decode_job_template_dict` / `decode_environment_template_dict`,
+   or call the shape-specific entry point directly. No v1 tests
+   or internal v1 modules referenced the function (verified by
+   grep across `src/openjd/model/_v1/`, `test/openjd/model_v1/`,
+   and `specs/`); no external consumers
+   (`openjd-sessions-for-python`) reference it either.
 
 ### Medium priority — small parity / spec items
 

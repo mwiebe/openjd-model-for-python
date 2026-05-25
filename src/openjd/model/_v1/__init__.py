@@ -434,19 +434,6 @@ def decode_environment_template_str(
     )
 
 
-def parse_model(*, model: Any = None, obj: dict[str, Any]) -> Any:
-    """Decode a template from a dict, auto-detecting the type.
-
-    The ``model`` parameter is accepted for backward compatibility but
-    ignored — the template type is determined from ``specificationVersion``
-    in the dict.
-    """
-    spec = obj.get("specificationVersion", "")
-    if "environment" in spec:
-        return decode_environment_template_dict(obj)
-    return decode_job_template_dict(obj)
-
-
 # ── Compatibility shims ──
 #
 # Surface re-exports kept here for downstream callers that still import
@@ -547,7 +534,6 @@ __all__ = (
     "decode_template",
     "document_string_to_object",
     "merge_job_parameter_definitions",
-    "parse_model",
     "preprocess_job_parameters",
     # Capability validation (Python-only)
     "validate_amount_capability_name",
