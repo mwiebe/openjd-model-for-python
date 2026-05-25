@@ -114,6 +114,22 @@ The `ModelProfile` type is used as an *output* of decoding (via
 It is not an input to `decode_*_template` itself — that function takes
 a flat list of strings, mirroring the Rust crate.
 
+#### `decode_template` (deprecated)
+
+Deprecated alias for ``decode_job_template``. Mirrors the v0
+reference, which also exports a deprecated ``decode_template`` for
+backward compatibility. New code should call ``decode_job_template``
+directly.
+
+```python
+from openjd.model._v1 import decode_template
+
+# Same signature and return type as decode_job_template.
+template = decode_template(template={...})
+```
+
+Will be removed in a future release.
+
 #### `decode_job_template_str`
 
 Decode directly from a YAML or JSON string — no intermediate dict.
@@ -1036,6 +1052,16 @@ correctly there too).
 
 The decoded model containers (``JobTemplate``, ``EnvironmentTemplate``,
 ``Job``, ``Step``, etc.) and the live ``StepParameterSpaceIterator`` /
-``StepDependencyGraph`` types are not yet pickleable. To round-trip a
-decoded template, re-decode from the source document.
+``StepDependencyGraph`` types are **not pickleable**, and there are no
+plans to add pickle support to them. The intended round-trip path for a
+decoded template is to keep the source document around (or its parsed
+``dict``) and re-decode it on the other side; the decoded model object
+is not designed to act as a wire format.
+
+If a specific sub-model needs to cross a process boundary or be cached
+to disk, the recommendation is to pickle (or otherwise serialise) the
+inputs that produced it — the template ``dict`` and the
+``job_parameter_values`` for ``Job``, etc. — rather than the model
+itself. Targeted helpers will be considered case-by-case if a concrete
+serialisation need arises that cannot be met by re-decoding.
 | `TokenError` | `Exception` |

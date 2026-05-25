@@ -11,6 +11,7 @@ from openjd.model._v1 import (
     OpenJDModel,
     decode_environment_template,
     decode_job_template,
+    decode_template,
     document_string_to_object,
 )
 from openjd.model._v1.types import (
@@ -18,6 +19,7 @@ from openjd.model._v1.types import (
 )
 from openjd.model._v1.errors import (
     DecodeValidationError,
+    ModelValidationError,
 )
 from openjd.model._v1.template import JobTemplate, EnvironmentTemplate
 
@@ -113,6 +115,46 @@ class TestDecodeJobTemplate:
 
         # THEN
         assert isinstance(result, expected_class)
+
+
+class TestDecodeTemplate:
+    """``decode_template`` is a deprecated alias for ``decode_job_template``,
+    kept for parity with the v0 / pure-Python reference module which also
+    exports a deprecated ``decode_template``."""
+
+    def test_returns_job_template(self) -> None:
+        template = {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": "name",
+            "steps": [{"name": "step", "script": {"actions": {"onRun": {"command": "echo"}}}}],
+        }
+        result = decode_template(template=template)
+        assert isinstance(result, JobTemplate)
+        assert result.name == "name"
+
+    def test_forwards_supported_extensions(self) -> None:
+        # An EXPR-extension expression in the template parses cleanly
+        # only when the EXPR extension is in the caller's allowlist.
+        template = {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": "name",
+            "extensions": ["EXPR"],
+            "steps": [{"name": "step", "script": {"actions": {"onRun": {"command": "echo"}}}}],
+        }
+        # Without EXPR in supported_extensions, the template fails decode
+        # with ModelValidationError (the template requested an extension
+        # the caller didn't allowlist).
+        with pytest.raises(ModelValidationError):
+            decode_template(template=template)
+        # With EXPR allowed, the template decodes.
+        result = decode_template(template=template, supported_extensions=["EXPR"])
+        assert isinstance(result, JobTemplate)
+
+    def test_rejects_environment_template(self) -> None:
+        # Like ``decode_job_template``, the deprecated alias rejects
+        # environment templates with ``DecodeValidationError``.
+        with pytest.raises(DecodeValidationError):
+            decode_template(template={"specificationVersion": "environment-2023-09"})
 
 
 class TestDecodeEnvironmentTemplate:

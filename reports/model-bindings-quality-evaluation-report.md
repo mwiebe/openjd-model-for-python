@@ -719,10 +719,10 @@ in `test/openjd/model_v1/test_known_gaps.py`.
 | 3 | ~~`model_to_object(model=...)` raises `NotImplementedError` for every Rust-backed model.~~ **Won't fix** — v0-only API removed from v1 (see Rec #3). | `test_model_to_object_round_trip` (removed) |
 | 4 | ~~`chunks_default_task_count` setter is a silent no-op (returns `Ok(())` without storing).~~ **Resolved** — wrapper now holds a persistent `Mutex<StepParameterSpaceIterator>`; the setter calls `iter.set_chunks_default_task_count(value)` on it. | `test_step_param_space_iter_chunks_default_task_count_setter` (now passing) |
 | 5 | ~~`len(iter)` returns 0 on adaptive-chunked space; reference raises `ValueError`.~~ **Resolved** — `__len__` now raises `ValueError("Length is not available because the parameter space uses adaptive chunking.")`. | `test_step_param_space_iter_adaptive_len_raises` (now passing) |
-| 6 | ~~`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType` — none pickleable. (`TemplateSpecificationVersion` *is* pickleable because it's a Python `Enum`.)~~ **Partially resolved (Rec #8).** `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType`, and `TemplateSpecificationVersion` (Rust-side) all pickle now. The decoded model containers (`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`) still don't — they need `to_dict()` / `to_json()` accessors first. | `test_job_template_pickleable` (still xfail) |
+| 6 | ~~`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType` — none pickleable. (`TemplateSpecificationVersion` *is* pickleable because it's a Python `Enum`.)~~ **Resolved (Rec #8).** All Group A enums and Group B value types now pickle. Decoded model containers (`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`) are explicitly **out of scope** for pickle — keep the source dict and re-decode on the other side. See `specs/python-model-interface.md` § "Pickle Support". | `test_job_template_pickleable` (removed) |
 | 7 | ~~`TaskParameterType` is not hashable, but `JobParameterType` is.~~ **Resolved (Rec #9).** Added `frozen, hash` to `PyTaskParameterType`. | `test_task_parameter_type_hashable` (now passing) |
 | 8 | ~~`StepParameterSpace.taskParameterDefinitions[name]` returns serde-tagged JSON, not typed object.~~ **Resolved (Rec #6).** Returns one of five typed pyclasses mirroring the Rust runtime enum. | `test_task_parameter_definitions_typed_objects` (passing — relocated to `test_task_parameter.py`) |
-| 9 | `decode_template` not exported (reference exports it). | `test_decode_template_re_export` |
+| 9 | ~~`decode_template` not exported (reference exports it).~~ **Resolved (Rec #10).** Added as a deprecated alias for `decode_job_template`. | `test_decode_template_re_export` (removed — replaced by `TestDecodeTemplate` in `test_parse.py`) |
 | 10 | ~~`JobTemplate.specificationVersion` (camel) not exposed.~~ **Resolved (Rec #11 part 1).** Exposed as a camelCase alias for `specification_version`. | `test_job_template_specification_version_camelcase` (passing — relocated to `test_rust_model_bindings.py::TestDecodeJobTemplate::test_specification_version_camelcase_alias`) |
 
 ### Other findings (informational, not failing tests)
@@ -952,10 +952,13 @@ proves the gap so it can be fixed and the proof regenerated.
    The decoded model containers (`JobTemplate`, `EnvironmentTemplate`,
    `Job`, `Step`, `StepScript`, `StepParameterSpace`) and the live
    `StepParameterSpaceIterator` / `StepDependencyGraph` types are
-   not yet pickleable — they need the underlying `openjd-rs` types
-   to expose `to_dict()` / `to_json()` first. Will be tracked
-   separately when those accessors land.
-   `test_job_template_pickleable` remains xfail.
+   **out of scope** for pickle support. The intended round-trip
+   path is to keep the source document (or its parsed dict) and
+   re-decode on the other side; the decoded model object is not
+   designed to act as a wire format. See
+   `specs/python-model-interface.md` § "Pickle Support" for the
+   spec text. The xfail
+   `test_known_gaps.py::test_job_template_pickleable` is removed.
 
 9. ~~**Make `TaskParameterType` hashable** by adding `frozen, hash` to the
    `#[pyclass]` attribute. Resolves
@@ -964,11 +967,20 @@ proves the gap so it can be fixed and the proof regenerated.
    provides a `name` getter. The `test_task_parameter_type_hashable`
    xfail is now a passing regression test.
 
-10. **Re-export `decode_template` from `openjd.model._v1`.** Either
+10. ~~**Re-export `decode_template` from `openjd.model._v1`.** Either
     implement it as a thin wrapper (auto-detect job vs environment
     template, then call the appropriate decoder) or alias to
     `parse_model`. Resolves
-    `test/openjd/model_v1/test_known_gaps.py::test_decode_template_re_export`.
+    `test/openjd/model_v1/test_known_gaps.py::test_decode_template_re_export`.~~
+    **Resolved.** Added as a deprecated alias for
+    `decode_job_template`, mirroring the v0 reference (which also
+    exposes `decode_template` as a thin alias and documents it as
+    deprecated). Spec updated with a deprecation note. Tests:
+    `test/openjd/model_v1/test_parse.py::TestDecodeTemplate` (3
+    tests covering the happy path, `supported_extensions`
+    forwarding, and rejection of environment templates). The xfail
+    `test_known_gaps.py::test_decode_template_re_export` is
+    removed.
 
 11. ~~**Expose `JobTemplate.specificationVersion`, `parameter_definitions`,
     `steps`, `extensions`, `job_environments`** (and the same for

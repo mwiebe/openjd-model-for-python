@@ -11,33 +11,10 @@ to the appropriate home in this directory (e.g. pickle tests to
 ``test_pickle.py``, parser shape tests to ``test_parse.py``); this file
 is being driven to zero.
 
+There are no known gaps in ``openjd.model._v1`` at the moment. New
+xfail-style regression tests for newly discovered gaps belong here
+until they are resolved.
+
 Cross-reference:
     reports/model-bindings-quality-evaluation-report.md
 """
-
-import pickle
-
-import pytest
-
-from openjd.model._v1 import (
-    decode_job_template,
-)
-
-
-@pytest.mark.xfail(strict=True, reason="Issue: JobTemplate is not pickleable")
-def test_job_template_pickleable():
-    t = decode_job_template(
-        template={
-            "specificationVersion": "jobtemplate-2023-09",
-            "name": "X",
-            "steps": [{"name": "S", "script": {"actions": {"onRun": {"command": "echo"}}}}],
-        }
-    )
-    data = pickle.dumps(t)
-    rt = pickle.loads(data)
-    assert rt.name == t.name
-
-
-@pytest.mark.xfail(strict=True, reason="Issue: decode_template not exported (reference exports it)")
-def test_decode_template_re_export():
-    from openjd.model._v1 import decode_template  # noqa: F401

@@ -326,6 +326,26 @@ def decode_job_template(
     )
 
 
+def decode_template(
+    *,
+    template: dict[str, Any],
+    supported_extensions: Optional[list[str]] = None,
+    caller_limits: "Optional[CallerLimits]" = None,
+) -> "template.JobTemplate":
+    """Deprecated alias for :func:`decode_job_template`.
+
+    Mirrors the v0 / pure-Python reference's ``decode_template``,
+    which is itself documented as deprecated. New code should call
+    ``decode_job_template`` directly. Will be removed in a future
+    release.
+    """
+    return decode_job_template(
+        template=template,
+        supported_extensions=supported_extensions,
+        caller_limits=caller_limits,
+    )
+
+
 def decode_environment_template(
     *,
     template: dict[str, Any],
@@ -444,6 +464,7 @@ __all__ = (
     "create_job",
     "decode_environment_template",
     "decode_job_template",
+    "decode_template",
     "document_string_to_object",
     "merge_job_parameter_definitions",
     "parse_model",
