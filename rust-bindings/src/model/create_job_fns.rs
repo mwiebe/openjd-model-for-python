@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::*;
 use pyo3::types::PyDict;
 
-use openjd_model::types::{JobParameterValues, JobParameterValue, JobParameterType, JobParameterInputValues};
+use openjd_model::types::JobParameterInputValues;
 use openjd_model::template::EnvironmentTemplate;
 use openjd_model::PathParameterOptions;
 
@@ -21,60 +21,18 @@ fn extract_input_values(py_dict: &Bound<'_, PyDict>) -> PyResult<JobParameterInp
     for (key, val) in py_dict.iter() {
         let name: String = key.extract()?;
         if let Ok(inner_dict) = val.cast::<PyDict>() {
+            // {"type": ..., "value": ...} — take the value field.
             if let Some(v) = inner_dict.get_item("value")? {
                 result.insert(name, py_to_expr_value(&v)?);
             }
+        } else if let (Ok(_), Ok(value_attr)) = (val.getattr("type"), val.getattr("value")) {
+            // ``ParameterValue``-shaped object with ``.type`` / ``.value``
+            // attributes. Drop the type — preprocess will infer the
+            // target type from the parameter definition and coerce.
+            result.insert(name, py_to_expr_value(&value_attr)?);
         } else {
+            // Bare scalar (e.g. ``{"Frame": 5}``). Pass straight through.
             result.insert(name, py_to_expr_value(&val)?);
-        }
-    }
-    Ok(result)
-}
-
-fn coerce_value_to_type(value: openjd_expr::ExprValue, param_type: JobParameterType) -> openjd_expr::ExprValue {
-    use openjd_expr::path_mapping::PathFormat;
-    if let openjd_expr::ExprValue::String(ref s) = value {
-        let target = match param_type {
-            JobParameterType::Int => openjd_expr::ExprType::INT,
-            JobParameterType::Float => openjd_expr::ExprType::FLOAT,
-            JobParameterType::Bool => openjd_expr::ExprType::BOOL,
-            JobParameterType::Path => openjd_expr::ExprType::PATH,
-            _ => return value,
-        };
-        openjd_expr::ExprValue::from_str_coerce(s, &target, PathFormat::host())
-            .unwrap_or(value)
-    } else {
-        value
-    }
-}
-
-fn extract_parameter_values(py_dict: &Bound<'_, PyDict>) -> PyResult<JobParameterValues> {
-    let mut result = JobParameterValues::new();
-    for (key, val) in py_dict.iter() {
-        let name: String = key.extract()?;
-        // Try as a dict with "type" and "value" keys
-        if let Ok(inner_dict) = val.cast::<PyDict>() {
-            let type_str: String = inner_dict.get_item("type")?
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Missing 'type' key"))?
-                .extract()?;
-            let param_type = JobParameterType::from_spec_str(&type_str)
-                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("Unknown parameter type: {type_str}")))?;
-            let value_obj = inner_dict.get_item("value")?
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Missing 'value' key"))?;
-            let value = coerce_value_to_type(py_to_expr_value(&value_obj)?, param_type);
-            result.insert(name, JobParameterValue { param_type, value });
-        }
-        // Try as an object with .type and .value attributes (ParameterValue, JobParameterValue)
-        else if let (Ok(type_attr), Ok(value_attr)) = (val.getattr("type"), val.getattr("value")) {
-            let type_str: String = type_attr.call_method0("as_str")?.extract()?;
-            let param_type = JobParameterType::from_spec_str(&type_str)
-                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("Unknown parameter type: {type_str}")))?;
-            let value = coerce_value_to_type(py_to_expr_value(&value_attr)?, param_type);
-            result.insert(name, JobParameterValue { param_type, value });
-        } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "Each parameter value must be a dict with 'type'/'value' keys or an object with .type/.value attributes"
-            ));
         }
     }
     Ok(result)
@@ -94,17 +52,43 @@ pub(crate) fn py_create_job(
     validation_context: Option<&super::profile::PyValidationContext>,
 ) -> PyResult<PyJob> {
     let env_templates = extract_env_templates(environment_templates);
-    let params = extract_parameter_values(job_parameter_values)?;
 
-    // Validate constraints from job + env templates before calling create_job
-    let merged = openjd_model::merge_job_parameter_definitions(
-        &job_template.inner, &env_templates
+    // Match the v0 (pure-Python) reference's behaviour: route the
+    // caller-supplied parameter values through ``preprocess_job_parameters``
+    // before constructing the job. This:
+    //   * fills in defaults from the parameter definitions for any
+    //     names the caller didn't supply explicitly, so
+    //     ``Job.parameters`` ends up with every defined parameter
+    //     (matching the v0 contract that downstream consumers —
+    //     sessions, the worker agent, deadline-cli — rely on);
+    //   * runs every per-parameter constraint check before
+    //     instantiation (no need for the caller to also call
+    //     ``preprocess_job_parameters`` first);
+    //   * coerces input values from their raw Python form
+    //     (string, int, etc.) to the typed ``ExprValue`` shape that
+    //     ``create_job`` expects.
+    //
+    // Path-resolution-related options use sentinel "skip" values
+    // (empty paths + ``allow_template_dir_walk_up=true``) because at
+    // ``create_job`` time we don't know the on-disk template
+    // directory or the caller's CWD; the v0 reference does the same.
+    // Callers that need PATH-default resolution against a real
+    // template-dir / CWD should call ``preprocess_job_parameters``
+    // explicitly first and then pass the result to ``create_job``.
+    let input_values = extract_input_values(job_parameter_values)?;
+    let path_opts = PathParameterOptions {
+        job_template_dir: "",
+        current_working_dir: "",
+        path_format: openjd_expr::path_mapping::PathFormat::host(),
+        allow_template_dir_walk_up: true,
+        allow_uri_path_values: false,
+    };
+    let params = openjd_model::preprocess_job_parameters(
+        &job_template.inner,
+        &input_values,
+        &env_templates,
+        &path_opts,
     ).map_err(model_err_to_py)?;
-    for param in &merged {
-        if let Some(jpv) = params.get(&param.name) {
-            param.check_constraints(&jpv.value).map_err(model_err_to_py)?;
-        }
-    }
 
     // Use the caller-supplied validation_context if given; otherwise
     // derive the default one from the template's declared profile.

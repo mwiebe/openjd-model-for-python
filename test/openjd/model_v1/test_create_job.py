@@ -835,3 +835,165 @@ class TestCreateJob_2023_09:
             str(excinfo.value)
             == "Associative combination: all members must have the same number of values, got 10 and 2"
         )
+
+
+class TestParametersDict:
+    """``Job.parameters`` is the resolved parameter set: every parameter
+    defined in the template (defaults plus explicit values) keyed by
+    name, with each ``JobParameter.value`` resolved to the chosen
+    ``ExprValue``. This matches the v0 reference's behaviour and is
+    relied on by every downstream consumer that walks the resolved set
+    (sessions, the worker agent, deadline-cli)."""
+
+    @staticmethod
+    def _two_param_template() -> dict[str, Any]:
+        return {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": "T",
+            "parameterDefinitions": [
+                {"name": "Frame", "type": "INT", "default": 5},
+                {"name": "Name", "type": "STRING", "default": "render"},
+            ],
+            "steps": [
+                {
+                    "name": "S",
+                    "script": {
+                        "actions": {
+                            "onRun": {
+                                "command": "echo",
+                                "args": [
+                                    "{{Param.Name}}",
+                                    "{{Param.Frame}}",
+                                ],
+                            }
+                        }
+                    },
+                }
+            ],
+        }
+
+    def test_defaults_only_populated(self) -> None:
+        """No values supplied — all defaults appear in
+        ``Job.parameters``."""
+        t = decode_job_template(template=self._two_param_template())
+        j = create_job(job_template=t, job_parameter_values={})
+        assert set(j.parameters.keys()) == {"Frame", "Name"}
+        assert j.parameters["Frame"].param_type == "INT"
+        assert j.parameters["Frame"].value.item() == 5
+        assert j.parameters["Name"].param_type == "STRING"
+        assert j.parameters["Name"].value.item() == "render"
+
+    def test_explicit_values_override_defaults(self) -> None:
+        """Explicit values override defaults; un-supplied parameters
+        still show up via their defaults."""
+        t = decode_job_template(template=self._two_param_template())
+        j = create_job(
+            job_template=t,
+            job_parameter_values={"Frame": ParameterValue(type=JobParameterType.INT, value="7")},
+        )
+        assert set(j.parameters.keys()) == {"Frame", "Name"}
+        assert j.parameters["Frame"].value.item() == 7
+        assert j.parameters["Name"].value.item() == "render"
+
+    def test_bare_scalar_input(self) -> None:
+        """Bare-scalar input (``{"Frame": 7}``) is accepted and the
+        un-supplied parameter falls back to its default."""
+        t = decode_job_template(template=self._two_param_template())
+        j = create_job(
+            job_template=t,
+            job_parameter_values={"Frame": 7},
+        )
+        assert j.parameters["Frame"].value.item() == 7
+        assert j.parameters["Name"].value.item() == "render"
+
+    def test_dict_shaped_input(self) -> None:
+        """Dict-shaped input (``{"type": ..., "value": ...}``) is
+        accepted; defaults still fill in the missing names."""
+        t = decode_job_template(template=self._two_param_template())
+        j = create_job(
+            job_template=t,
+            job_parameter_values={"Name": {"type": "STRING", "value": "foo"}},
+        )
+        assert j.parameters["Name"].value.item() == "foo"
+        assert j.parameters["Frame"].value.item() == 5
+
+    def test_all_explicit_no_defaults_used(self) -> None:
+        """When every parameter is supplied explicitly, no default is
+        consulted; ``Job.parameters`` reflects the supplied values."""
+        t = decode_job_template(template=self._two_param_template())
+        j = create_job(
+            job_template=t,
+            job_parameter_values={
+                "Frame": ParameterValue(type=JobParameterType.INT, value="42"),
+                "Name": ParameterValue(type=JobParameterType.STRING, value="bar"),
+            },
+        )
+        assert j.parameters["Frame"].value.item() == 42
+        assert j.parameters["Name"].value.item() == "bar"
+
+    def test_required_param_no_default_no_value_raises(self) -> None:
+        """A parameter with no default and no supplied value triggers
+        the standard 'Values missing for required job parameters' error
+        (this lives in ``preprocess_job_parameters``, which
+        ``create_job`` now routes through internally)."""
+        template = {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": "T",
+            "parameterDefinitions": [
+                {"name": "Required", "type": "INT"},  # no default
+            ],
+            "steps": [
+                {
+                    "name": "S",
+                    "script": {
+                        "actions": {
+                            "onRun": {
+                                "command": "echo",
+                                "args": ["{{Param.Required}}"],
+                            }
+                        }
+                    },
+                }
+            ],
+        }
+        t = decode_job_template(template=template)
+        with pytest.raises(DecodeValidationError, match="missing"):
+            create_job(job_template=t, job_parameter_values={})
+
+    def test_constraint_check_runs_via_create_job(self) -> None:
+        """Constraint checks (e.g. ``minValue``) run during
+        ``create_job`` itself — callers don't need to call
+        ``preprocess_job_parameters`` first."""
+        template = {
+            "specificationVersion": "jobtemplate-2023-09",
+            "name": "T",
+            "parameterDefinitions": [
+                {"name": "Frame", "type": "INT", "default": 5, "minValue": 1},
+            ],
+            "steps": [
+                {
+                    "name": "S",
+                    "script": {
+                        "actions": {
+                            "onRun": {
+                                "command": "echo",
+                                "args": ["{{Param.Frame}}"],
+                            }
+                        }
+                    },
+                }
+            ],
+        }
+        t = decode_job_template(template=template)
+        # Below-min value rejected.
+        with pytest.raises(DecodeValidationError):
+            create_job(
+                job_template=t,
+                job_parameter_values={
+                    "Frame": ParameterValue(type=JobParameterType.INT, value="0")
+                },
+            )
+        # Default (5) passes constraints — Job.parameters gets the
+        # default.
+        j = create_job(job_template=t, job_parameter_values={})
+        assert j.parameters["Frame"].value.item() == 5

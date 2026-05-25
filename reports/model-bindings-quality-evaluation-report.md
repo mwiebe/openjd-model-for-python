@@ -975,7 +975,7 @@ fix should land, and (where applicable) suggests a
 
 ### High priority — behavioural regressions vs reference
 
-1. **Restore `Job.parameters` to include defaults.** The v0
+1. ~~**Restore `Job.parameters` to include defaults.** The v0
    reference's `Job.parameters` dict contains every parameter
    defined in the template (defaults plus explicit values), with
    `JobParameter.value` resolved to the chosen value. The v1
@@ -995,7 +995,48 @@ fix should land, and (where applicable) suggests a
    and asserts both keys are present with the default values.
    Add an xfail at
    `test/openjd/model_v1/test_known_gaps.py::test_job_parameters_includes_defaults`
-   tracking it until resolved.
+   tracking it until resolved.~~ **Resolved.** Fixed at the
+   binding boundary in
+   `rust-bindings/src/model/create_job_fns.rs::py_create_job`
+   without requiring upstream changes. The binding now routes
+   the caller-supplied parameter values through
+   `openjd_model::preprocess_job_parameters` before calling
+   `openjd_model::create_job`, matching the v0 (pure-Python)
+   reference's behaviour. This:
+   * fills in defaults from the parameter definitions for any
+     names the caller didn't supply explicitly, so
+     `Job.parameters` ends up with every defined parameter;
+   * runs every per-parameter constraint check before
+     instantiation (the previous separate constraint loop was
+     redundant and is removed);
+   * coerces input values from their raw Python form (string,
+     int, etc.) to the typed `ExprValue` shape that
+     `create_job` expects.
+
+   Path-resolution-related options use sentinel "skip" values
+   (empty `job_template_dir` and `current_working_dir` plus
+   `allow_template_dir_walk_up=true`) — the same pattern the
+   v0 reference uses, since at `create_job` time we don't know
+   the on-disk template directory or the caller's CWD. Callers
+   that need PATH-default resolution against a real template
+   directory continue to call `preprocess_job_parameters`
+   explicitly first and pass the resolved values.
+
+   `extract_input_values` also gained a third accepted shape:
+   it now accepts `ParameterValue`-shaped objects (with
+   `.type` / `.value` attributes), in addition to the existing
+   bare-scalar and dict-shaped (`{"type": ..., "value": ...}`)
+   inputs. The previously-separate `extract_parameter_values`
+   and `coerce_value_to_type` helpers became dead code and
+   were removed.
+
+   New regression tests in
+   `test/openjd/model_v1/test_create_job.py::TestParametersDict`
+   (7 tests): defaults-only, explicit-overrides-default, bare
+   scalar input, dict-shaped input, all-explicit (no defaults
+   used), required-parameter-missing error path, and
+   constraint-check-via-`create_job` (no separate
+   `preprocess_job_parameters` call required).
 
 2. **Fix `StepParameterSpaceIterator.__contains__` for
    `CHUNK[INT]` parameter spaces.** Yielded values from a chunked
