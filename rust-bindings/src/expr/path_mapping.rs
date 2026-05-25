@@ -99,9 +99,14 @@ impl PyPathMappingRule {
     }
 
     fn __repr__(&self) -> String {
+        // Render `source_path_format` using its Python name
+        // (`PathFormat.POSIX`) rather than the underlying Rust
+        // enum's `Debug` name (`Posix`). Matches the Python
+        // convention for enum repr.
+        let fmt: PyPathFormat = self.inner.source_path_format.into();
         format!(
-            "PathMappingRule(source_path_format={:?}, source_path='{}', destination_path='{}')",
-            self.inner.source_path_format, self.inner.source_path, self.inner.destination_path
+            "PathMappingRule(source_path_format=PathFormat.{}, source_path='{}', destination_path='{}')",
+            fmt.variant_name(), self.inner.source_path, self.inner.destination_path
         )
     }
 

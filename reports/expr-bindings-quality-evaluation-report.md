@@ -558,13 +558,20 @@ workflow in `~/openjd-rs/AGENTS.md` can resolve it precisely.
 
 ### P2 — Polish / housekeeping
 
-6. **Render `PathMappingRule.source_path_format` using its Python name in `__repr__`.**
+6. ~~**Render `PathMappingRule.source_path_format` using its Python name in `__repr__`.**
    `rust-bindings/src/expr/path_mapping.rs::__repr__` uses `{:?}` on
    the inner `PathFormat`, producing `Posix` / `Windows` / `Uri`.
    Either format the corresponding `PyPathFormat` (which yields
    `POSIX` / `WINDOWS` / `URI` via its `name` getter) or hand-write
    the variant string. Cosmetic only; no failing test today, but
-   reproduces in IDE tooltips and traceback inspection.
+   reproduces in IDE tooltips and traceback inspection.~~
+   **Resolved.** `__repr__` now formats as
+   `source_path_format=PathFormat.POSIX` (matching how Python's
+   own enums repr themselves and how the rest of the binding's
+   pyclass enums render). A pub-crate `PyPathFormat::variant_name`
+   method exposes the variant string outside `#[pymethods]` for use
+   from the path-mapping module. Pinned by 3 new tests in
+   `test_path_mapping.py::TestPathMappingRuleRepr`.
 7. **Consider exposing `ExprValue.null()` as a classmethod.**
    The reference exposes `ExprValue.null()` as a convenience
    classmethod that returns `ExprValue(None)`. The binding requires

@@ -18,16 +18,26 @@ pub(crate) enum PyPathFormat {
     URI = 2,
 }
 
-#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
-#[pymethods]
 impl PyPathFormat {
-    #[getter]
-    fn name(&self) -> &'static str {
+    /// Variant name as a static `&str` (`"POSIX"`, `"WINDOWS"`,
+    /// `"URI"`). Available outside `#[pymethods]` so other modules
+    /// (e.g. `path_mapping::__repr__`) can use it for diagnostic
+    /// rendering.
+    pub(crate) fn variant_name(&self) -> &'static str {
         match self {
             PyPathFormat::POSIX => "POSIX",
             PyPathFormat::WINDOWS => "WINDOWS",
             PyPathFormat::URI => "URI",
         }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyPathFormat {
+    #[getter]
+    fn name(&self) -> &'static str {
+        self.variant_name()
     }
 
     /// Pickle support — round-trips through the variant name.

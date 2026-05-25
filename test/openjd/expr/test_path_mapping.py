@@ -456,3 +456,41 @@ class TestPathMappingViaProfile:
         fs = FormatString("{{apply_path_mapping('/mnt/shared/file.exr')}}")
         result = fs.resolve(SymbolTable({}), profile=self._profile_with_rule())
         assert result.item() == "/local/cache/file.exr"
+
+
+class TestPathMappingRuleRepr:
+    """``__repr__`` renders ``source_path_format`` using the Python
+    convention (``PathFormat.POSIX``) rather than the underlying Rust
+    enum's debug name (``Posix``). Pinned for parity with how Python's
+    own enums repr themselves and to make logged repr output drop-in
+    pasteable into Python source."""
+
+    def test_repr_uses_python_enum_name_posix(self) -> None:
+        r = PathMappingRule(
+            source_path_format=PathFormat.POSIX,
+            source_path="/a",
+            destination_path="/b",
+        )
+        text = repr(r)
+        assert "source_path_format=PathFormat.POSIX" in text
+        assert "Posix" not in text  # no leaked Rust debug name
+
+    def test_repr_uses_python_enum_name_windows(self) -> None:
+        r = PathMappingRule(
+            source_path_format=PathFormat.WINDOWS,
+            source_path=r"C:\src",
+            destination_path=r"C:\dst",
+        )
+        text = repr(r)
+        assert "source_path_format=PathFormat.WINDOWS" in text
+        assert "Windows" not in text  # no leaked Rust debug name
+
+    def test_repr_uses_python_enum_name_uri(self) -> None:
+        r = PathMappingRule(
+            source_path_format=PathFormat.URI,
+            source_path="/a",
+            destination_path="/b",
+        )
+        text = repr(r)
+        assert "source_path_format=PathFormat.URI" in text
+        assert "Uri" not in text  # no leaked Rust debug name
