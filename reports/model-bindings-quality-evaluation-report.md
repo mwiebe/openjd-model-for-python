@@ -1082,7 +1082,7 @@ fix should land, and (where applicable) suggests a
    docstring helpers. Add the symbols to `__init__.py`'s
    imports and `__all__`.
 
-7. **Re-export structural pyclasses at the
+7. ~~**Re-export structural pyclasses at the
    `openjd.model._v1` top level — or update the spec to use
    submodule paths consistently.** Spec uses `from openjd.model
    import Job, Step, JobTemplate, EnvironmentTemplate,
@@ -1103,7 +1103,29 @@ fix should land, and (where applicable) suggests a
    Option A is the smaller change (15-20 import lines) and
    matches user expectations; Option B is more honest about the
    architecture. **Recommend Option A** for backward-compat
-   with v0 and to keep the spec examples copy-pasteable.
+   with v0 and to keep the spec examples copy-pasteable.~~
+   **Resolved (Option B chosen).** All 24 `from openjd.model
+   import` snippets in `specs/python-model-interface.md` now use
+   the canonical submodule path for each symbol:
+   * Entry-point functions (`decode_*_template`, `create_job`,
+     `preprocess_job_parameters`, `merge_job_parameter_definitions`,
+     `decode_template`) and convenience classes (`ParameterValue`,
+     `SpecificationRevision`, `TemplateSpecificationVersion`,
+     `ValueReferenceConstants`, `IntRangeExpr`,
+     `CancelationMethod*`, `DocumentType`, `CallerLimits`,
+     `ModelProfile`, `DecodeValidationError`) → `openjd.model._v1`.
+   * Structural pyclasses → submodules:
+     `template.JobTemplate`/`EnvironmentTemplate`/etc. under
+     `openjd.model._v1.template`; `job.StepParameterSpaceIterator`/
+     `StepDependencyGraph` under `openjd.model._v1.job`;
+     `JobParameterType`/`TaskParameterType`/`ModelExtension`/
+     `ValidationContext` under `openjd.model._v1.types`.
+   * `decode_job_template_str` → `openjd._openjd_rs` (until it's
+     re-exported through the wrapper, see Rec #6).
+   A new "Module Layout" section was added to the spec right
+   after the existing "Architecture" section, with a 5-row table
+   mapping each submodule to its canonical contents. All 24 spec
+   imports were verified to import successfully at runtime.
 
 8. **Fix `parse_model` to forward `supported_extensions=` and
    `caller_limits=`.** Today `parse_model(obj={…with extensions
@@ -1154,12 +1176,15 @@ fix should land, and (where applicable) suggests a
     divergence in the spec** — the spec section currently says
     "Mirrors the v0 reference" which is misleading.
 
-13. **Update the spec's `it.names()` example.** Line ~783 in
+13. ~~**Update the spec's `it.names()` example.** Line ~783 in
     `specs/python-model-interface.md` shows
     `it.names()                  # {"Frame"}` but
     `it.names` is a property. Trying `it.names()` raises
     `TypeError: 'set' object is not callable`. Drop the
-    parentheses.
+    parentheses.~~ **Resolved.** The spec now reads
+    `it.names                    # {"Frame"} — property, not callable`,
+    with the inline comment calling out the property/method
+    distinction so future readers don't reintroduce the typo.
 
 ### Lower priority — polish / hygiene
 

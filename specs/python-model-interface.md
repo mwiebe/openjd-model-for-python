@@ -52,6 +52,30 @@ enum value).
 [openjd-model]: https://github.com/OpenJobDescription/openjd-rs/tree/main/crates/openjd-model
 [validate]: https://github.com/OpenJobDescription/openjd-rs/blob/main/crates/openjd-model/src/template/validation/mod.rs
 
+## Module Layout
+
+The `openjd.model._v1` package is split into four submodules that
+mirror the underlying Rust crate's organization. The top-level
+`openjd.model._v1` re-exports the *entry points* (decode/create
+functions, Python-only compatibility classes, str-Enum shims),
+but **does not** re-export the structural pyclasses — those live
+in their respective submodules. Examples in this spec import each
+symbol from its canonical location.
+
+| Submodule | Contents |
+|---|---|
+| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_environment_template`, `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `parse_model`, `decode_template`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), Python-only compat (`SpecificationRevision`, `TemplateSpecificationVersion`, `ParameterValue`, `ValueReferenceConstants`, `RevisionExtensions`, `CancelationMethod*`, `IntRangeExpr`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`), capability-validation helpers, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`, `FormatStringError`). Also re-exports `DecodeValidationError`. |
+| `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the typed `JobParameterDefinition`/`TaskParameterDefinition`/`*UserInterface` variants, etc. |
+| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, and the job-time `EmbeddedFile`. |
+| `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `TaskParameterType`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision` (Rust pyclass form), `CallerLimits`, `ValidationContext`. |
+| `openjd.model._v1.errors` | Exception classes raised by decode/create paths: `DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`. |
+
+Decode/create functions like `decode_job_template_str` and
+`decode_environment_template_str` that are not yet re-exported
+through the wrapper are accessed from `openjd._openjd_rs` directly;
+these will be re-exported through `openjd.model._v1` in a future
+release.
+
 ## Functions
 
 ### Decode
@@ -64,7 +88,7 @@ extension *strings* as the caller's allowlist, plus optional
 `CallerLimits`.
 
 ```python
-from openjd.model import decode_job_template
+from openjd.model._v1 import decode_job_template
 
 template = decode_job_template(
     template={
@@ -135,7 +159,8 @@ Will be removed in a future release.
 Decode directly from a YAML or JSON string — no intermediate dict.
 
 ```python
-from openjd.model import decode_job_template_str, DocumentType
+from openjd._openjd_rs import decode_job_template_str
+from openjd.model._v1 import DocumentType
 
 yaml_str = """
 specificationVersion: jobtemplate-2023-09
@@ -156,7 +181,7 @@ template = decode_job_template_str(yaml_str, DocumentType.YAML)
 Same pattern for environment templates.
 
 ```python
-from openjd.model import decode_environment_template
+from openjd.model._v1 import decode_environment_template
 
 env_template = decode_environment_template(template={
     "specificationVersion": "environment-2023-09",
@@ -179,7 +204,7 @@ env_template = decode_environment_template(template={
 Create a fully resolved job from a template and parameter values.
 
 ```python
-from openjd.model import decode_job_template, create_job
+from openjd.model._v1 import decode_job_template, create_job
 
 template = decode_job_template(template={
     "specificationVersion": "jobtemplate-2023-09",
@@ -208,7 +233,7 @@ Validate and coerce job parameter values. Accepts `str` or `pathlib.Path`
 for directory arguments.
 
 ```python
-from openjd.model import decode_job_template, preprocess_job_parameters
+from openjd.model._v1 import decode_job_template, preprocess_job_parameters
 from pathlib import Path
 
 template = decode_job_template(template={
@@ -234,7 +259,7 @@ params = preprocess_job_parameters(
 Merge parameter definitions from a job template and environment templates.
 
 ```python
-from openjd.model import decode_job_template, merge_job_parameter_definitions
+from openjd.model._v1 import decode_job_template, merge_job_parameter_definitions
 
 template = decode_job_template(template={...})
 merged = merge_job_parameter_definitions(job_template=template)
@@ -769,7 +794,7 @@ ff.patterns                     # list[str], e.g. ["*.png", "*.jpg"]
 Iterate over task parameter combinations for a step.
 
 ```python
-from openjd.model import StepParameterSpaceIterator
+from openjd.model._v1.job import StepParameterSpaceIterator
 
 it = StepParameterSpaceIterator(step=job.steps[0])
 # or: it = StepParameterSpaceIterator(space=step.parameterSpace)
@@ -780,7 +805,7 @@ it[-1]                      # {"Frame": 10}
 for params in it:
     print(params["Frame"])  # 1, 2, 3, ...
 
-it.names()                  # {"Frame"}
+it.names                    # {"Frame"} — property, not callable
 it.chunks_adaptive          # bool
 it.chunks_parameter_name    # Optional[str]
 it.chunks_default_task_count  # Optional[int]
@@ -791,7 +816,7 @@ it.chunks_default_task_count  # Optional[int]
 Step dependency graph for topological ordering.
 
 ```python
-from openjd.model import StepDependencyGraph
+from openjd.model._v1.job import StepDependencyGraph
 
 graph = StepDependencyGraph(job=job)
 graph.topo_sorted()         # ["Render", "Composite"] — dependency order
@@ -803,7 +828,7 @@ graph.step_names()          # ["Render", "Composite"]
 ### `DocumentType` (Rust)
 
 ```python
-from openjd.model import DocumentType
+from openjd.model._v1.types import DocumentType
 DocumentType.JSON
 DocumentType.YAML
 ```
@@ -811,7 +836,7 @@ DocumentType.YAML
 ### `TemplateSpecificationVersion` (Python str Enum)
 
 ```python
-from openjd.model import TemplateSpecificationVersion as TSV
+from openjd.model._v1 import TemplateSpecificationVersion as TSV
 
 TSV.JOBTEMPLATE_v2023_09    # "jobtemplate-2023-09"
 TSV.ENVIRONMENT_v2023_09    # "environment-2023-09"
@@ -821,7 +846,7 @@ TSV.is_job_template(TSV.JOBTEMPLATE_v2023_09)  # True
 ### `JobParameterType` (Rust)
 
 ```python
-from openjd.model import JobParameterType
+from openjd.model._v1.types import JobParameterType
 JobParameterType.STRING     # STRING, INT, FLOAT, PATH, BOOL, RANGE_EXPR
 JobParameterType.LIST_INT   # LIST_STRING, LIST_INT, LIST_FLOAT, LIST_PATH, LIST_BOOL, LIST_LIST_INT
 ```
@@ -829,14 +854,14 @@ JobParameterType.LIST_INT   # LIST_STRING, LIST_INT, LIST_FLOAT, LIST_PATH, LIST
 ### `TaskParameterType` (Rust)
 
 ```python
-from openjd.model import TaskParameterType
+from openjd.model._v1.types import TaskParameterType
 TaskParameterType.INT       # INT, FLOAT, STRING, PATH, CHUNK_INT
 ```
 
 ### `SpecificationRevision` (Python str Enum)
 
 ```python
-from openjd.model import SpecificationRevision
+from openjd.model._v1 import SpecificationRevision
 SpecificationRevision.v2023_09  # "2023-09"
 ```
 
@@ -845,7 +870,7 @@ SpecificationRevision.v2023_09  # "2023-09"
 Symbol table key prefixes used by sessions at runtime.
 
 ```python
-from openjd.model import ValueReferenceConstants as VRC
+from openjd.model._v1 import ValueReferenceConstants as VRC
 
 VRC.JOB_PARAMETER_PREFIX        # "Param"
 VRC.TASK_PARAMETER_PREFIX       # "Task.Param"
@@ -856,7 +881,8 @@ VRC.HAS_PATH_MAPPING_RULES     # "Session.HasPathMappingRules"
 ## Simple Types (Python)
 
 ```python
-from openjd.model import ParameterValue, JobParameterType
+from openjd.model._v1 import ParameterValue
+from openjd.model._v1.types import JobParameterType
 
 # A parameter value with its type
 pv = ParameterValue(type=JobParameterType.STRING, value="hello")
@@ -876,11 +902,12 @@ decoding (read it off `JobTemplate.profile`) and an *input* to
 expression engine.
 
 ```python
-from openjd.model import (
-    ModelProfile, ModelExtension, SpecificationRevision,
-    CallerLimits, ValidationContext,
+from openjd.model._v1 import (
+    ModelProfile, SpecificationRevision,
+    CallerLimits,
     decode_job_template, create_job,
 )
+from openjd.model._v1.types import ModelExtension, ValidationContext
 
 # 1. Decode a template using the string-list allowlist (Rust-aligned).
 template = decode_job_template(template={...}, supported_extensions=["EXPR"])
@@ -928,7 +955,7 @@ thin Python wrapper kept for backward compatibility with code in
 It exposes `.to_profile()` to convert to a `ModelProfile`. New code
 should construct a `ModelProfile` directly.
 
-from openjd.model import CancelationMethodTerminate, CancelationMethodNotifyThenTerminate
+from openjd.model._v1 import CancelationMethodTerminate, CancelationMethodNotifyThenTerminate
 
 CancelationMethodTerminate(mode="TERMINATE")
 CancelationMethodNotifyThenTerminate(mode="NOTIFY_THEN_TERMINATE", notify_period_in_seconds=120)
@@ -955,7 +982,7 @@ on the canonical ascending form; the input's direction is not
 retained.
 
 ```python
-from openjd.model import IntRangeExpr
+from openjd.model._v1 import IntRangeExpr
 
 r = IntRangeExpr.from_str("-1 - -2 : -1")
 list(r)   # [-2, -1]   (ascending)
@@ -992,7 +1019,7 @@ Practical consequences:
 ## Exceptions
 
 ```python
-from openjd.model import DecodeValidationError, decode_job_template
+from openjd.model._v1 import DecodeValidationError, decode_job_template
 
 # Invalid template
 try:
