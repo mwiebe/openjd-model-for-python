@@ -543,3 +543,33 @@ class TestWithNumber:
     def test_hash_padding_too_wide(self) -> None:
         with pytest.raises(ExpressionError, match="exceeds maximum"):
             evaluate_expression("'file_" + "#" * 33 + ".exr'.with_number(1)")
+
+
+class TestPathFormatHashability:
+    """``PathFormat`` is a pyclass enum; verify it is hashable so that
+    callers can use it as a dict key or set member alongside the other
+    enum-shaped pyclasses (``TypeCode``, ``ExprRevision``,
+    ``ExprExtension``)."""
+
+    def test_pathformat_hash_matches_self(self) -> None:
+        # Same singleton hashes equal.
+        assert hash(PathFormat.POSIX) == hash(PathFormat.POSIX)
+        assert hash(PathFormat.WINDOWS) == hash(PathFormat.WINDOWS)
+        assert hash(PathFormat.URI) == hash(PathFormat.URI)
+
+    def test_pathformat_distinct_variants_distinct_hash(self) -> None:
+        # Three distinct variants → three distinct hashes (no
+        # accidental collisions).
+        h = {hash(PathFormat.POSIX), hash(PathFormat.WINDOWS), hash(PathFormat.URI)}
+        assert len(h) == 3
+
+    def test_pathformat_usable_as_set_member(self) -> None:
+        s = {PathFormat.POSIX, PathFormat.WINDOWS}
+        assert PathFormat.POSIX in s
+        assert PathFormat.URI not in s
+
+    def test_pathformat_usable_as_dict_key(self) -> None:
+        d = {PathFormat.POSIX: "p", PathFormat.WINDOWS: "w", PathFormat.URI: "u"}
+        assert d[PathFormat.POSIX] == "p"
+        assert d[PathFormat.WINDOWS] == "w"
+        assert d[PathFormat.URI] == "u"

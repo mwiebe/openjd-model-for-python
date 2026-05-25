@@ -145,6 +145,51 @@ pub(crate) fn str_to_typecode(v: &str) -> PyResult<TypeCode> {
     }
 }
 
+/// Validate that the parameter count for a `TypeCode` matches the
+/// canonical arity for that variant, raising `ValueError` on mismatch.
+/// The reference enforces these constraints; the upstream Rust
+/// `ExprType::new` is permissive and produces non-canonical shapes
+/// (e.g. `unresolved` with zero or two type params, `list` with
+/// zero or many element types) that don't appear anywhere in
+/// well-formed evaluation. Validating here keeps the Python surface
+/// honest without requiring upstream changes.
+///
+/// Note: `Union` is intentionally NOT validated here — the upstream
+/// `normalize_union` accepts any number of params and unwraps /
+/// flattens / hoists `noreturn` and `unresolved` in well-defined
+/// ways. Single-element unions unwrap to the element, zero-element
+/// unions become `noreturn`. Existing tests rely on this; preserving
+/// it.
+fn validate_typecode_arity(code: TypeCode, params: &[ExprType]) -> PyResult<()> {
+    let n = params.len();
+    let err = |msg: &str| Err(pyo3::exceptions::PyValueError::new_err(msg.to_string()));
+    match code {
+        // Exactly one type parameter.
+        TypeCode::List | TypeCode::Unresolved => {
+            if n != 1 {
+                return err(&format!(
+                    "{:?} requires exactly one type parameter, got {}",
+                    code, n
+                ));
+            }
+        }
+        // Zero parameters expected. Includes the simple primitives
+        // (NullType, Bool, Int, Float, String, Path, RangeExpr) and
+        // the special markers (Any, NoReturn, TypeVarT*, Signature).
+        // Union is exempt from validation — see doc comment above.
+        TypeCode::Union => {}
+        _ => {
+            if n != 0 {
+                return err(&format!(
+                    "{:?} does not accept type parameters, got {}",
+                    code, n
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn extract_expr_type(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<ExprType> {
     if let Ok(t) = obj.extract::<PyExprType>() {
         return Ok(t.inner);
@@ -172,6 +217,7 @@ impl PyExprType {
         if let Ok(tc) = arg.extract::<PyTypeCode>() {
             let code: TypeCode = tc.into();
             let rust_params: Vec<ExprType> = params.unwrap_or_default().into_iter().map(|p| p.inner).collect();
+            validate_typecode_arity(code, &rust_params)?;
             return Ok(PyExprType { inner: ExprType::new(code, rust_params) });
         }
         // String form
@@ -180,6 +226,7 @@ impl PyExprType {
                 // Two-arg string form: ExprType("list", [ExprType("int")])
                 let code = str_to_typecode(&s)?;
                 let rust_params: Vec<ExprType> = p.iter().map(|p| p.inner.clone()).collect();
+                validate_typecode_arity(code, &rust_params)?;
                 return Ok(PyExprType { inner: ExprType::new(code, rust_params) });
             }
             // Single-arg string form: ExprType("list[int]")

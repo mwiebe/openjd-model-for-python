@@ -8,8 +8,8 @@ use pyo3_stub_gen::derive::*;
 use openjd_expr::path_mapping::PathFormat;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.expr", name = "PathFormat", eq, eq_int, from_py_object)]
-#[derive(Clone, Copy, PartialEq)]
+#[pyclass(module = "openjd.expr", name = "PathFormat", eq, eq_int, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 // Variant names follow Python's UPPER_CASE enum convention.
 #[allow(clippy::upper_case_acronyms)]
 pub(crate) enum PyPathFormat {

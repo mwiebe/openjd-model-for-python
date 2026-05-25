@@ -491,50 +491,70 @@ workflow in `~/openjd-rs/AGENTS.md` can resolve it precisely.
 
 ### P1 — Reference parity / behaviour bugs
 
-1. **Make `PathFormat` hashable.** Add `hash` to the
+1. ~~**Make `PathFormat` hashable.** Add `hash` to the
    `#[pyclass(module = "openjd.expr", name = "PathFormat", eq, eq_int,
    from_py_object)]` line in `rust-bindings/src/expr/path_format.rs`
    so it matches `PyTypeCode` / `PyExprRevision`. When the change
    lands, move
    `test_known_gaps.py::test_path_format_is_hashable` to
    `test_pickle.py` (or a new `test_enum_hash.py`) alongside the
-   existing pickle round-trip tests for `PathFormat`.
-2. **Raise `ExpressionTypeError` from `ExprValue.unresolved(T).item()`.**
+   existing pickle round-trip tests for `PathFormat`.~~ **Resolved.**
+   Added `hash, frozen` to the `#[pyclass(...)]` config and the
+   matching `Eq, Hash` to the `#[derive(...)]`. The xfail moved to
+   `test_paths.py::TestPathFormatHashability` (4 tests covering
+   self-hash, distinct-variant distinct-hash, set membership, and
+   dict-key usage).
+2. ~~**Raise `ExpressionTypeError` from `ExprValue.unresolved(T).item()`.**
    The `ExprValue::Unresolved(_) => py.None()` arm in
    `rust-bindings/src/expr/expr_value.rs::expr_value_to_py` should
    raise `ExpressionTypeError("Cannot extract value from
    unresolved[T]: value is not known")` to match the reference
    contract. When resolved, move
    `test_known_gaps.py::test_unresolved_item_raises` to
-   `test_expression_value.py`.
-3. **Raise `ExpressionTypeError` from `str(ExprValue.unresolved(T))`.**
+   `test_expression_value.py`.~~ **Resolved.** `expr_value_to_py`
+   converted from infallible `Py<PyAny>` → fallible
+   `PyResult<Py<PyAny>>`; the `Unresolved(t)` arm now raises
+   `ExpressionTypeError` with the spec'd message. The pickle path
+   (`__reduce__`) special-cases unresolved before calling the
+   helper, so pickle round-trips still work. The xfail moved to
+   `test_expression_value.py::TestUnresolvedExtraction`.
+3. ~~**Raise `ExpressionTypeError` from `str(ExprValue.unresolved(T))`.**
    Same surface as #2 — `__str__` should consult the `is_unresolved`
    path and raise instead of returning the debug-style display
    string. When resolved, move
    `test_known_gaps.py::test_unresolved_str_raises` alongside #2 in
-   `test_expression_value.py`.
-4. **Raise `TypeError` (not `ValueError`) on incompatible list-element types.**
-   In `rust-bindings/src/expr/expr_value.rs::py_to_expr_value` and
-   `PyExprValue::new`, both `ExprValue::make_list` failure paths
-   currently call `pyo3::exceptions::PyValueError::new_err(...)`.
-   For incompatible-type errors specifically (substring
-   `"incompatible types"` or `"unresolved"` in the error message),
-   the reference uses `TypeError`. Either route those errors through
-   `pyo3::exceptions::PyTypeError::new_err(...)` or — more cleanly —
-   classify the underlying Rust error and dispatch by category. When
-   resolved, move
-   `test_known_gaps.py::test_mixed_type_list_raises_type_error`
-   and `…::test_list_with_unresolved_raises_type_error` to
-   `test_lists.py` or `test_expression_value.py`.
-5. **Validate arity for non-zero-parameter `TypeCode` variants in `ExprType.__init__`.**
-   In `rust-bindings/src/expr/expr_type.rs::PyExprType::new`, when
-   `arg` is a `TypeCode`, validate the param count against the
-   variant's documented arity (UNRESOLVED, LIST require exactly one;
-   UNION requires at least one; primitives require zero). Raise
-   `ValueError("exactly one type parameter")` (or the corresponding
-   message) on mismatch to match the reference. When resolved, move
-   `test_known_gaps.py::test_unresolved_type_requires_exactly_one_param`
-   to `test_types.py`.
+   `test_expression_value.py`.~~ **Resolved.** `__str__` now
+   special-cases `Unresolved` and raises the spec'd
+   `ExpressionTypeError("Cannot convert unresolved[T] to string:
+   value is not known")`. `__repr__` deliberately does *not* raise
+   (Python convention: `repr` is for debugging and should never
+   raise) — pinned by
+   `test_expression_value.py::TestUnresolvedExtraction::test_repr_does_not_raise_on_unresolved`.
+4. ~~**Raise `TypeError` (not `ValueError`) on incompatible list-element types.**
+   …~~ **Resolved.** Both `ExprValue::make_list` call sites in
+   `expr_value.rs` now route through a new `make_list_err_to_py`
+   helper that wraps the upstream "make_list expected X element,
+   got Y" message into the reference's "List contains incompatible
+   types: X, Y" form, and the special unresolved-element case into
+   "Cannot construct a list containing unresolved values…". Both
+   raise `TypeError`, matching the reference contract. The two
+   xfails moved to
+   `test_lists.py::TestExprValueListConstructionErrors`. (Note:
+   `[1, 2.0]` is intentionally still allowed — that's int→float
+   numeric promotion, not a heterogeneous-type rejection.)
+5. ~~**Validate arity for non-zero-parameter `TypeCode` variants in `ExprType.__init__`.**
+   …~~ **Resolved.** New `validate_typecode_arity` helper in
+   `expr_type.rs` enforces:
+   - `Unresolved` and `List` must have exactly one type parameter
+   - Primitives (`Int`, `String`, `Bool`, `Float`, `Path`,
+     `NullType`) must have zero
+   - `Union` is intentionally exempt — the upstream
+     `normalize_union` deliberately accepts any number of
+     parameters and unwraps single-element unions to the element /
+     turns zero-element unions into `NoReturn`. The new test class
+     `test_types.py::TestExprTypeArityValidation` pins this
+     normalisation as well as the rejection cases. The xfail
+     moved there.
 
 ### P2 — Polish / housekeeping
 

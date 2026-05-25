@@ -817,3 +817,31 @@ class TestFlatten:
     def test_empty(self) -> None:
         result = evaluate_expression("flatten([])")
         assert result.item() == []
+
+
+class TestExprValueListConstructionErrors:
+    """``ExprValue([...])`` rejects element-type mismatches with
+    ``TypeError`` (not ``ValueError``) — type-class mismatch is the
+    semantic category, and ``TypeError`` is the Python convention for
+    that. Pinned for parity with the pure-Python reference's
+    ``TypeError("List contains incompatible types: ...")`` /
+    ``TypeError("Cannot construct a list containing unresolved values
+    ...")``.
+
+    Note: ``[1, 'a']`` *as an expression* (`evaluate_expression(
+    "[1, 'a']")`) is rejected at evaluation time with
+    ``ExpressionError`` per RFC 0005's "list literal contains
+    incompatible types" diagnostic. That's a separate path from
+    direct ``ExprValue([1, 'a'])`` construction from Python."""
+
+    def test_mixed_int_string_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="incompatible types"):
+            ExprValue([1, "hello"])
+
+    def test_list_with_unresolved_first_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="unresolved"):
+            ExprValue([ExprValue.unresolved(ExprType("int")), 42])
+
+    def test_list_with_unresolved_later_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="unresolved"):
+            ExprValue([42, ExprValue.unresolved(ExprType("int"))])

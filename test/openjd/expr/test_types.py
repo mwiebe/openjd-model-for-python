@@ -743,3 +743,64 @@ class TestUnknownTypeNormalization:
         if constraint.type_code == TypeCode.UNION:
             for member in constraint.type_params:
                 assert member.type_code != TypeCode.UNRESOLVED
+
+
+class TestExprTypeArityValidation:
+    """``ExprType(TypeCode.X)`` validates that the parameter count
+    matches the canonical arity for variant X. Without this, callers
+    can construct non-canonical shapes (e.g. ``unresolved`` with no
+    type parameter, or ``list`` with two element types) that don't
+    appear anywhere in well-formed evaluation but compile fine through
+    the upstream Rust ``ExprType::new``."""
+
+    def test_unresolved_requires_one_param(self) -> None:
+        with pytest.raises(ValueError, match="exactly one type parameter"):
+            ExprType(TypeCode.UNRESOLVED)
+
+    def test_unresolved_rejects_empty_params(self) -> None:
+        with pytest.raises(ValueError, match="exactly one type parameter"):
+            ExprType(TypeCode.UNRESOLVED, [])
+
+    def test_unresolved_rejects_two_params(self) -> None:
+        with pytest.raises(ValueError, match="exactly one type parameter"):
+            ExprType(TypeCode.UNRESOLVED, [ExprType("int"), ExprType("string")])
+
+    def test_unresolved_with_one_param_succeeds(self) -> None:
+        # Canonical form — should construct cleanly and round-trip.
+        t = ExprType(TypeCode.UNRESOLVED, [ExprType("int")])
+        assert str(t) == "unresolved[int]"
+
+    def test_list_requires_one_param(self) -> None:
+        with pytest.raises(ValueError, match="exactly one type parameter"):
+            ExprType(TypeCode.LIST)
+
+    def test_list_rejects_two_params(self) -> None:
+        with pytest.raises(ValueError, match="exactly one type parameter"):
+            ExprType(TypeCode.LIST, [ExprType("int"), ExprType("string")])
+
+    def test_list_with_one_param_succeeds(self) -> None:
+        t = ExprType(TypeCode.LIST, [ExprType("int")])
+        assert str(t) == "list[int]"
+
+    def test_union_zero_or_one_param_normalises(self) -> None:
+        # Union is intentionally lax — upstream `normalize_union`
+        # unwraps a single-element union to the element and turns a
+        # zero-element union into `noreturn`. Pin that contract.
+        single = ExprType(TypeCode.UNION, [ExprType("string")])
+        assert single.type_code == TypeCode.STRING
+        empty = ExprType(TypeCode.UNION, [])
+        assert empty.type_code == TypeCode.NORETURN
+
+    def test_primitive_rejects_params(self) -> None:
+        # Primitives (INT, STRING, BOOL, FLOAT, PATH, RANGE_EXPR,
+        # NULLTYPE) take no type parameters.
+        for tc in (
+            TypeCode.INT,
+            TypeCode.STRING,
+            TypeCode.BOOL,
+            TypeCode.FLOAT,
+            TypeCode.PATH,
+            TypeCode.NULLTYPE,
+        ):
+            with pytest.raises(ValueError, match="does not accept type parameters"):
+                ExprType(tc, [ExprType("int")])

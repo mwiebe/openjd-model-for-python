@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from openjd.expr import ExprValue
+from openjd.expr import ExprValue, ExprType, ExpressionTypeError
 from openjd.expr import PathFormat
 
 
@@ -320,3 +320,34 @@ class TestI64OverflowMapping:
     def test_i64_min_accepted(self) -> None:
         v = ExprValue(-(2**63))
         assert v.item() == -(2**63)
+
+
+class TestUnresolvedExtraction:
+    """``ExprValue.unresolved(T)`` is a placeholder that carries a type
+    constraint but no concrete value. Calls that try to extract a
+    Python value from it (``.item()``, ``str(...)``) must raise
+    ``ExpressionTypeError`` — silently returning ``None`` or a debug
+    sentinel like ``"<unresolved[T]>"`` would let static-validation
+    code accidentally consume placeholder values as if they were real,
+    masking real bugs in evaluation paths."""
+
+    def test_item_raises_on_unresolved(self) -> None:
+        with pytest.raises(ExpressionTypeError, match="value is not known"):
+            ExprValue.unresolved(ExprType("int")).item()
+
+    def test_item_raises_with_type_name_in_message(self) -> None:
+        # The error message names the unresolved type so callers can
+        # see *what kind* of placeholder they tried to extract from.
+        with pytest.raises(ExpressionTypeError, match="unresolved"):
+            ExprValue.unresolved(ExprType("string")).item()
+
+    def test_str_raises_on_unresolved(self) -> None:
+        with pytest.raises(ExpressionTypeError, match="value is not known"):
+            str(ExprValue.unresolved(ExprType("int")))
+
+    def test_repr_does_not_raise_on_unresolved(self) -> None:
+        # ``__repr__`` is a debug-print convenience and *should* still
+        # work — Python's debugging convention is that ``repr`` does
+        # not raise. Only ``str``/``__str__`` and ``item()`` raise.
+        r = repr(ExprValue.unresolved(ExprType("int")))
+        assert "unresolved" in r

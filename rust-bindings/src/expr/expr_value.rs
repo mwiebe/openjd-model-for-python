@@ -10,7 +10,7 @@ use openjd_expr::path_mapping::PathFormat;
 use openjd_expr::types::ExprType;
 use openjd_expr::value::ExprValue;
 
-use crate::expr::errors::PyExpressionError;
+use crate::expr::errors::{PyExpressionError, PyExpressionTypeError};
 use crate::expr::expr_type::{extract_expr_type, PyExprType};
 use crate::expr::path_format::PyPathFormat;
 use crate::expr::range_expr::PyRangeExpr;
@@ -25,6 +25,39 @@ fn find_path_format(v: &ExprValue) -> Option<PathFormat> {
             .and_then(|elems| elems.iter().find_map(find_path_format)),
         _ => None,
     }
+}
+
+/// Wrap an `ExprValue::make_list` error in a `TypeError`, rewriting
+/// the upstream "make_list expected X element, got Y" message into
+/// the reference's "List contains incompatible types: X, Y" form.
+/// Errors mentioning unresolved elements rewrite to the reference's
+/// "Cannot construct a list containing unresolved values" message.
+fn make_list_err_to_py(e: openjd_expr::error::ExpressionError) -> PyErr {
+    let msg = e.to_string();
+    // Strip the caret/source-line decoration upstream may attach;
+    // we only care about the headline.
+    let headline = msg.split('\n').next().unwrap_or(&msg);
+    let rewritten = if let Some(rest) = headline.strip_prefix("make_list expected ") {
+        // "X element, got Y" — extract X and Y.
+        if let Some((expected, got_part)) = rest.split_once(" element, got ") {
+            if got_part == "unresolved" {
+                "Cannot construct a list containing unresolved values. \
+                Use ExprValue.unresolved() to create unresolved list types \
+                for type checking."
+                    .to_string()
+            } else {
+                format!(
+                    "List contains incompatible types: {}, {}",
+                    expected, got_part
+                )
+            }
+        } else {
+            headline.to_string()
+        }
+    } else {
+        headline.to_string()
+    };
+    pyo3::exceptions::PyTypeError::new_err(rewritten)
 }
 
 pub(crate) fn py_to_expr_value(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<ExprValue> {
@@ -83,8 +116,10 @@ pub(crate) fn py_to_expr_value(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<ExprVal
         let elements: PyResult<Vec<ExprValue>> = list.iter().map(|item| py_to_expr_value(&item)).collect();
         let elements = elements?;
         let hint = elements.first().map(|e| e.expr_type()).unwrap_or(ExprType::NULLTYPE);
-        return ExprValue::make_list(elements, hint)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()));
+        // `make_list` rejects element-type mismatches and unresolved
+        // elements; both are type errors per the reference contract,
+        // so map to `TypeError` (not `ValueError`).
+        return ExprValue::make_list(elements, hint).map_err(make_list_err_to_py);
     }
     Err(pyo3::exceptions::PyTypeError::new_err(format!(
         "Cannot convert {} to ExprValue",
@@ -92,25 +127,35 @@ pub(crate) fn py_to_expr_value(obj: &Bound<'_, pyo3::PyAny>) -> PyResult<ExprVal
     )))
 }
 
-pub(crate) fn expr_value_to_py(py: Python<'_>, val: &ExprValue) -> Py<pyo3::PyAny> {
+/// Convert an `ExprValue` to a native Python object. Raises
+/// `ExpressionTypeError` if the value is unresolved — there is no
+/// meaningful Python value to extract from a placeholder. Recursive
+/// list construction propagates the same contract; an unresolved
+/// element inside a list also raises (in practice, list-construction
+/// already rejects unresolved elements upstream).
+pub(crate) fn expr_value_to_py(py: Python<'_>, val: &ExprValue) -> PyResult<Py<pyo3::PyAny>> {
     use pyo3::IntoPyObjectExt;
     match val {
-        ExprValue::Null => py.None(),
-        ExprValue::Bool(b) => b.into_py_any(py).unwrap(),
-        ExprValue::Int(i) => i.into_py_any(py).unwrap(),
-        ExprValue::Float(f) => f.value().into_py_any(py).unwrap(),
-        ExprValue::String(s) => s.into_py_any(py).unwrap(),
-        ExprValue::Path { value, .. } => value.into_py_any(py).unwrap(),
-        ExprValue::RangeExpr(r) => {
-            PyRangeExpr { inner: r.clone() }.into_py_any(py).unwrap()
-        }
-        ExprValue::Unresolved(_) => py.None(),
+        ExprValue::Null => Ok(py.None()),
+        ExprValue::Bool(b) => Ok(b.into_py_any(py)?),
+        ExprValue::Int(i) => Ok(i.into_py_any(py)?),
+        ExprValue::Float(f) => Ok(f.value().into_py_any(py)?),
+        ExprValue::String(s) => Ok(s.into_py_any(py)?),
+        ExprValue::Path { value, .. } => Ok(value.into_py_any(py)?),
+        ExprValue::RangeExpr(r) => Ok(PyRangeExpr { inner: r.clone() }.into_py_any(py)?),
+        ExprValue::Unresolved(t) => Err(PyExpressionTypeError::new_err(format!(
+            "Cannot extract value from unresolved[{}]: value is not known",
+            t
+        ))),
         val if val.is_list() => {
             let elements = val.list_elements().unwrap_or_default();
-            let items: Vec<Py<pyo3::PyAny>> = elements.iter().map(|e| expr_value_to_py(py, e)).collect();
-            PyList::new(py, items).unwrap().into_any().unbind()
+            let items: Vec<Py<pyo3::PyAny>> = elements
+                .iter()
+                .map(|e| expr_value_to_py(py, e))
+                .collect::<PyResult<_>>()?;
+            Ok(PyList::new(py, items)?.into_any().unbind())
         }
-        _ => py.None(),
+        _ => Ok(py.None()),
     }
 }
 
@@ -146,8 +191,7 @@ impl PyExprValue {
             } else {
                 elements.first().map(|e| e.expr_type()).unwrap_or(ExprType::NULLTYPE)
             };
-            ExprValue::make_list(elements, hint)
-                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?
+            ExprValue::make_list(elements, hint).map_err(make_list_err_to_py)?
         } else {
             py_to_expr_value(value)?
         };
@@ -199,7 +243,7 @@ impl PyExprValue {
     }
 
 
-    fn item(&self, py: Python<'_>) -> Py<pyo3::PyAny> {
+    fn item(&self, py: Python<'_>) -> PyResult<Py<pyo3::PyAny>> {
         expr_value_to_py(py, &self.inner)
     }
 
@@ -239,8 +283,14 @@ impl PyExprValue {
         Py::new(py, PyExprValueIter { elements, pos: 0 })
     }
 
-    fn __str__(&self) -> String {
-        self.inner.to_display_string()
+    fn __str__(&self) -> PyResult<String> {
+        if let ExprValue::Unresolved(t) = &self.inner {
+            return Err(PyExpressionTypeError::new_err(format!(
+                "Cannot convert unresolved[{}] to string: value is not known",
+                t
+            )));
+        }
+        Ok(self.inner.to_display_string())
     }
 
     fn __repr__(&self) -> String {
@@ -292,7 +342,7 @@ impl PyExprValue {
         let helper = py
             .import("openjd._openjd_rs")?
             .getattr("_reconstruct_expr_value")?;
-        let item = expr_value_to_py(py, &self.inner);
+        let item = expr_value_to_py(py, &self.inner)?;
         let type_str = self.inner.expr_type().to_string();
         let path_format: Option<&str> = find_path_format(&self.inner).map(|f| match f {
             PathFormat::Posix => "POSIX",
