@@ -9,9 +9,8 @@ use pyo3_stub_gen::derive::*;
 use openjd_expr::format_string::{FormatString, FormatStringOptions};
 
 use crate::expr::errors::{expr_err_to_py, format_string_validation_err_to_py};
-use crate::expr::evaluate::library_for_call;
+use crate::expr::evaluate::profile_for_call;
 use crate::expr::expr_value::PyExprValue;
-use crate::expr::function_library::PyFunctionLibrary;
 use crate::expr::profile::PyExprProfile;
 use crate::expr::symbol_table::extract_symtab;
 
@@ -32,28 +31,26 @@ impl PyFormatString {
             .map_err(expr_err_to_py)
     }
 
-    #[pyo3(signature = (symtab, *, library=None, profile=None))]
+    #[pyo3(signature = (symtab, *, profile=None))]
     fn resolve_string(
         &self,
         symtab: &Bound<'_, pyo3::PyAny>,
-        library: Option<&PyFunctionLibrary>,
         profile: Option<&PyExprProfile>,
     ) -> PyResult<String> {
         let st = extract_symtab(symtab)?;
-        let lib = library_for_call(library, profile);
+        let lib = profile_for_call(profile);
         let opts = FormatStringOptions::new().with_library(&lib);
         self.inner.resolve_string_with(&st, &opts).map_err(expr_err_to_py)
     }
 
-    #[pyo3(signature = (symtab, *, library=None, profile=None))]
+    #[pyo3(signature = (symtab, *, profile=None))]
     fn resolve(
         &self,
         symtab: &Bound<'_, pyo3::PyAny>,
-        library: Option<&PyFunctionLibrary>,
         profile: Option<&PyExprProfile>,
     ) -> PyResult<PyExprValue> {
         let st = extract_symtab(symtab)?;
-        let lib = library_for_call(library, profile);
+        let lib = profile_for_call(profile);
         let opts = FormatStringOptions::new().with_library(&lib);
         self.inner
             .resolve_with(&st, &opts)
@@ -104,15 +101,14 @@ impl PyFormatString {
     /// Mirrors the Rust crate's
     /// `FormatString::validate_expressions(symtab, lib)`. Returns
     /// `None` on success.
-    #[pyo3(signature = (symtab, *, library=None, profile=None))]
+    #[pyo3(signature = (symtab, *, profile=None))]
     fn validate_expressions(
         &self,
         symtab: &Bound<'_, pyo3::PyAny>,
-        library: Option<&PyFunctionLibrary>,
         profile: Option<&PyExprProfile>,
     ) -> PyResult<()> {
         let st = extract_symtab(symtab)?;
-        let lib = library_for_call(library, profile);
+        let lib = profile_for_call(profile);
         self.inner
             .validate_expressions(&st, &lib)
             .map_err(format_string_validation_err_to_py)

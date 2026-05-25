@@ -196,28 +196,17 @@ pub(crate) fn py_merge_job_parameter_definitions(
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction(module = "openjd._openjd_rs"))]
 #[pyfunction]
 #[pyo3(name = "evaluate_let_bindings")]
-#[pyo3(signature = (bindings, symtab, library=None))]
+#[pyo3(signature = (bindings, symtab, *, profile=None))]
 pub(crate) fn py_evaluate_let_bindings(
     bindings: Vec<String>,
     symtab: &crate::expr::PySymbolTable,
-    library: Option<&crate::expr::PyFunctionLibrary>,
+    profile: Option<&crate::expr::profile::PyExprProfile>,
 ) -> PyResult<crate::expr::PySymbolTable> {
-    let default_lib;
-    let lib = library.map(|l| l.inner.clone());
-    let lib_ref = match &lib {
-        Some(l) => l,
-        None => {
-            let arc = openjd_expr::FunctionLibrary::for_profile(
-                &openjd_expr::profile::ExprProfile::current()
-            );
-            default_lib = (*arc).clone();
-            &default_lib
-        }
-    };
+    let lib = crate::expr::evaluate::profile_for_call(profile);
     let result = openjd_model::evaluate_let_bindings(
         &bindings,
         &symtab.inner,
-        Some(lib_ref),
+        Some(&lib),
         openjd_expr::path_mapping::PathFormat::host(),
     ).map_err(super::errors::model_err_to_py)?;
     Ok(crate::expr::PySymbolTable { inner: result })

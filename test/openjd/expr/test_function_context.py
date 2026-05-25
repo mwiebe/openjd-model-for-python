@@ -5,7 +5,6 @@ import pytest
 from openjd.expr import (
     evaluate_expression,
     ExprProfile,
-    FunctionLibrary,
     HostContext,
     ExpressionError,
     PathMappingRule,
@@ -13,46 +12,43 @@ from openjd.expr import (
 )
 
 
-class TestFunctionLibraryContext:
-    """Test that functions are available/unavailable based on profile."""
+class TestHostContextOnProfile:
+    """Verify the ``ExprProfile.with_host_context`` chain is what
+    governs which functions are available during evaluation, after
+    the removal of the public ``FunctionLibrary`` surface."""
 
-    def test_default_library_no_host_context(self) -> None:
-        """Default library should not have host context enabled."""
-        library = FunctionLibrary()
-        assert library.host_context_enabled is False
+    def test_default_profile_no_host_context(self) -> None:
+        """``ExprProfile()`` defaults to ``HostContext.none()``."""
+        profile = ExprProfile()
+        assert profile.host_context == HostContext.none()
+        assert profile.host_context.is_enabled() is False
 
-    def test_for_profile_returns_new_library(self) -> None:
-        """`FunctionLibrary.for_profile(...)` returns a fresh library."""
-        default_lib = FunctionLibrary()
+    def test_with_rules_enables_host_context(self) -> None:
         profile = ExprProfile().with_host_context(HostContext.with_rules([]))
-        result = FunctionLibrary.for_profile(profile)
-        assert result is not default_lib
-        assert result.host_context_enabled is True
-        assert default_lib.host_context_enabled is False
+        assert profile.host_context.is_enabled() is True
 
-    def test_for_profile_with_unresolved_host_context(self) -> None:
-        """`HostContext.unresolved()` enables stub host functions."""
+    def test_with_unresolved_enables_host_context(self) -> None:
         profile = ExprProfile().with_host_context(HostContext.unresolved())
-        lib = FunctionLibrary.for_profile(profile)
-        assert lib.host_context_enabled is True
+        assert profile.host_context.is_enabled() is True
+        assert profile.host_context.is_unresolved() is True
 
 
 class TestApplyPathMappingContext:
-    """Test apply_path_mapping availability based on profile (RFC 0006)."""
+    """``apply_path_mapping`` is a host-context function (RFC 0006)
+    that is available only when ``HostContext`` is set on the
+    profile."""
 
-    def test_not_available_without_host_context(self) -> None:
-        """apply_path_mapping should error without host context."""
-        library = FunctionLibrary()
+    def test_not_available_with_default_profile(self) -> None:
         with pytest.raises(ExpressionError, match="apply_path_mapping"):
-            evaluate_expression("apply_path_mapping('/path')", library=library)
+            evaluate_expression("apply_path_mapping('/path')", profile=ExprProfile())
 
-    def test_not_available_with_default_library(self) -> None:
-        """apply_path_mapping should error with the default library."""
+    def test_not_available_with_no_profile(self) -> None:
+        # Same as default profile — the implicit profile is
+        # ``ExprProfile.current()`` which has no host context.
         with pytest.raises(ExpressionError, match="apply_path_mapping"):
             evaluate_expression("apply_path_mapping('/path')")
 
     def test_available_with_host_context(self) -> None:
-        """apply_path_mapping should work when host context is enabled."""
         from pathlib import PurePath
 
         profile = ExprProfile().with_host_context(HostContext.with_rules([]))
@@ -61,13 +57,10 @@ class TestApplyPathMappingContext:
         assert str(result) == str(PurePath("/some/path"))
 
     def test_method_syntax_without_host_context(self) -> None:
-        """Method syntax should also error without host context."""
-        library = FunctionLibrary()
         with pytest.raises(ExpressionError, match="apply_path_mapping"):
-            evaluate_expression("'/path'.apply_path_mapping()", library=library)
+            evaluate_expression("'/path'.apply_path_mapping()", profile=ExprProfile())
 
     def test_method_syntax_with_host_context(self) -> None:
-        """Method syntax should work with host context."""
         from pathlib import PurePath
 
         profile = ExprProfile().with_host_context(HostContext.with_rules([]))
@@ -118,7 +111,8 @@ class TestApplyPathMappingContext:
 
 
 class TestSubmissionContextFunctions:
-    """Test that submission-time functions work without host context."""
+    """Submission-time (non-host-context) functions work without
+    needing a host context on the profile."""
 
     @pytest.mark.parametrize(
         "expr,expected",
@@ -130,49 +124,39 @@ class TestSubmissionContextFunctions:
         ],
     )
     def test_submission_functions_available(self, expr: str, expected) -> None:
-        """Core functions should work without host context."""
-        library = FunctionLibrary()
-        result = evaluate_expression(expr, library=library)
-        if isinstance(expected, int):
-            assert result.item() == expected
-        else:
-            assert result.item() == expected
+        """Core functions should work with the default profile (no
+        host context)."""
+        result = evaluate_expression(expr, profile=ExprProfile())
+        assert result.item() == expected
 
     def test_path_functions_available_without_host_context(self, tmp_path) -> None:
-        """Path manipulation functions should work without host context."""
+        """Path manipulation functions don't require host context."""
         import sys
         from openjd.expr import SymbolTable, ExprValue
         from openjd.expr import PathFormat
 
         host_pf = PathFormat.WINDOWS if sys.platform == "win32" else PathFormat.POSIX
-        library = FunctionLibrary()
         render_file = tmp_path / "projects" / "render.exr"
         symtab = SymbolTable({"P": ExprValue(str(render_file), type="path", path_format=host_pf)})
 
-        # These should all work without host context
-        result = evaluate_expression("P.stem", values=symtab, library=library)
+        # These should all work without host context.
+        result = evaluate_expression("P.stem", values=symtab, profile=ExprProfile())
         assert result.item() == "render"
 
-        result = evaluate_expression("P.suffix", values=symtab, library=library)
+        result = evaluate_expression("P.suffix", values=symtab, profile=ExprProfile())
         assert result.item() == ".exr"
 
-        result = evaluate_expression("with_suffix(P, '.png')", values=symtab, library=library)
+        result = evaluate_expression("with_suffix(P, '.png')", values=symtab, profile=ExprProfile())
         assert str(result).endswith("render.png")
 
 
 class TestUnresolvedHostContext:
-    """Test HostContext.unresolved() for job creation time type checking."""
-
-    def test_for_profile_unresolved_returns_enabled_library(self) -> None:
-        default_lib = FunctionLibrary()
-        profile = ExprProfile().with_host_context(HostContext.unresolved())
-        result = FunctionLibrary.for_profile(profile)
-        assert result is not default_lib
-        assert result.host_context_enabled is True
-        assert default_lib.host_context_enabled is False
+    """``HostContext.unresolved()`` is the job-template-validation
+    mode: host-context functions are registered with stub
+    implementations that return ``Unresolved(T)`` so the type
+    checker can run before real path-mapping rules are bound."""
 
     def test_apply_path_mapping_returns_unresolved_path(self) -> None:
-        """At job creation time, apply_path_mapping returns unresolved[path]."""
         from openjd.expr import TypeCode
 
         profile = ExprProfile().with_host_context(HostContext.unresolved())
@@ -180,7 +164,6 @@ class TestUnresolvedHostContext:
         assert result.type.type_code == TypeCode.UNRESOLVED
 
     def test_apply_path_mapping_method_returns_unresolved_path(self) -> None:
-        """Method syntax also returns unresolved[path] at job creation time."""
         from openjd.expr import TypeCode
 
         profile = ExprProfile().with_host_context(HostContext.unresolved())
@@ -188,7 +171,9 @@ class TestUnresolvedHostContext:
         assert result.type.type_code == TypeCode.UNRESOLVED
 
     def test_not_available_without_any_context(self) -> None:
-        """apply_path_mapping should still error without any host context."""
-        library = FunctionLibrary()
+        """``apply_path_mapping`` still errors without any host
+        context, even when one was previously bound on a different
+        profile instance — profiles are immutable, ``with_host_context``
+        returns a new one."""
         with pytest.raises(ExpressionError, match="apply_path_mapping"):
-            evaluate_expression("apply_path_mapping('/path')", library=library)
+            evaluate_expression("apply_path_mapping('/path')", profile=ExprProfile())

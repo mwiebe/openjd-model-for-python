@@ -10,10 +10,9 @@ use pyo3_stub_gen::derive::*;
 use openjd_expr::symbol_table::SymbolTable;
 
 use crate::expr::errors::expr_err_to_py;
-use crate::expr::evaluate::library_for_call;
+use crate::expr::evaluate::profile_for_call;
 use crate::expr::expr_type::PyExprType;
 use crate::expr::expr_value::PyExprValue;
-use crate::expr::function_library::PyFunctionLibrary;
 use crate::expr::path_format::PyPathFormat;
 use crate::expr::profile::PyExprProfile;
 use crate::expr::symbol_table::extract_symtab;
@@ -53,12 +52,11 @@ impl PyParsedExpression {
         self.inner.expression()
     }
 
-    #[pyo3(signature = (*, values=None, library=None, profile=None, target_type=None, path_format=None, memory_limit=None, operation_limit=None))]
+    #[pyo3(signature = (*, values=None, profile=None, target_type=None, path_format=None, memory_limit=None, operation_limit=None))]
     #[allow(clippy::too_many_arguments)] // signature mirrors the documented evaluate() Python API
     fn evaluate(
         &self,
         values: Option<&Bound<'_, pyo3::PyAny>>,
-        library: Option<&PyFunctionLibrary>,
         profile: Option<&PyExprProfile>,
         target_type: Option<&PyExprType>,
         path_format: Option<PyPathFormat>,
@@ -73,7 +71,7 @@ impl PyParsedExpression {
             vec![]
         };
 
-        let lib = library_for_call(library, profile);
+        let lib = profile_for_call(profile);
         let mut builder = self.inner.with_library(&lib);
 
         if let Some(ml) = memory_limit {

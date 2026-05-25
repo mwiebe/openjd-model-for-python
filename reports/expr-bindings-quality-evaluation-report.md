@@ -49,12 +49,15 @@ the public symbol set matches the spec exactly:
 DEFAULT_MEMORY_LIMIT, DEFAULT_OPERATION_LIMIT,
 ExprExtension, ExprProfile, ExprRevision, ExprType, ExprValue,
 ExpressionError, ExpressionTypeError,
-FormatString, FormatStringValidationError, FunctionLibrary,
+FormatString, FormatStringValidationError,
 HostContext, ParsedExpression, PathFormat, PathMappingRule,
 RangeExpr, RangeExprError, SymbolTable, TypeCode,
 escape_format_string, evaluate_expression, evaluate_let_bindings,
-get_default_library, parse_expression
+parse_expression
 ```
+
+(Updated 2026-05-25: `FunctionLibrary` and `get_default_library`
+removed from the public surface — see Rec #8.)
 
 **Spec gaps (binding has more than spec advertises):**
 
@@ -76,14 +79,13 @@ get_default_library, parse_expression
   `ExprProfile()` — which is `HostContext.none()`. The example reads
   cleanly in context but a one-line clarifying comment would prevent
   the reader from misinterpreting the default.
-- `evaluate_let_bindings`'s spec example shows `library` as the only
-  optional kwarg. The actual binding signature also takes only
-  `library=`. Unlike `evaluate_expression`, `parse_expression` and
-  `FormatString.resolve*`, it does NOT accept `profile=`. That is
-  consistent with the spec but inconsistent with the rest of the
-  expr API; consider extending the binding to accept `profile=`
-  (with the documented `library` > `profile` > default precedence)
-  to match its sibling entry points.
+- (Resolved — Rec #8.) `evaluate_let_bindings`'s spec example
+  originally took `library=` only, inconsistent with
+  `evaluate_expression` / `parse_expression` /
+  `FormatString.resolve*` (which took both `library=` and
+  `profile=`). The fix consolidated every entry point on
+  `profile=` only and removed `library=` (and `FunctionLibrary`
+  itself) from the public surface — see Rec #8 for rationale.
 
 ## 2. PyO3 Binding Source Review
 
@@ -98,12 +100,12 @@ Files under `rust-bindings/src/expr/`:
 | `expr_value.rs` | `PyExprValue`, `PyExprValueIter`, `_reconstruct_expr_value` | Construction handles `None`/bool/int/float/str/Decimal/list/ExprValue/RangeExpr/ExprType passthroughs. NaN and Inf are rejected; integer overflow → `ExpressionError`. Pickle via a module-level `_reconstruct_expr_value` helper so older pickled bytes still load. |
 | `symbol_table.rs` | `PySymbolTable` | Hierarchical dotted-path access, sets+gets via the underlying `SymbolTable`. `keys` returns top-level namespaces, `symbols` returns full dotted leaf paths. `union(*others)` mirrors the reference. Pickle via flat `dict[str, ExprValue]`. `__repr__` walks top-level keys in sorted order so output is deterministic. |
 | `profile.rs` | `PyExprRevision`, `PyExprExtension`, `PyHostContext`, `PyExprProfile` | Mirrors `openjd_expr::profile::*` one-to-one. `ExprExtension` is a zero-variant placeholder today (the upstream Rust enum is empty-but-`#[non_exhaustive]`); `unreachable!` on the From impls explicitly documents the situation. `HostContext.with_rules(rules)` accepts an empty list — distinct from `HostContext.none()`, matching the Rust crate. |
-| `function_library.rs` | `PyFunctionLibrary`, `get_default_library` | Two constructors: `FunctionLibrary()` (default profile) and `FunctionLibrary.for_profile(profile)` (cached). `host_context_enabled` getter exposes whether `apply_path_mapping` is registered. |
-| `parsed_expression.rs` | `PyParsedExpression`, `parse_expression` | Holds last-evaluation peak memory and operation count in `AtomicUsize`. `evaluate(*, values, library, profile, target_type, path_format, memory_limit, operation_limit)` mirrors the spec. Uses `library_for_call(library, profile)` from `evaluate.rs` for consistent precedence. |
-| `evaluate.rs` | `library_for_call`, `evaluate_expression` | `library_for_call` documents the `library` > `profile` > default precedence used everywhere. `evaluate_expression` strips leading/trailing whitespace before parsing (matches reference). |
+| ~~`function_library.rs`~~ | (deleted — Rec #8) | The `PyFunctionLibrary` pyclass and `get_default_library` free function were retired from the public surface; `profile=ExprProfile(...)` is the single way to configure evaluation. The upstream Rust `openjd_expr::FunctionLibrary` and its per-profile cache are unchanged. |
+| `parsed_expression.rs` | `PyParsedExpression`, `parse_expression` | Holds last-evaluation peak memory and operation count in `AtomicUsize`. `evaluate(*, values, profile, target_type, path_format, memory_limit, operation_limit)` mirrors the spec. Uses `profile_for_call(profile)` from `evaluate.rs`. |
+| `evaluate.rs` | `profile_for_call`, `evaluate_expression` | `profile_for_call(profile)` resolves the profile (defaulting to `ExprProfile::current()`) and fetches the cached `FunctionLibrary` from upstream. `evaluate_expression` strips leading/trailing whitespace before parsing (matches reference). |
 | `path_mapping.rs` | `PyPathMappingRule` | `__init__(*, source_path_format, source_path, destination_path)`, `apply(*, path, output_format=None)`, `to_dict`, `from_dict`. `from_dict` accepts case-insensitive `source_path_format` strings, rejects unknown keys, and produces a Python-set-style error message for the deterministic-set repr. Pickle via `to_dict`/`from_dict`. |
 | `range_expr.rs` | `PyRangeExpr`, `PyRangeExprIter` | Constructors `RangeExpr(str)` and `from_str` and `from_list` (rejecting empty input). `__hash__` wraps the underlying Rust hash; `__eq__` compares via `inner == inner`. Pickle via spec-form string. |
-| `format_string.rs` | `PyFormatString`, `escape_format_string` | `new(input)` returns `PyExpressionError` on parse failure (the underlying `FormatString::new` returns `ExpressionError` in Rust). `resolve_string` and `resolve` take `(symtab, *, library, profile)`. `validate_expressions(symtab, *, library, profile)` mirrors the Rust crate's method and raises `FormatStringValidationError` on failure (Rec #6). |
+| `format_string.rs` | `PyFormatString`, `escape_format_string` | `new(input)` returns `PyExpressionError` on parse failure (the underlying `FormatString::new` returns `ExpressionError` in Rust). `resolve_string` and `resolve` take `(symtab, *, profile)`. `validate_expressions(symtab, *, profile)` mirrors the Rust crate's method and raises `FormatStringValidationError` on failure (Rec #6). |
 
 ### PyO3-specific concerns
 
@@ -205,10 +207,10 @@ symbol-by-symbol parity table.
 
 | Symbol | Reference | Binding | Status |
 |--------|-----------|---------|--------|
-| `evaluate_expression(expr, *, values, library, target_type, memory_limit, operation_limit, path_format)` | function | function (extra `profile=` kwarg) | ✓ binding adds `profile=` |
+| `evaluate_expression(expr, *, values, library, target_type, memory_limit, operation_limit, path_format)` | function | function (`profile=` instead of `library=` — Rec #8) | ✓ binding consolidated on `profile=` |
 | `parse_expression(expr) -> ParsedExpression` | function | function | ✓ |
-| `evaluate_let_bindings` | not exported | function (extra) | ⚠ extra in binding; takes `library=` only |
-| `get_default_library() -> FunctionLibrary` | function | function | ✓ |
+| `evaluate_let_bindings` | not exported | function (extra) | ⚠ extra in binding; now takes `profile=` (Rec #8) |
+| ~~`get_default_library() -> FunctionLibrary`~~ | function | removed (Rec #8) | ✓ resolved by removal |
 | `escape_format_string(value) -> str` | not exported | function (extra) | ⚠ extra in binding; reference exposes via model package |
 | `ExprType(spec_str_or_typecode, params=None)` | class | class | ✓ |
 | `ExprType.match(concrete)` → `match_type(concrete)` | method | renamed | ⚠ documented divergence (Rust reserves `match`) |
@@ -219,8 +221,8 @@ symbol-by-symbol parity table.
 | `SymbolTable(source=None)` | class | class (also accepts positional `init`) | ✓ |
 | `SymbolTable.union(*others)` | method | method | ✓ |
 | `SymbolTable.keys` / `symbols` | properties | properties | ✓ |
-| `FunctionLibrary` | class | class | ✓ |
-| `FunctionLibrary.for_profile(profile)` | not in reference | classmethod (new) | ⚠ extra in binding |
+| ~~`FunctionLibrary`~~ | class | removed (Rec #8) | ✓ resolved by removal |
+| ~~`FunctionLibrary.for_profile(profile)`~~ | not in reference | removed (Rec #8) | ✓ resolved by removal |
 | `FunctionSignature` | class | not exported | ⚠ binding omits — `FunctionSignature` is reference-internal type machinery; spec does not advertise it |
 | `ParsedExpression` | class | class | ✓ |
 | `ParsedExpression.evaluate(*, values, library, target_type, …)` | method | method (adds `profile=`) | ✓ |
@@ -256,11 +258,15 @@ symbol-by-symbol parity table.
    any public binding entry point (see §7).~~ **Resolved (Rec #6).**
    Now raised by ``FormatString.validate_expressions(symtab, *,
    library=None, profile=None)``.
-3. **`evaluate_let_bindings` does not accept `profile=`** even though
+3. ~~**`evaluate_let_bindings` does not accept `profile=`** even though
    every other entry point that accepts a `library=` also accepts a
    `profile=`. The reference does not export this function at all,
    so this is not a regression — but it is an inconsistency in the
-   bindings' own API.
+   bindings' own API.~~ **Resolved (Rec #8) by removing `library=`
+   from every entry point and replacing it with `profile=`.**
+   `FunctionLibrary` and `get_default_library` are no longer part
+   of the public surface; `profile=ExprProfile(...)` is the single
+   way to configure evaluation.
 4. **`FunctionSignature` is intentionally not exposed** by the binding
    (spec's design choice) — the reference's `FunctionSignature` was
    internal type machinery that no documented user code constructs.
@@ -557,14 +563,66 @@ independent of upstream review). Tests live in
    isn't mentioned. Suggested location:
    `specs/python-expr-interface.md`, in the `FormatString` section.
 
-8. **Decide whether `evaluate_let_bindings` should accept `profile=`.**
+8. ~~**Decide whether `evaluate_let_bindings` should accept `profile=`.**
    Every other entry point that takes `library=` also takes
    `profile=`. Adding it would be a non-breaking change and would
    close the only signature-shape inconsistency in the expr API.
    Suggested location:
    `rust-bindings/src/model/create_job_fns.rs::py_evaluate_let_bindings`
    (the function lives on the model side but is exposed in
-   `openjd.expr`). Update the spec example accordingly.
+   `openjd.expr`). Update the spec example accordingly.~~
+   **Resolved by going further: removed `library=` from every
+   public entry point.** The recommendation framed this as "add
+   `profile=` to `evaluate_let_bindings` so it matches the rest
+   of the surface". On audit, however, `library=` was redundant
+   everywhere it appeared:
+
+   * `PyFunctionLibrary` had no public `register()` method (no way
+     to add custom functions from Python). Construction paths
+     were `FunctionLibrary()` (default profile) and
+     `FunctionLibrary.for_profile(profile)`. The library could
+     therefore never carry information that wasn't already in the
+     profile.
+   * `library=` was accepted purely as a caching optimisation —
+     the upstream `FunctionLibrary::for_profile()` lookup is
+     already cached via `Arc`, so passing the library directly
+     saved one cache hit.
+   * When both `library=` and `profile=` were provided, `library`
+     won — a footgun: the supplied library could have been built
+     from a *different* profile, silently masking the explicit
+     `profile=`.
+   * `lib.host_context_enabled` was the only library-side getter,
+     and is fully redundant with
+     `profile.host_context.is_enabled()`.
+
+   So instead of papering over the asymmetry, this commit drops
+   `library=` from every public entry point and removes
+   `FunctionLibrary` and `get_default_library` from the public
+   surface entirely. The single way to configure evaluation is
+   now `profile=ExprProfile(...)`, with the upstream cache
+   doing the per-profile library resolution under the hood.
+
+   Affected entry points (now `profile=` only):
+   `evaluate_expression`, `ParsedExpression.evaluate`,
+   `FormatString.resolve_string`, `FormatString.resolve`,
+   `FormatString.validate_expressions`, `evaluate_let_bindings`.
+
+   Implementation: renamed `library_for_call(library, profile)`
+   → `profile_for_call(profile)` in
+   `rust-bindings/src/expr/evaluate.rs`. Deleted
+   `rust-bindings/src/expr/function_library.rs` outright.
+   Dropped `PyFunctionLibrary` / `get_default_library` from
+   `rust-bindings/src/lib.rs` registration, `expr/mod.rs`
+   re-exports, `src/openjd/expr/__init__.py` imports/`__all__`,
+   and `test/openjd/model_v1/test_pyclass_modules.py`
+   `EXPECTED_MODULES`. Spec deleted both
+   `### get_default_library` and `### FunctionLibrary` sections;
+   updated all examples to use `profile=` directly. Tests:
+   `test/openjd/expr/test_function_context.py` rewritten to
+   exercise host-context behaviour through `ExprProfile.with_host_context`
+   directly (33 tests → 19 tests; the dropped tests were
+   `FunctionLibrary` introspection cases, the kept tests cover
+   actual evaluation behaviour under different host contexts).
 
 9. **Clarify the default `host_context` in the "Inspecting a profile"
    spec example.** The example just before the `Inspecting a profile`

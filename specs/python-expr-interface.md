@@ -70,17 +70,6 @@ result = evaluate_let_bindings(["end = Param.Start + Param.Count - 1"], st)
 result["end"].item()  # 10
 ```
 
-### `get_default_library`
-
-Return the default function library with all built-in functions.
-
-```python
-from openjd.expr import get_default_library
-
-lib = get_default_library()
-lib.host_context_enabled  # False
-```
-
 ### `escape_format_string`
 
 Escape `{{` and `}}` in a string for use as a literal in a format string.
@@ -263,27 +252,6 @@ The Rust crate's underlying primitive is `SymbolTable::merge_from`,
 which mutates in place; `union` is the immutable equivalent built on
 top of it for Python ergonomics.
 
-### `FunctionLibrary`
-
-Registry of functions available during expression evaluation. Built and
-cached per-profile by `FunctionLibrary.for_profile(profile)` — concurrent
-evaluations sharing the same profile reuse a single library allocation.
-
-```python
-from openjd.expr import (
-    FunctionLibrary, ExprProfile, HostContext, PathMappingRule, PathFormat,
-    evaluate_expression,
-)
-
-# Default library (no host context, no extensions, current revision)
-lib = FunctionLibrary()
-lib.host_context_enabled  # False
-
-# Library bound to an explicit profile
-profile = ExprProfile.current()
-lib = FunctionLibrary.for_profile(profile)
-```
-
 ### `ExprRevision` / `ExprExtension` / `HostContext` / `ExprProfile`
 
 Profile types that select which functions, operators, and types are
@@ -329,7 +297,7 @@ evaluate `apply_path_mapping(...)` against a real rule set:
 
 ```python
 from openjd.expr import (
-    ExprProfile, FunctionLibrary, HostContext, PathFormat, PathMappingRule,
+    ExprProfile, HostContext, PathFormat, PathMappingRule,
     evaluate_expression,
 )
 
@@ -346,10 +314,6 @@ evaluate_expression(
     "apply_path_mapping('/mnt/shared/file.exr')",
     profile=profile,
 ).item()  # "/local/cache/file.exr"
-
-# Or build the library once and pass library= for repeated use:
-lib = FunctionLibrary.for_profile(profile)
-evaluate_expression("apply_path_mapping('/x')", library=lib)
 ```
 
 For template-validation type-checking (where rules aren't known yet but
@@ -511,8 +475,8 @@ result.item()             # 43
 result.type.type_code     # TypeCode.INT
 ```
 
-**Static validation.** ``validate_expressions(symtab, *, library=None,
-profile=None)`` walks every ``{{...}}`` segment and evaluates it
+**Static validation.** ``validate_expressions(symtab, *, profile=None)``
+walks every ``{{...}}`` segment and evaluates it
 against the supplied symbol table, raising
 ``FormatStringValidationError`` (a ``ValueError`` subclass) on the
 first failure. Returns ``None`` on success.
@@ -655,7 +619,6 @@ original.
 | ``ExprProfile`` | constructor arguments (``revision``, ``extensions``, ``host_context``) |
 | ``ExpressionError``, ``ExpressionTypeError``, ``RangeExprError``, ``FormatStringValidationError`` | standard exception pickle, under their canonical ``openjd.expr`` module path |
 
-The runtime types ``ParsedExpression`` and ``FunctionLibrary`` are not
-pickleable — they hold transient evaluation state that is not meaningful
-to serialize. Re-construct them via ``parse_expression`` /
-``get_default_library`` after loading the inputs.
+The runtime type ``ParsedExpression`` is not pickleable — it holds
+transient evaluation state that is not meaningful to serialize.
+Re-construct it via ``parse_expression`` after loading the inputs.

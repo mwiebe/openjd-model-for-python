@@ -343,9 +343,8 @@ fn host_context_hash(hc: &HostContext) -> u64 {
 /// A complete expression profile: revision, enabled extensions, and
 /// host context.
 ///
-/// Mirrors `openjd_expr::ExprProfile`. Pass to
-/// [`FunctionLibrary.for_profile(profile)`](crate::expr::PyFunctionLibrary)
-/// and to entry points like `evaluate_expression(..., profile=...)`,
+/// Mirrors `openjd_expr::ExprProfile`. Pass to entry points like
+/// `evaluate_expression(..., profile=...)`,
 /// `ParsedExpression.evaluate(..., profile=...)`,
 /// `FormatString.resolve(..., profile=...)`,
 /// `FormatString.resolve_string(..., profile=...)`.

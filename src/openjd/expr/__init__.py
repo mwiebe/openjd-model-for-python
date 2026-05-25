@@ -8,8 +8,6 @@ from openjd._openjd_rs import (
     ExprType,
     ExprValue,
     SymbolTable,
-    FunctionLibrary,
-    get_default_library,
     evaluate_expression,
     parse_expression,
     ParsedExpression,
@@ -25,9 +23,11 @@ from openjd._openjd_rs import (
     TypeCode,
     DEFAULT_MEMORY_LIMIT,
     DEFAULT_OPERATION_LIMIT,
-    # Profile types — pass to FunctionLibrary.for_profile(...) and to
-    # evaluate_expression / ParsedExpression.evaluate / FormatString.resolve*
-    # via the `profile=` kwarg. Mirror openjd_expr's profile module:
+    # Profile types — pass to entry points like
+    # `evaluate_expression(..., profile=...)`,
+    # `ParsedExpression.evaluate(..., profile=...)`, and
+    # `FormatString.resolve*(..., profile=...)`. Mirror
+    # openjd_expr's profile module:
     # https://github.com/OpenJobDescription/openjd-rs/blob/main/crates/openjd-expr/src/profile.rs
     ExprProfile,
     ExprRevision,
@@ -51,7 +51,6 @@ __all__ = [
     "TypeCode",
     "ExprValue",
     "SymbolTable",
-    "FunctionLibrary",
     "ParsedExpression",
     "PathMappingRule",
     "PathFormat",
@@ -63,7 +62,6 @@ __all__ = [
     "ExprExtension",
     "HostContext",
     # Functions
-    "get_default_library",
     "evaluate_expression",
     "parse_expression",
     "evaluate_let_bindings",

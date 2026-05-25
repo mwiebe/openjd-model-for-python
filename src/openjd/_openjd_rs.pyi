@@ -36,7 +36,6 @@ __all__ = [
     "FloatTaskParameterDefinition",
     "FloatUserInterface",
     "FormatString",
-    "FunctionLibrary",
     "HiddenOnlyUserInterface",
     "HostContext",
     "HostRequirements",
@@ -121,7 +120,6 @@ __all__ = [
     "escape_format_string",
     "evaluate_expression",
     "evaluate_let_bindings",
-    "get_default_library",
     "merge_job_parameter_definitions",
     "parse_expression",
     "preprocess_job_parameters",
@@ -541,9 +539,8 @@ class ExprProfile:
     A complete expression profile: revision, enabled extensions, and
     host context.
 
-    Mirrors `openjd_expr::ExprProfile`. Pass to
-    [`FunctionLibrary.for_profile(profile)`](crate::expr::PyFunctionLibrary)
-    and to entry points like `evaluate_expression(..., profile=...)`,
+    Mirrors `openjd_expr::ExprProfile`. Pass to entry points like
+    `evaluate_expression(..., profile=...)`,
     `ParsedExpression.evaluate(..., profile=...)`,
     `FormatString.resolve(..., profile=...)`,
     `FormatString.resolve_string(..., profile=...)`.
@@ -781,18 +778,10 @@ class FloatUserInterface:
 class FormatString:
     def __new__(cls, input: builtins.str) -> FormatString: ...
     def resolve_string(
-        self,
-        symtab: typing.Any,
-        *,
-        library: typing.Optional[FunctionLibrary] = None,
-        profile: typing.Optional[ExprProfile] = None,
+        self, symtab: typing.Any, *, profile: typing.Optional[ExprProfile] = None
     ) -> builtins.str: ...
     def resolve(
-        self,
-        symtab: typing.Any,
-        *,
-        library: typing.Optional[FunctionLibrary] = None,
-        profile: typing.Optional[ExprProfile] = None,
+        self, symtab: typing.Any, *, profile: typing.Optional[ExprProfile] = None
     ) -> ExprValue: ...
     def raw(self) -> builtins.str: ...
     def has_complex_expressions(self) -> builtins.bool: ...
@@ -807,11 +796,7 @@ class FormatString:
         """
 
     def validate_expressions(
-        self,
-        symtab: typing.Any,
-        *,
-        library: typing.Optional[FunctionLibrary] = None,
-        profile: typing.Optional[ExprProfile] = None,
+        self, symtab: typing.Any, *, profile: typing.Optional[ExprProfile] = None
     ) -> None:
         r"""
         Validate every ``{{...}}`` interpolation against ``symtab``,
@@ -848,33 +833,6 @@ class FormatString:
         r"""
         Pickle support — round-trips through the raw input string.
         """
-
-@typing.final
-class FunctionLibrary:
-    @property
-    def host_context_enabled(self) -> builtins.bool:
-        r"""
-        True iff this library has any host-context functions
-        registered (today: `apply_path_mapping`).
-        """
-
-    def __new__(cls) -> FunctionLibrary:
-        r"""
-        Build a library for the default profile (current revision, no
-        extensions, no host context). Equivalent to
-        `FunctionLibrary.for_profile(ExprProfile.current())`.
-        """
-
-    @classmethod
-    def for_profile(cls, profile: ExprProfile) -> FunctionLibrary:
-        r"""
-        Build (or fetch from the per-profile cache) the library
-        matching the given profile. The Rust crate's profile cache
-        keys on revision + extensions + host-kind, so callers that
-        reuse the same profile reuse the same `Arc<FunctionLibrary>`.
-        """
-
-    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class HiddenOnlyUserInterface:
@@ -1634,7 +1592,6 @@ class ParsedExpression:
         self,
         *,
         values: typing.Optional[typing.Any] = None,
-        library: typing.Optional[FunctionLibrary] = None,
         profile: typing.Optional[ExprProfile] = None,
         target_type: typing.Optional[ExprType] = None,
         path_format: typing.Optional[PathFormat] = None,
@@ -2965,7 +2922,6 @@ def evaluate_expression(
     expr: builtins.str,
     *,
     values: typing.Optional[typing.Any] = None,
-    library: typing.Optional[FunctionLibrary] = None,
     profile: typing.Optional[ExprProfile] = None,
     target_type: typing.Optional[ExprType] = None,
     memory_limit: typing.Optional[builtins.int] = None,
@@ -2975,9 +2931,9 @@ def evaluate_expression(
 def evaluate_let_bindings(
     bindings: typing.Sequence[builtins.str],
     symtab: SymbolTable,
-    library: typing.Optional[FunctionLibrary] = None,
+    *,
+    profile: typing.Optional[ExprProfile] = None,
 ) -> SymbolTable: ...
-def get_default_library() -> FunctionLibrary: ...
 def merge_job_parameter_definitions(
     *,
     job_template: JobTemplate,

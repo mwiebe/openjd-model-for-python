@@ -44,7 +44,6 @@ EXPECTED_MODULES: dict[str, str] = {
     "ExprType": "openjd.expr",
     "ExprValue": "openjd.expr",
     "FormatString": "openjd.expr",
-    "FunctionLibrary": "openjd.expr",
     "HostContext": "openjd.expr",
     "ParsedExpression": "openjd.expr",
     "PathFormat": "openjd.expr",

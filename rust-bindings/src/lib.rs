@@ -70,7 +70,6 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyExprExtension>()?;
     m.add_class::<PyHostContext>()?;
     m.add_class::<PyExprProfile>()?;
-    m.add_class::<PyFunctionLibrary>()?;
     m.add_class::<PyParsedExpression>()?;
     m.add_class::<PyPathMappingRule>()?;
     m.add_class::<PyRangeExpr>()?;
@@ -78,7 +77,6 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(evaluate_expression, m)?)?;
     m.add_function(wrap_pyfunction!(parse_expression, m)?)?;
-    m.add_function(wrap_pyfunction!(get_default_library, m)?)?;
     m.add_function(wrap_pyfunction!(escape_format_string, m)?)?;
     m.add_function(wrap_pyfunction!(_reconstruct_expr_value, m)?)?;
 

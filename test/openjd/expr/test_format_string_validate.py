@@ -177,7 +177,8 @@ class TestValidateExpressionsArgumentForms:
 
     def test_library_and_profile_are_keyword_only(self) -> None:
         # Mirrors ``resolve_string`` / ``resolve`` — only ``symtab``
-        # is positional.
+        # is positional. ``profile`` (the lone keyword arg, after
+        # the removal of ``library``) cannot be passed positionally.
         fs = FormatString("hello")
         with pytest.raises(TypeError):
-            fs.validate_expressions(SymbolTable(), None, None)  # type: ignore[misc]
+            fs.validate_expressions(SymbolTable(), None)  # type: ignore[misc]
