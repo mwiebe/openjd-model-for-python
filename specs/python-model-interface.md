@@ -64,7 +64,7 @@ symbol from its canonical location.
 
 | Submodule | Contents |
 |---|---|
-| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `parse_model`, `decode_template`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), Python-only compat (`SpecificationRevision`, `TemplateSpecificationVersion`, `ParameterValue`, `ValueReferenceConstants`, `RevisionExtensions`, `CancelationMethod*`, `IntRangeExpr`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`), capability-validation helpers, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`, `FormatStringError`). Also re-exports `DecodeValidationError`. |
+| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `parse_model`, `decode_template`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), Python-only compat (`SpecificationRevision`, `TemplateSpecificationVersion`, `ParameterValue`, `ValueReferenceConstants`, `RevisionExtensions`, `CancelationMethod*`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`), capability-validation helpers, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`, `FormatStringError`). Also re-exports `DecodeValidationError`. |
 | `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the typed `JobParameterDefinition`/`TaskParameterDefinition`/`*UserInterface` variants, etc. |
 | `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, and the job-time `EmbeddedFile`. |
 | `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `TaskParameterType`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision` (Rust pyclass form), `CallerLimits`, `ValidationContext`. |
@@ -995,7 +995,6 @@ CancelationMethodNotifyThenTerminate(mode="NOTIFY_THEN_TERMINATE", notify_period
 
 | Alias | Target | Usage |
 |---|---|---|
-| `IntRangeExpr` | `RangeExpr` | `IntRangeExpr("1-10")` |
 | `CommandString` | `FormatString` | `CommandString("echo")` |
 | `ArgString` | `FormatString` | `ArgString("{{Param.Frame}}")` |
 | `EmbeddedFileText` | `EmbeddedFile` | isinstance checks |
@@ -1003,27 +1002,31 @@ CancelationMethodNotifyThenTerminate(mode="NOTIFY_THEN_TERMINATE", notify_period
 | `JobParameterValues` | `dict` | `dict[str, ParameterValue]` |
 | `TaskParameterSet` | `dict` | `dict[str, Any]` |
 
+> **Note.** Earlier versions exposed an ``IntRangeExpr`` alias under
+> ``openjd.model._v1`` for legacy parity with v0. Use
+> ``openjd.expr.RangeExpr`` directly instead. The model layer no
+> longer re-exports a range-expression type.
+
 ### Behavior change: `RangeExpr` iteration is always ascending
 
-`RangeExpr` (and its `IntRangeExpr` alias) always presents its values
-as an **increasing list of integers**, regardless of how the source
-expression was written. Iteration, indexing, and `__str__` all operate
-on the canonical ascending form; the input's direction is not
-retained.
+`openjd.expr.RangeExpr` always presents its values as an **increasing
+list of integers**, regardless of how the source expression was
+written. Iteration, indexing, and `__str__` all operate on the
+canonical ascending form; the input's direction is not retained.
 
 ```python
-from openjd.model._v1 import IntRangeExpr
+from openjd.expr import RangeExpr
 
-r = IntRangeExpr.from_str("-1 - -2 : -1")
+r = RangeExpr("-1 - -2 : -1")
 list(r)   # [-2, -1]   (ascending)
 r[0]      # -2
 r[-1]     # -1
 
-r = IntRangeExpr.from_str("10-1:-1")
+r = RangeExpr("10-1:-1")
 list(r)   # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  (ascending)
 ```
 
-This differs from the pure-Python reference implementation
+This differs from the v0 pure-Python reference implementation
 (`openjd.model._range_expr.IntRangeExpr`), which preserves the
 user-supplied direction so that `IntRangeExpr.from_str("-1 - -2 : -1")`
 iterates as `[-1, -2]`. The Rust-backed binding intentionally drops

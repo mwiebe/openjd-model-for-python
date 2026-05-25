@@ -462,7 +462,7 @@ def parse_model(*, model: Any = None, obj: dict[str, Any]) -> Any:
 #   CancelationMethodNotifyThenTerminate, ValueReferenceConstants,
 #   CompatibilityError, TokenError, EmbeddedFileText, EmbeddedFiles).
 #
-# * Aliases (CommandString, ArgString, IntRangeExpr,
+# * Aliases (CommandString, ArgString,
 #   StepDependencyGraphNode, StepDependencyGraphStepToStepEdge) for v0
 #   names that map to v1 types.
 
@@ -477,7 +477,6 @@ from openjd._openjd_rs import (  # noqa: E402
 
 CommandString = FormatString
 ArgString = FormatString
-IntRangeExpr = RangeExpr
 EmbeddedFileText = job.EmbeddedFile
 EmbeddedFiles = list
 StepDependencyGraphNode = job.StepDependencyNode
@@ -581,7 +580,6 @@ __all__ = (
     "CommandString",
     "EmbeddedFileText",
     "EmbeddedFiles",
-    "IntRangeExpr",
     "StepDependencyGraphNode",
     "StepDependencyGraphStepToStepEdge",
     # Version
