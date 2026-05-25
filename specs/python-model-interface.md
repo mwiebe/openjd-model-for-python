@@ -226,14 +226,28 @@ merged = merge_job_parameter_definitions(job_template=template)
 
 ### Utility
 
-#### `model_to_object`
+#### `model_to_object` — v0-only, not implemented in v1
 
-Serialize a model object to a dict. Calls `to_dict()` if available.
+`model_to_object(*, model)` is a pure-Python helper from
+`openjd.model` (the v0 / pydantic-based reference) that walks a
+`BaseModel.model_dump()` result and converts nested `Decimal`
+instances back to strings so the resulting dict is JSON/YAML-
+serializable. It is **not** part of the v1 (Rust-backed)
+interface — the v1 model pyclasses (`JobTemplate`,
+`EnvironmentTemplate`, the various `*ParameterDefinition`s, etc.)
+do not have a general "serialize this whole model back to a
+JSON-shaped dict" method, and there are no plans to add one.
 
-```python
-from openjd.model import model_to_object
-# model_to_object(model=some_object)  # returns dict
-```
+If specific use cases surface that need similar functionality
+(e.g. round-tripping a job template back to YAML for diffing,
+or extracting a particular sub-model as a dict), they will be
+addressed as targeted helpers on the relevant pyclass(es) — not
+as a single `model_to_object` umbrella API. Reach out with the
+concrete use case and we'll decide what shape that helper takes.
+
+The v0 module retains `from openjd.model import model_to_object`
+unchanged; it works on v0 / pydantic models only, and importing
+it through `openjd.model._v1` is intentionally not supported.
 
 ## Output Types (from Rust)
 

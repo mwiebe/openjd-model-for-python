@@ -357,13 +357,6 @@ def parse_model(*, model: Any = None, obj: dict[str, Any]) -> Any:
     return decode_job_template_dict(obj)
 
 
-def model_to_object(*, model: Any) -> dict[str, Any]:
-    """Serialize a model object to a dict. Limited support with Rust types."""
-    if hasattr(model, "to_dict"):
-        return model.to_dict()
-    raise NotImplementedError("model_to_object is not supported for this type")
-
-
 # ── Compatibility shims ──
 #
 # Surface re-exports kept here for downstream callers that still import
@@ -453,7 +446,6 @@ __all__ = (
     "decode_job_template",
     "document_string_to_object",
     "merge_job_parameter_definitions",
-    "model_to_object",
     "parse_model",
     "preprocess_job_parameters",
     # Capability validation (Python-only)

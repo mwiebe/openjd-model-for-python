@@ -66,11 +66,24 @@ for the pure-Python reference**:
    projects `params` onto the association's own keys before
    comparison. The Python-side test
    `test_nested_expr_contains` is no longer xfailed and passes.
-3. **`model_to_object` is unimplemented for every Rust-backed model.** The
+3. ~~**`model_to_object` is unimplemented for every Rust-backed model.** The
    wrapper module raises `NotImplementedError`. The reference round-trips
    through `model.model_dump(by_alias=True, exclude_unset=True)` to produce
    the input dict. One existing parity test fails because of this
-   (`TestModelToObject::test[translates Decimal to string]`).
+   (`TestModelToObject::test[translates Decimal to string]`).~~
+   **Won't fix.** `model_to_object` is intentionally a v0-only API.
+   The Rust-backed v1 model pyclasses do not have a general
+   "serialize whole model back to a JSON-shaped dict" method, and
+   there are no plans to add one. Specific use cases that need
+   similar functionality on individual sub-models will be addressed
+   as targeted helpers when the concrete need arises. Spec updated
+   (see `specs/python-model-interface.md` § "model_to_object —
+   v0-only, not implemented in v1"). Stub function and `__all__`
+   entry removed from `src/openjd/model/_v1/__init__.py`; the
+   failing parity test (`TestModelToObject::test[translates
+   Decimal to string]`) and the duplicate xfail in
+   `test_known_gaps.py::test_model_to_object_round_trip` are
+   removed.
 4. ~~**`StepParameterSpaceIterator.chunks_default_task_count` setter is a
    silent no-op.** The setter validates that the space is adaptively
    chunked, then returns without storing the value. The reference mutates
@@ -162,8 +175,9 @@ The following all import successfully from `openjd.model._v1`:
 - Functions: `decode_job_template`, `decode_job_template_str`,
   `decode_environment_template`, `decode_environment_template_str`,
   `create_job`, `preprocess_job_parameters`,
-  `merge_job_parameter_definitions`, `model_to_object` (as a function —
-  but always raises `NotImplementedError`).
+  `merge_job_parameter_definitions`. (`model_to_object` was
+  removed in finding #3 — it is a v0-only API; the v1 module
+  no longer exports it.)
 - Output types: `Job`, `Step`, `StepScript`, `StepActions`, `Action`,
   `Environment`, `EnvironmentScript`, `EnvironmentActions`,
   `EmbeddedFile`, `JobParameter`, `StepParameterSpace`, `StepDependency`,
@@ -224,7 +238,7 @@ The following all import successfully from `openjd.model._v1`:
 |---|---|
 | `template.specification_version` (camel `specificationVersion`) | Only snake-case getter is exposed; `template.specificationVersion` → `AttributeError`. |
 | `it.names()                  # {"Frame"}` | `it.names` is a property, not a callable. The example would `TypeError: 'set' object is not callable`. |
-| `model_to_object(model=some_object)` | Always raises `NotImplementedError("model_to_object is not supported for this type")` for every Rust-backed model. |
+| ~~`model_to_object(model=some_object)`~~ | ~~Always raises `NotImplementedError("model_to_object is not supported for this type")` for every Rust-backed model.~~ Removed — v0-only API per Rec #3. |
 | `script.let` (advertised as `Optional[list[str]]`) | Works ✓ |
 | `step.resolvedBindings` | Works ✓ but reference tests use `script.let` — which also works. |
 | ~~`space.taskParameterDefinitions` returns dict of typed defs~~ | Now returns ``dict[str, IntTaskParameter \| FloatTaskParameter \| StringTaskParameter \| PathTaskParameter \| ChunkIntTaskParameter]``. ✓ resolved (Rec #6). |
@@ -486,7 +500,7 @@ This section lists every public symbol in the **reference**
 | `create_job(*, job_template, job_parameter_values, environment_templates=None)` | Returns Job | Returns Rust Job | ✓ |
 | `preprocess_job_parameters(*, job_template, job_parameter_values, environment_templates=None, job_template_dir, current_working_dir, allow_job_template_dir_walk_up=False)` | Returns dict[str, ParameterValue] | Returns dict[str, JobParameterValue] | ⚠ value type differs (`ParameterValue` vs `JobParameterValue`) but `__eq__` is symmetric so most code keeps working. |
 | `merge_job_parameter_definitions(*, job_template, environment_templates=None)` | Returns list of pydantic objects | Returns list of dicts | ⚠ shape differs |
-| `model_to_object(*, model)` | Returns dict via `model_dump` | **Always raises `NotImplementedError`** | ❌ |
+| ~~`model_to_object(*, model)`~~ | Returns dict via `model_dump` | Removed from v1 (v0-only API; see Rec #3). | ✓ resolved by removal |
 | `parse_model(*, model=None, obj)` | Returns pydantic model | Returns Rust model | ✓ |
 | `document_string_to_object(*, document, document_type=None)` | Returns dict (uses CSafeLoader) | Returns dict (uses CSafeLoader) | ✓ |
 | `validate_amount_capability_name(*, capability_name, standard_capabilities)` | strict kw-only | Permits positional `name` + makes `standard_capabilities` optional | ⚠ more permissive |
@@ -702,7 +716,7 @@ in `test/openjd/model_v1/test_known_gaps.py`.
 |---|---|---|
 | 1 | ~~`IntRangeExpr.from_str("-1 - -2 : -1")` iterates as `[-2, -1]`; reference iterates as `[-1, -2]`.~~ **Resolved** — accepted as an intentional behavior change. `RangeExpr` values are always an increasing list of integers; descending-input direction is not retained. See `specs/python-model-interface.md` Compatibility Aliases. | `test_int_range_expr_descending_iteration_order` (now asserts the ascending behavior) |
 | 2 | ~~`StepParameterSpaceIterator.__contains__` rejects values it just yielded.~~ **Resolved** — `extract_task_parameter_set` now reads the parameter type via `as_str()` first. | `test_step_param_space_iter_contains_self_yielded` (now passing) |
-| 3 | `model_to_object(model=...)` raises `NotImplementedError` for every Rust-backed model. | `test_model_to_object_round_trip` |
+| 3 | ~~`model_to_object(model=...)` raises `NotImplementedError` for every Rust-backed model.~~ **Won't fix** — v0-only API removed from v1 (see Rec #3). | `test_model_to_object_round_trip` (removed) |
 | 4 | ~~`chunks_default_task_count` setter is a silent no-op (returns `Ok(())` without storing).~~ **Resolved** — wrapper now holds a persistent `Mutex<StepParameterSpaceIterator>`; the setter calls `iter.set_chunks_default_task_count(value)` on it. | `test_step_param_space_iter_chunks_default_task_count_setter` (now passing) |
 | 5 | ~~`len(iter)` returns 0 on adaptive-chunked space; reference raises `ValueError`.~~ **Resolved** — `__len__` now raises `ValueError("Length is not available because the parameter space uses adaptive chunking.")`. | `test_step_param_space_iter_adaptive_len_raises` (now passing) |
 | 6 | ~~`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`, `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType` — none pickleable. (`TemplateSpecificationVersion` *is* pickleable because it's a Python `Enum`.)~~ **Partially resolved (Rec #8).** `FormatString`, `RangeExpr`, `SymbolTable`, `JobParameterType`, `DocumentType`, and `TemplateSpecificationVersion` (Rust-side) all pickle now. The decoded model containers (`JobTemplate`, `Job`, `Step`, `StepParameterSpaceIterator`) still don't — they need `to_dict()` / `to_json()` accessors first. | `test_job_template_pickleable` (still xfail) |
@@ -781,11 +795,26 @@ proves the gap so it can be fixed and the proof regenerated.
    which uses the same `for v in expected_values: assert v in it` idiom.
    Verified by promoting the `xfail` test to a passing test.
 
-3. **Implement `model_to_object` for every Rust-backed model type, or stop
+3. ~~**Implement `model_to_object` for every Rust-backed model type, or stop
    exporting it.** `decode_job_template(template=t); model_to_object(model=t)`
    should round-trip back to the input dict. Resolves
    `test/openjd/model_v1/test_parse.py::TestModelToObject::test[translates Decimal to string]`
-   and `test/openjd/model_v1/test_known_gaps.py::test_model_to_object_round_trip`.
+   and `test/openjd/model_v1/test_known_gaps.py::test_model_to_object_round_trip`.~~
+   **Won't fix; resolved by removal.** `model_to_object` is a
+   v0/pydantic-era helper that walked `model.model_dump()` and
+   converted nested `Decimal`s back to strings. The Rust-backed
+   v1 model pyclasses do not have an analogous "serialize whole
+   model to a JSON-shaped dict" method, and there are no plans
+   to add one. Spec updated with an explicit "v0-only, not
+   implemented in v1" note. `model_to_object` removed from
+   `src/openjd/model/_v1/__init__.py` (function and `__all__`
+   entry); the failing parity test
+   (`TestModelToObject::test[translates Decimal to string]`)
+   and the duplicate xfail in
+   `test_known_gaps.py::test_model_to_object_round_trip` are
+   removed. Specific use cases that need similar functionality
+   on individual sub-models will be addressed as targeted
+   helpers when the concrete need arises.
 
 4. ~~**Fix `StepParameterSpaceIterator.chunks_default_task_count` setter.**
    File: `rust-bindings/src/model/step_param_space.rs:199`. Currently

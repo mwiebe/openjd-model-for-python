@@ -12,7 +12,6 @@ from openjd.model._v1 import (
     decode_environment_template,
     decode_job_template,
     document_string_to_object,
-    model_to_object,
 )
 from openjd.model._v1.types import (
     DocumentType,
@@ -67,44 +66,13 @@ class TestDocStringToObject:
             document_string_to_object(document=document, document_type=doctype)
 
 
-class TestModelToObject:
-    @pytest.mark.parametrize(
-        "template",
-        [
-            pytest.param(
-                {
-                    "name": "DemoJob",
-                    "specificationVersion": "jobtemplate-2023-09",
-                    "parameterDefinitions": [{"name": "Foo", "type": "FLOAT", "default": "12"}],
-                    "steps": [
-                        {
-                            "name": "DemoStep",
-                            "parameterSpace": {
-                                "taskParameterDefinitions": [
-                                    {"name": "Foo", "type": "FLOAT", "range": ["1.1", "1.2"]}
-                                ]
-                            },
-                            "script": {
-                                "actions": {
-                                    "onRun": {"command": "echo", "args": ["Foo={{Param.Foo}}"]}
-                                }
-                            },
-                        }
-                    ],
-                },
-                id="translates Decimal to string",
-            )
-        ],
-    )
-    def test(self, template: dict[str, Any]) -> None:
-        # GIVEN
-        model = decode_job_template(template=template)
-
-        # WHEN
-        result = model_to_object(model=model)
-
-        # THEN
-        assert result == template
+# `TestModelToObject` (and the `model_to_object` import) used to live
+# here. The function was a v0/pydantic-era helper that walked a
+# `BaseModel.model_dump()` result and converted nested `Decimal`
+# instances back to strings; the v1 Rust-backed model types do not
+# have an analogous "serialize whole model back to a JSON-shaped
+# dict" method, and the spec now explicitly states `model_to_object`
+# is a v0-only API. See `specs/python-model-interface.md`.
 
 
 class TestDecodeJobTemplate:

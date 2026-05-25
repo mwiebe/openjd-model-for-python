@@ -21,25 +21,7 @@ import pytest
 
 from openjd.model._v1 import (
     decode_job_template,
-    model_to_object,
 )
-
-
-@pytest.mark.xfail(strict=True, reason="Issue: model_to_object NotImplementedError for JobTemplate")
-def test_model_to_object_round_trip():
-    template = {
-        "specificationVersion": "jobtemplate-2023-09",
-        "name": "X",
-        "steps": [
-            {
-                "name": "S",
-                "script": {"actions": {"onRun": {"command": "echo"}}},
-            }
-        ],
-    }
-    t = decode_job_template(template=template)
-    out = model_to_object(model=t)
-    assert out == template
 
 
 @pytest.mark.xfail(strict=True, reason="Issue: JobTemplate is not pickleable")
