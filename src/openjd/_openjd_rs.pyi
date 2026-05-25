@@ -806,6 +806,28 @@ class FormatString:
         copies `Param.Name` but not `Param.Name.upper`).
         """
 
+    def validate_expressions(
+        self,
+        symtab: typing.Any,
+        *,
+        library: typing.Optional[FunctionLibrary] = None,
+        profile: typing.Optional[ExprProfile] = None,
+    ) -> None:
+        r"""
+        Validate every ``{{...}}`` interpolation against ``symtab``,
+        raising `FormatStringValidationError` on the first failure.
+
+        Per the spec, callers populate the symbol table with
+        `ExprValue.unresolved(T)` placeholders for symbols whose
+        concrete values aren't known at validation time — the
+        evaluator's unresolved-propagation rules then drive type
+        checking through the expression tree.
+
+        Mirrors the Rust crate's
+        `FormatString::validate_expressions(symtab, lib)`. Returns
+        `None` on success.
+        """
+
     def __str__(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
     def __eq__(self, other: typing.Any) -> builtins.bool:

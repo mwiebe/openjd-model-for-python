@@ -511,6 +511,49 @@ result.item()             # 43
 result.type.type_code     # TypeCode.INT
 ```
 
+**Static validation.** ``validate_expressions(symtab, *, library=None,
+profile=None)`` walks every ``{{...}}`` segment and evaluates it
+against the supplied symbol table, raising
+``FormatStringValidationError`` (a ``ValueError`` subclass) on the
+first failure. Returns ``None`` on success.
+
+The intended pattern is to populate the symbol table with
+``ExprValue.unresolved(T)`` placeholders for symbols whose concrete
+values are not yet known — the evaluator's unresolved-propagation
+rules then drive type checking through the expression tree without
+requiring real values:
+
+```python
+from openjd.expr import (
+    FormatString, SymbolTable, ExprType, ExprValue,
+    FormatStringValidationError,
+)
+
+# At template-validation time, populate the symbol table with
+# typed placeholders for parameters whose values aren't bound yet.
+symtab = SymbolTable({
+    "Param.Name": ExprValue.unresolved(ExprType("string")),
+    "Param.Frame": ExprValue.unresolved(ExprType("int")),
+})
+
+# Valid: every interpolation resolves under the placeholder types.
+FormatString("hello {{Param.Name}}").validate_expressions(symtab)
+
+# Invalid: missing symbol — raises with a caret-anchored diagnostic.
+try:
+    FormatString("hello {{Param.Missing}}").validate_expressions(symtab)
+except FormatStringValidationError as e:
+    str(e)  # "Failed to parse interpolation expression at [6, 24].
+            #  Undefined variable: 'Param.Missing'.
+            #    Param.Missing
+            #    ~~~~~~^~~~~~~"
+```
+
+The error message embeds the ``[start, end]`` byte offsets of the
+failing ``{{...}}`` pair so callers can produce structured
+diagnostics or syntax-highlight the failing segment. Mirrors the
+Rust crate's ``FormatString::validate_expressions(symtab, lib)``.
+
 **Equality and hashability.** `FormatString` implements `__eq__` and
 `__hash__` on the raw source string. Two format strings compare equal
 iff `a.raw() == b.raw()`; lexically distinct inputs that would

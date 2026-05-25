@@ -25,9 +25,10 @@ five value/profile pyclasses that originally lacked
 `HostContext`, `ExprProfile`, `SymbolTable`) all now compose
 value-shaped equality from their visible fields — see
 Recommendations 1-5. The `FormatStringValidationError` exception
-class is registered but is not reachable from any public binding
-entry point today. The test-suite lint debt called out in the
-original draft of this report (16 ruff
+class is now reachable from the public binding API: see
+Recommendation 6 (`FormatString.validate_expressions`). The
+test-suite lint debt called out in the original draft of this
+report (16 ruff
 errors under `test/openjd/expr/` plus 2 stragglers in a model_v1
 test file, totalling 18 workspace-wide) has been fully resolved
 (see Recommendation #10); `hatch run lint` is now clean.
@@ -63,9 +64,8 @@ get_default_library, parse_expression
   so the surface is covered by tests, but the spec does not
   describe its semantics or when callers should use it.
 - The spec lists `FormatStringValidationError` as one of the four
-  exception types but does not say which entry point raises it.
-  After auditing the binding, no public method currently raises it
-  (see §2 and §7 below).
+  exception types and now also documents the
+  `FormatString.validate_expressions` raise site (Rec #6).
 
 **Spec accuracy notes:**
 
@@ -103,7 +103,7 @@ Files under `rust-bindings/src/expr/`:
 | `evaluate.rs` | `library_for_call`, `evaluate_expression` | `library_for_call` documents the `library` > `profile` > default precedence used everywhere. `evaluate_expression` strips leading/trailing whitespace before parsing (matches reference). |
 | `path_mapping.rs` | `PyPathMappingRule` | `__init__(*, source_path_format, source_path, destination_path)`, `apply(*, path, output_format=None)`, `to_dict`, `from_dict`. `from_dict` accepts case-insensitive `source_path_format` strings, rejects unknown keys, and produces a Python-set-style error message for the deterministic-set repr. Pickle via `to_dict`/`from_dict`. |
 | `range_expr.rs` | `PyRangeExpr`, `PyRangeExprIter` | Constructors `RangeExpr(str)` and `from_str` and `from_list` (rejecting empty input). `__hash__` wraps the underlying Rust hash; `__eq__` compares via `inner == inner`. Pickle via spec-form string. |
-| `format_string.rs` | `PyFormatString`, `escape_format_string` | `new(input)` returns `PyExpressionError` on parse failure (the underlying `FormatString::new` returns `ExpressionError` in Rust). `resolve_string` and `resolve` take `(symtab, *, library, profile)`. The `validate_expressions` Rust method (which produces `FormatStringValidationError`) is **not** exposed (see §7). |
+| `format_string.rs` | `PyFormatString`, `escape_format_string` | `new(input)` returns `PyExpressionError` on parse failure (the underlying `FormatString::new` returns `ExpressionError` in Rust). `resolve_string` and `resolve` take `(symtab, *, library, profile)`. `validate_expressions(symtab, *, library, profile)` mirrors the Rust crate's method and raises `FormatStringValidationError` on failure (Rec #6). |
 
 ### PyO3-specific concerns
 
@@ -238,7 +238,7 @@ symbol-by-symbol parity table.
 | `ExpressionTypeError` | subclass of `ExpressionError` | subclass | ✓ |
 | `DEFAULT_MEMORY_LIMIT / DEFAULT_OPERATION_LIMIT` | constants | constants | ✓ |
 | `FormatString` | reference: in `openjd.model._format_strings`, str-subclass with `__eq__`/`__hash__` | binding: in `openjd.expr`, composed `__eq__`/`__hash__` on `raw()` (Rec #2) | ✓ (location moved into `openjd.expr`) |
-| `FormatStringValidationError` | reference: `FormatStringError` in model | binding: registered, never raised from public API | ⚠ exception is unreachable (see §7) |
+| `FormatStringValidationError` | reference: `FormatStringError` in model | binding: raised by `FormatString.validate_expressions` (Rec #6) | ✓ |
 | `FormatString.copy_used_symtab_values(source, dest)` | not in reference | method (new) | ⚠ binding-only; not in spec |
 | `ExprProfile`, `ExprRevision`, `ExprExtension`, `HostContext` | not in reference | classes (new) | ⚠ binding-only; the path-mapping API moved from per-call kwarg to profile-based |
 
@@ -252,8 +252,10 @@ symbol-by-symbol parity table.
    complete but `pickle.loads(pickle.dumps(x)) == x` is `False` for these
    types — `test_pickle.py` works around the gap by comparing
    `to_dict()` results or `is_enabled()` flags.
-2. **`FormatStringValidationError` is registered but unreachable** from
-   any public binding entry point (see §7).
+2. ~~**`FormatStringValidationError` is registered but unreachable** from
+   any public binding entry point (see §7).~~ **Resolved (Rec #6).**
+   Now raised by ``FormatString.validate_expressions(symtab, *,
+   library=None, profile=None)``.
 3. **`evaluate_let_bindings` does not accept `profile=`** even though
    every other entry point that accepts a `library=` also accepts a
    `profile=`. The reference does not export this function at all,
@@ -369,31 +371,20 @@ The pickle round-trip suite has been tightened to assert
 
 ### `FormatStringValidationError` is unreachable
 
-```
-$ rg 'PyFormatStringValidationError' rust-bindings/src
-rust-bindings/src/expr/errors.rs       (declaration)
-rust-bindings/src/expr/mod.rs          (re-export)
-rust-bindings/src/lib.rs               (register_renamed_exception)
-```
+(Resolved — see Rec #6.) The exception class was registered by
+``register_renamed_exception`` but never raised from the binding,
+because the underlying Rust ``FormatString::validate_expressions``
+method that produces it was not exposed. ``FormatString.new``
+(which is exposed) raises ``ExpressionError`` on parse failure
+instead.
 
-No `PyFormatStringValidationError::new_err(...)` call exists anywhere
-in the binding. The underlying Rust `FormatStringValidationError` is
-produced by `openjd_expr::format_string::FormatString::validate_expressions`
-— a method that is **not** exposed in the binding. `FormatString::new`,
-which is exposed, returns `ExpressionError` on parse failure, so any
-malformed input raises `ExpressionError`, not
-`FormatStringValidationError`:
-
-```
->>> e.FormatString('{{ unclosed')
-Traceback ...
-openjd.expr.ExpressionError: Failed to parse interpolation expression
-at [0, 11]. Reason: Braces mismatch.
-```
-
-The exception class is therefore registered, pickleable, and
-documented, but a user has no way to actually catch it from the
-public expr API.
+The fix exposed ``FormatString.validate_expressions(symtab, *,
+library=None, profile=None)`` on the binding. It evaluates every
+``{{...}}`` segment under the supplied symbol table and raises
+``FormatStringValidationError`` on the first failure, with a
+caret-anchored diagnostic message containing the failing
+``{{...}}`` byte offsets. Tests live in
+``test/openjd/expr/test_format_string_validate.py``.
 
 ### Lint debt under `test/openjd/expr/`
 
@@ -537,13 +528,28 @@ independent of upstream review). Tests live in
 
 ### P2 — housekeeping
 
-6. **Make `FormatStringValidationError` reachable, or mark it reserved.**
+6. ~~**Make `FormatStringValidationError` reachable, or mark it reserved.**
    Either expose `FormatString.validate_expressions(symtab, library)`
    on the binding (mirroring the Rust crate's method) and document
    the raise site in the spec, or remove `FormatStringValidationError`
    from the spec and from `openjd.expr.__all__`. Suggested location:
    spec edit + (optional) `rust-bindings/src/expr/format_string.rs`
-   adding the missing method.
+   adding the missing method.~~ **Resolved.** Chose the
+   "expose the method" branch. `FormatString.validate_expressions(
+   symtab, *, library=None, profile=None)` is now a public method
+   on the binding that mirrors the Rust crate's
+   `FormatString::validate_expressions(symtab, lib)`. Returns
+   `None` on success; raises `FormatStringValidationError` (a
+   `ValueError` subclass) with a caret-anchored diagnostic
+   message containing the failing `{{...}}` byte offsets on the
+   first failure. Helper `format_string_validation_err_to_py` in
+   `rust-bindings/src/expr/errors.rs` formats the error via
+   `Display`. Spec updated with a "Static validation" subsection
+   on `FormatString` showing the `ExprValue.unresolved(T)`
+   placeholder pattern. Tests live in
+   `test/openjd/expr/test_format_string_validate.py` (14 tests
+   across 3 classes covering success cases, failure cases,
+   and argument-shape).
 
 7. **Document `FormatString.copy_used_symtab_values` in the spec.**
    The method is public, exercised by `test_copy_used_symtab.py`, and

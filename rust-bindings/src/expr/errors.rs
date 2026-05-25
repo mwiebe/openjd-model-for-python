@@ -158,3 +158,20 @@ pub(crate) fn attach_expression_error_methods(m: &Bound<'_, PyModule>) -> PyResu
 pub(crate) fn expr_err_to_py(e: openjd_expr::error::ExpressionError) -> PyErr {
     PyExpressionError::new_err(e.to_string())
 }
+
+/// Map a Rust-side `FormatStringValidationError` to a Python-side
+/// `PyFormatStringValidationError` instance. The Rust struct
+/// implements `Display` as
+/// `"Failed to parse interpolation expression at [start, end]. message"`,
+/// which we forward verbatim. Structured fields (`input`, `start`,
+/// `end`, `expression_error`) are not currently exposed to Python —
+/// callers who need them should match on the message string or
+/// catch `ExpressionError` directly via `evaluate_*`. If a real
+/// structured access need surfaces, the helper can grow into
+/// `new_err((message, input, start, end))` populating instance
+/// attributes.
+pub(crate) fn format_string_validation_err_to_py(
+    e: openjd_expr::format_string::FormatStringValidationError,
+) -> PyErr {
+    PyFormatStringValidationError::new_err(e.to_string())
+}
