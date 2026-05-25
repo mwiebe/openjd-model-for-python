@@ -1,13 +1,19 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 from openjd.model._v1 import (
+    CompatibilityError,
     ExpressionError,
     TokenError,
+    decode_environment_template,
+    decode_job_template,
+    merge_job_parameter_definitions,
+    create_job,
 )
 from openjd.model._v1.errors import (
     DecodeValidationError,
     UnsupportedSchema,
 )
+import pytest
 
 
 class TestUnsupportedSchema:
@@ -44,3 +50,148 @@ class TestTokenError:
 
         # THEN
         assert str(error) == "Unexpected '5' in '0123456789' after '01234'"
+
+
+class TestCompatibilityError:
+    """``CompatibilityError`` is a ``ValueError`` subclass (matching
+    the v0 reference) so callers that catch ``ValueError`` for
+    constraint validation also catch incompatible-parameter
+    errors."""
+
+    def test_is_value_error_subclass(self) -> None:
+        assert issubclass(CompatibilityError, ValueError)
+
+    def test_mro_includes_value_error(self) -> None:
+        # Pin the parent chain so a future refactor doesn't quietly
+        # change the inheritance.
+        mro = [c.__name__ for c in CompatibilityError.__mro__]
+        assert "ValueError" in mro
+        assert mro.index("CompatibilityError") < mro.index("ValueError")
+
+    def test_caught_via_value_error(self) -> None:
+        # ``except ValueError`` catches the compat error too.
+        try:
+            raise CompatibilityError("conflict")
+        except ValueError as e:
+            assert "conflict" in str(e)
+        else:
+            pytest.fail("CompatibilityError should have been caught as ValueError")
+
+    def test_raised_via_merge_with_conflicting_types(self) -> None:
+        """Real-world path: a job-template parameter and an
+        env-template parameter for the same name with different
+        types triggers ``CompatibilityError`` from
+        ``merge_job_parameter_definitions``."""
+        job_t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "parameterDefinitions": [{"name": "Frame", "type": "INT", "default": 5}],
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {"actions": {"onRun": {"command": "echo"}}},
+                    }
+                ],
+            }
+        )
+        env_t = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "parameterDefinitions": [{"name": "Frame", "type": "STRING", "default": "x"}],
+                "environment": {
+                    "name": "E",
+                    "script": {"actions": {"onEnter": {"command": "echo"}}},
+                },
+            }
+        )
+        with pytest.raises(CompatibilityError, match="conflicting types"):
+            merge_job_parameter_definitions(job_template=job_t, environment_templates=[env_t])
+
+    def test_raised_via_merge_caught_as_value_error(self) -> None:
+        """Same path as above but caught via the parent
+        ``ValueError`` — confirms the inheritance is honoured at
+        the actual error raise site, not just for instances built
+        from Python."""
+        job_t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "parameterDefinitions": [{"name": "Frame", "type": "INT", "default": 5}],
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {"actions": {"onRun": {"command": "echo"}}},
+                    }
+                ],
+            }
+        )
+        env_t = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "parameterDefinitions": [{"name": "Frame", "type": "STRING", "default": "x"}],
+                "environment": {
+                    "name": "E",
+                    "script": {"actions": {"onEnter": {"command": "echo"}}},
+                },
+            }
+        )
+        with pytest.raises(ValueError, match="conflicting types"):
+            merge_job_parameter_definitions(job_template=job_t, environment_templates=[env_t])
+
+
+class TestExpressionErrorMapping:
+    """``ModelError::Expression(...)`` raised during ``create_job``
+    surfaces as ``openjd.expr.ExpressionError`` (the same class
+    raised by ``evaluate_expression``), not as the generic
+    ``ModelValidationError``. Pinned for parity with the v0
+    reference's exception class hierarchy."""
+
+    def test_chunk_default_task_count_invalid_int(self) -> None:
+        """A CHUNK[INT] ``defaultTaskCount`` format string that
+        resolves to a non-integer value at ``create_job`` time
+        raises ``ExpressionError`` (not the generic
+        ``ModelValidationError``)."""
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "extensions": ["TASK_CHUNKING"],
+                "parameterDefinitions": [
+                    {
+                        "name": "Count",
+                        "type": "STRING",
+                        "default": "not-an-integer",
+                    }
+                ],
+                "steps": [
+                    {
+                        "name": "S",
+                        "parameterSpace": {
+                            "taskParameterDefinitions": [
+                                {
+                                    "name": "Frame",
+                                    "type": "CHUNK[INT]",
+                                    "range": "1-10",
+                                    "chunks": {
+                                        "defaultTaskCount": "{{Param.Count}}",
+                                        "rangeConstraint": "CONTIGUOUS",
+                                    },
+                                }
+                            ]
+                        },
+                        "script": {
+                            "actions": {
+                                "onRun": {
+                                    "command": "echo",
+                                    "args": ["{{Task.Param.Frame}}"],
+                                }
+                            }
+                        },
+                    }
+                ],
+            },
+            supported_extensions=["TASK_CHUNKING"],
+        )
+        with pytest.raises(ExpressionError, match="not a valid integer"):
+            create_job(job_template=t, job_parameter_values={})

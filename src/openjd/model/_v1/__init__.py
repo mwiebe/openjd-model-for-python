@@ -508,7 +508,16 @@ class CancelationMethodNotifyThenTerminate:
         self.notify_period_in_seconds = notify_period_in_seconds
 
 
-class CompatibilityError(Exception):
+class CompatibilityError(ValueError):
+    """Raised when two parameter definitions for the same name (e.g. a
+    job-template definition and an environment-template definition for
+    the same parameter) declare incompatible types or constraints.
+
+    Inherits from :class:`ValueError` to match the v0 reference's
+    exception class hierarchy — callers that catch ``ValueError`` for
+    constraint validation also catch this.
+    """
+
     pass
 
 

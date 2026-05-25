@@ -1072,7 +1072,7 @@ fix should land, and (where applicable) suggests a
    `TaskParameterValue` instances with matching chunk strings
    are recognised.
 
-3. **Make `CompatibilityError` inherit from `ValueError`.**
+3. ~~**Make `CompatibilityError` inherit from `ValueError`.**
    Reference: `class CompatibilityError(ValueError)`.
    Today: `class CompatibilityError(Exception)`. Fix in
    `src/openjd/model/_v1/__init__.py`:
@@ -1083,9 +1083,17 @@ fix should land, and (where applicable) suggests a
    ```
 
    Add a single-line test at
-   `test/openjd/model_v1/test_errors.py::test_compatibility_error_is_value_error`.
+   `test/openjd/model_v1/test_errors.py::test_compatibility_error_is_value_error`.~~
+   **Resolved.** `CompatibilityError` in
+   `src/openjd/model/_v1/__init__.py` now inherits from
+   `ValueError` (with a docstring explaining the rationale).
+   Tests in `test/openjd/model_v1/test_errors.py::TestCompatibilityError`
+   (5 tests): direct `issubclass`, MRO ordering, catch-via-parent,
+   end-to-end raise via `merge_job_parameter_definitions` with
+   conflicting types, and end-to-end catch via the `ValueError`
+   parent.
 
-4. **Map `ModelError::FormatStringError` →
+4. ~~**Map `ModelError::FormatStringError` →
    `FormatStringError`, not `ModelValidationError`.** File:
    `rust-bindings/src/model/errors.rs::model_err_to_py`.
    Reuse the existing `PyFormatStringValidationError` registered
@@ -1109,7 +1117,40 @@ fix should land, and (where applicable) suggests a
 
    Adds parity with the reference's exception class hierarchy.
    xfail at
-   `test/openjd/model_v1/test_known_gaps.py::test_format_string_error_class`.
+   `test/openjd/model_v1/test_known_gaps.py::test_format_string_error_class`.~~
+   **Resolved.** All three error-bucket mappings are now wired:
+   * `ModelError::FormatStringError { message, .. }` →
+     `PyFormatStringValidationError` (re-exported as
+     `FormatStringError` from the v1 wrapper, matching
+     `openjd.expr.FormatStringValidationError`).
+   * `ModelError::Expression(expr_err)` →
+     `PyExpressionError` (the same class
+     `openjd.expr.evaluate_expression` raises).
+   * `ModelError::Compatibility(msg)` → the Python-side
+     `CompatibilityError` class. Because `CompatibilityError`
+     is Python-only (it lives in `openjd.model._v1.__init__`
+     for legacy compatibility), the binding resolves the class
+     at error-mapping time via `Python::attach` +
+     `py.import("openjd.model._v1").getattr("CompatibilityError")`.
+     The GIL is already held by every `model_err_to_py` call
+     site (they all run inside `#[pyfunction]` /
+     `#[pymethods]` bodies), and `Compatibility` errors are
+     rare in practice, so the import-by-name overhead is
+     acceptable. The implementation includes a fallback to
+     `PyModelValidationError` if the import or
+     `CompatibilityError(msg)` construction fails — should
+     never happen in practice but prevents a panic if the
+     module isn't loaded.
+   New regression tests in
+   `test/openjd/model_v1/test_errors.py::TestExpressionErrorMapping`
+   pin the `Expression` mapping via a real-world
+   create-job-time trigger (CHUNK[INT] `defaultTaskCount`
+   format string resolving to a non-integer). The
+   `FormatStringError` arm has no Python-reachable
+   create-job-time trigger today (decode-time format-string
+   parse errors batch under `ModelValidationError`, by
+   design); the wiring is correct and will surface the right
+   class once upstream hits the dedicated variant.
 
 ### Medium priority — surface visibility / wrapper module
 
