@@ -1535,7 +1535,7 @@ fix should land, and (where applicable) suggests a
     `test_preprocess_relative_path_error` test to assert the
     relative path appears in the message.
 
-18. **Spec drift: document the binding-side surface more
+18. ~~**Spec drift: document the binding-side surface more
     explicitly.** The spec already covers the major shapes,
     but the following are observably exposed but not
     mentioned:
@@ -1551,7 +1551,52 @@ fix should land, and (where applicable) suggests a
 
     Add a "Bindings-internal helpers" section near the bottom
     of the spec listing these with a "subject to change"
-    disclaimer.
+    disclaimer.~~ **Resolved.** Walked the listed surface,
+    verified each item against the live binding, and updated
+    the spec accordingly:
+
+    * `StepParameterSpaceIterator.reset_iter()` — added an
+      example call to the iterator's section in the spec
+      with a paragraph explaining when callers want it
+      (re-walking the same parameter space without rebuilding
+      the iterator's state — useful for chunked spaces where
+      iterator state is non-trivial).
+    * `Step.__eq__` / `Step.__hash__` — the spec now
+      documents that ``Step`` compares and hashes by **name
+      only** (matches `StepDependencyGraph`'s identity model
+      and the worker agent's runtime correlation). The
+      report's "un-`__hash__`-ability" claim was incorrect:
+      `Step` *is* hashable; the gap was only that the
+      name-only semantic was undocumented.
+    * `_openjd_rs.create_environment`, `_openjd_rs.deserialize_step`,
+      and `_openjd_rs.evaluate_let_bindings` (also exposed
+      and used by the sessions runtime) — new
+      "Bindings-internal helpers" section at the bottom of
+      the spec, each with a one-paragraph description and a
+      runnable example. The section carries a "subject to
+      change" disclaimer; ordinary template/job consumers
+      shouldn't need any of them.
+    * `ParameterValueType` — added as a row in the
+      Compatibility Aliases table (alias for
+      `JobParameterType`, kept for legacy v0 callers).
+    * `DEFAULT_MEMORY_LIMIT` / `DEFAULT_OPERATION_LIMIT` — these
+      are *expression-engine* constants exposed under
+      `openjd.expr` (already documented in
+      `specs/python-expr-interface.md`), not in the model
+      layer; verified at runtime that
+      `hasattr(openjd.model._v1, 'DEFAULT_MEMORY_LIMIT')` is
+      False. The report's inclusion of these in the model
+      drift list was a category error; nothing to add to the
+      model spec.
+
+    Spec hygiene also caught: the Exceptions table at the end
+    of the spec was missing `TokenError` (an orphan
+    `| TokenError | Exception |` row was floating below the
+    Pickle Support section); merged it back into the
+    canonical table. Also updated the table's
+    `CompatibilityError` row from `Exception` to `ValueError`
+    to reflect the inheritance change made in the resolution
+    of recommendation #3.
 
 19. **Backfill format-string and combination-expression
     integration tests** in `test/openjd/model_v1/`. The

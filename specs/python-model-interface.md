@@ -74,6 +74,31 @@ symbol from its canonical location.
 
 ### Decode
 
+> **Implementation note — Python-dict input.** The four
+> `decode_*_template{,_str}` functions all share a Python→Rust
+> conversion shim. The dict-shaped variants (`decode_job_template`
+> / `decode_environment_template`) convert the Python dict to
+> `serde_json::Value` via `json.dumps` + `serde_json::from_str`
+> before handing off to the upstream Rust validator. This detour
+> looks wasteful but the alternatives are not actually faster:
+> a `pythonize::depythonize` prototype (against `pyo3 = 0.28`)
+> regressed end-to-end decode time by 12% on small templates and
+> 5% on medium templates (20 steps × 20 parameter definitions),
+> because CPython's C-level `json.dumps` plus
+> `serde_json::from_str` together are faster than `pythonize`'s
+> PyO3-driven recursive walk. The conversion step is also only
+> ~0.6% of end-to-end cost — template validation in
+> [`openjd_model::decode_*_template`][openjd-model] dominates —
+> so even a notionally faster shim wouldn't be visible to
+> callers. As a side effect, both paths reject non-JSON-
+> serialisable values (`Decimal`, `Path`, custom objects) with
+> the same `unsupported type` error: `pythonize` would not
+> have changed that.
+>
+> If decode performance ever matters for a workload, the
+> productive optimisation lives in the upstream Rust validator,
+> not in the conversion shim.
+
 #### `decode_job_template`
 
 Decode and validate a job template from a Python dict. Mirrors the
@@ -354,6 +379,12 @@ step.dependencies           # Optional[list[StepDependency]]
 step.resolvedBindings       # Optional[list[str]] — let binding strings
 step.resolved_symtab        # Optional[SymbolTable] — resolved at step scope
 ```
+
+`Step` defines `__eq__` and `__hash__` by **name only** — two
+``Step`` instances with the same ``name`` compare equal and hash
+identically, regardless of script/parameter-space/etc. content.
+This matches how `StepDependencyGraph` and the worker agent
+identify steps for graph operations and runtime correlation.
 
 ### `StepScript`
 
@@ -839,7 +870,17 @@ it.names                    # {"Frame"} — property, not callable
 it.chunks_adaptive          # bool
 it.chunks_parameter_name    # Optional[str]
 it.chunks_default_task_count  # Optional[int]
+
+it.reset_iter()             # rewind to position 0; subsequent
+                            # for/next iteration yields the first
+                            # combination again
 ```
+
+`reset_iter()` is useful for callers that want to re-walk the same
+parameter space without rebuilding the iterator (the iterator caches
+non-trivial state for chunked spaces). Indexing (``it[i]``) is
+unaffected by iteration position; ``__contains__`` is also
+non-mutating.
 
 ### `StepDependencyGraph`
 
@@ -1001,6 +1042,7 @@ CancelationMethodNotifyThenTerminate(mode="NOTIFY_THEN_TERMINATE", notify_period
 | `EmbeddedFiles` | `list` | type alias |
 | `JobParameterValues` | `dict` | `dict[str, ParameterValue]` |
 | `TaskParameterSet` | `dict` | `dict[str, Any]` |
+| `ParameterValueType` | `JobParameterType` | legacy v0 name |
 
 > **Note.** Earlier versions exposed an ``IntRangeExpr`` alias under
 > ``openjd.model._v1`` for legacy parity with v0. Use
@@ -1078,7 +1120,8 @@ except DecodeValidationError as e:
 | `UnsupportedSchema` | `ValueError` |
 | `ExpressionError` | `ValueError` |
 | `FormatStringError` | `ValueError` |
-| `CompatibilityError` | `Exception` |
+| `CompatibilityError` | `ValueError` |
+| `TokenError` | `Exception` |
 
 ## Pickle Support
 
@@ -1124,4 +1167,60 @@ inputs that produced it — the template ``dict`` and the
 ``job_parameter_values`` for ``Job``, etc. — rather than the model
 itself. Targeted helpers will be considered case-by-case if a concrete
 serialisation need arises that cannot be met by re-decoding.
-| `TokenError` | `Exception` |
+
+
+## Bindings-internal helpers
+
+The following functions are exposed by the underlying Rust extension
+module ``openjd._openjd_rs`` but are **not** re-exported through the
+``openjd.model._v1`` wrapper. They exist to support the openjd-sessions
+runtime and the Deadline Cloud worker agent's wire-protocol decode
+path; ordinary template/job consumers should not need them. They are
+"subject to change" — signatures and semantics may evolve as the
+runtime layer matures.
+
+### `_openjd_rs.create_environment`
+
+Convert a template-time ``EnvironmentTemplate`` into a job-time
+``Environment``. Used by the sessions runtime when a session attaches
+an externally-defined environment (queue environment, host
+environment) to the job it's about to run.
+
+```python
+from openjd._openjd_rs import create_environment
+
+env = create_environment(env_template)  # template-time → job-time
+```
+
+### `_openjd_rs.deserialize_step`
+
+Reconstruct a job-side ``Step`` from the wire-protocol dict shape
+that the Deadline Cloud service's ``GetStepDetails`` /
+``BatchGetJobEntity`` API returns in the ``template`` field. The
+payload is a serialised ``openjd_model::job::Step`` (i.e. a
+*resolved* step, not a template-time ``StepTemplate``).
+
+```python
+from openjd._openjd_rs import deserialize_step
+
+step = deserialize_step(step_dict_from_service)
+session.run_task(step.script, ...)
+```
+
+### `_openjd_rs.evaluate_let_bindings`
+
+Evaluate a list of let-binding strings against a symbol table and
+return a new symbol table containing the bound names. Used at session
+runtime when a step's ``script.let`` bindings need to be resolved
+against the current task-scope symbols before invoking
+``Session.run_task``.
+
+```python
+from openjd._openjd_rs import evaluate_let_bindings
+
+resolved = evaluate_let_bindings(
+    ["end = Param.Start + Param.Count - 1"],
+    symtab,
+    profile=expr_profile,  # optional; ExprProfile for function-library scope
+)
+```
