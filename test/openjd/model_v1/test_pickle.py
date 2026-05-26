@@ -186,3 +186,117 @@ def test_task_parameter_value_round_trip():
     loaded = pickle.loads(pickle.dumps(v))
     assert loaded == v
     assert loaded.value == "hello"
+
+
+# ── Equality + hashability invariants ──────────────────────────
+
+
+def test_document_type_hashable():
+    """``DocumentType`` is hashable so it can be used as a dict key
+    or set member alongside the other enum-shaped pyclasses
+    (``JobParameterType``, ``TaskParameterType``,
+    ``SpecificationRevision``)."""
+    from openjd.model._v1.types import DocumentType
+
+    # Self-consistent: same variant hashes to the same value.
+    assert hash(DocumentType.YAML) == hash(DocumentType.YAML)
+    assert hash(DocumentType.JSON) == hash(DocumentType.JSON)
+
+    # Distinct variants hash distinctly.
+    assert hash(DocumentType.YAML) != hash(DocumentType.JSON)
+
+    # Usable as a set member and dict key.
+    s = {DocumentType.YAML, DocumentType.JSON}
+    assert len(s) == 2
+    d = {DocumentType.YAML: "y", DocumentType.JSON: "j"}
+    assert d[DocumentType.YAML] == "y"
+
+
+def test_model_profile_equality_after_pickle():
+    """``ModelProfile`` round-trips through pickle and the loaded
+    instance compares equal to the original via ``__eq__``. Pinned
+    for parity with the spec's "Pickle Support" claim that pickled
+    state ``compares equal to the original``."""
+    from openjd._openjd_rs import ModelExtension, ModelProfile, SpecificationRevision
+
+    p = ModelProfile(
+        SpecificationRevision.V2023_09,
+        extensions=[ModelExtension.EXPR, ModelExtension.TASK_CHUNKING],
+    )
+    loaded = pickle.loads(pickle.dumps(p))
+    assert loaded == p
+
+
+def test_model_profile_equality_negative():
+    """Different profiles compare unequal — confirms ``__eq__``
+    isn't accidentally trivial."""
+    from openjd._openjd_rs import ModelExtension, ModelProfile, SpecificationRevision
+
+    p_a = ModelProfile(SpecificationRevision.V2023_09, extensions=[ModelExtension.EXPR])
+    p_b = ModelProfile(SpecificationRevision.V2023_09, extensions=[ModelExtension.TASK_CHUNKING])
+    p_c = ModelProfile(SpecificationRevision.V2023_09)
+    assert p_a != p_b
+    assert p_a != p_c
+
+
+def test_caller_limits_equality_after_pickle():
+    from openjd._openjd_rs import CallerLimits
+
+    limits = CallerLimits(
+        max_step_count=10,
+        max_env_count=5,
+        max_task_count=1_000_000,
+        max_step_script_size=2048,
+        max_environment_size=1024,
+        max_template_size=4096,
+    )
+    loaded = pickle.loads(pickle.dumps(limits))
+    assert loaded == limits
+
+
+def test_caller_limits_equality_negative():
+    """Different caller-limits configurations compare unequal."""
+    from openjd._openjd_rs import CallerLimits
+
+    a = CallerLimits(max_step_count=10)
+    b = CallerLimits(max_step_count=20)
+    c = CallerLimits()
+    assert a != b
+    assert a != c
+
+
+def test_validation_context_equality_after_pickle():
+    from openjd._openjd_rs import (
+        CallerLimits,
+        ModelExtension,
+        ModelProfile,
+        SpecificationRevision,
+        ValidationContext,
+    )
+
+    ctx = ValidationContext(
+        ModelProfile(SpecificationRevision.V2023_09, extensions=[ModelExtension.EXPR]),
+        caller_limits=CallerLimits(max_step_count=10),
+    )
+    loaded = pickle.loads(pickle.dumps(ctx))
+    assert loaded == ctx
+
+
+def test_validation_context_equality_negative():
+    """Two contexts with different profiles or different caller
+    limits compare unequal."""
+    from openjd._openjd_rs import (
+        CallerLimits,
+        ModelExtension,
+        ModelProfile,
+        SpecificationRevision,
+        ValidationContext,
+    )
+
+    profile_a = ModelProfile(SpecificationRevision.V2023_09, extensions=[ModelExtension.EXPR])
+    profile_b = ModelProfile(SpecificationRevision.V2023_09)
+    ctx_a = ValidationContext(profile_a, caller_limits=CallerLimits(max_step_count=10))
+    ctx_b = ValidationContext(profile_b, caller_limits=CallerLimits(max_step_count=10))
+    ctx_c = ValidationContext(profile_a, caller_limits=CallerLimits(max_step_count=99))
+    assert ctx_a != ctx_b  # different profile
+    assert ctx_a != ctx_c  # different caller limits

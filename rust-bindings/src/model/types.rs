@@ -11,8 +11,8 @@ use openjd_model::TemplateSpecificationVersion;
 use openjd_model::JobParameterType;
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1.types", name = "DocumentType", eq, eq_int, from_py_object)]
-#[derive(Clone, Copy, PartialEq)]
+#[pyclass(module = "openjd.model._v1.types", name = "DocumentType", eq, eq_int, frozen, hash, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(non_camel_case_types)]
 pub(crate) enum PyDocumentType {
     YAML = 0,

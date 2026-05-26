@@ -1281,18 +1281,49 @@ fix should land, and (where applicable) suggests a
 
 ### Medium priority — small parity / spec items
 
-9. **Make `DocumentType` hashable.** Add `frozen, hash` to
+9. ~~**Make `DocumentType` hashable.** Add `frozen, hash` to
    `#[pyclass(...)]` in `rust-bindings/src/model/types.rs`,
    matching `JobParameterType` and `TaskParameterType`. Add a
    regression test in
-   `test/openjd/model_v1/test_pickle.py::TestDocumentType::test_hashable`.
+   `test/openjd/model_v1/test_pickle.py::TestDocumentType::test_hashable`.~~
+   **Resolved.** Added `frozen, hash` to the
+   `#[pyclass(...)]` config and `Eq, Hash` to the
+   `#[derive(...)]`, matching the pattern used by
+   `PyJobParameterType` and `PyTaskParameterType`. Pinned by
+   a new `test_document_type_hashable` test in
+   `test/openjd/model_v1/test_pickle.py` covering self-hash,
+   distinct-variant distinct-hash, set membership, and dict
+   key usage.
 
-10. **Pickle support for `ModelProfile`, `CallerLimits`,
+10. ~~**Pickle support for `ModelProfile`, `CallerLimits`,
     `ValidationContext`.** Spec's "Pickle Support" table lists
     all three as pickleable, but at runtime `pickle.dumps(profile)`
     fails. Implement `__reduce__` returning
     `(_reconstruct_kwargs, (cls, kwargs))`. Add tests in
-    `test/openjd/model_v1/test_pickle.py`.
+    `test/openjd/model_v1/test_pickle.py`.~~ **Resolved.**
+    `__reduce__` was already implemented; the actual gap was
+    that the loaded instances didn't compare equal to the
+    original because the pyclasses didn't expose `__eq__`. Added
+    structural `__eq__` to all three at the binding boundary
+    (the underlying upstream Rust structs don't derive
+    `PartialEq` — the `extensions` field is a `HashSet`, and
+    `CallerLimits`/`ValidationContext` upstream don't derive
+    it either):
+    * `PyModelProfile::__eq__` compares `revision()` and the
+      `extensions()` `HashSet`.
+    * `PyCallerLimits::__eq__` compares all six `Option<usize>`
+      / `Option<u64>` fields.
+    * `PyValidationContext::__eq__` composes the per-component
+      `__eq__` we just added on `PyModelProfile` and
+      `PyCallerLimits`.
+    Pinned by 6 new tests in `test/openjd/model_v1/test_pickle.py`:
+    `test_model_profile_equality_after_pickle`,
+    `test_model_profile_equality_negative`,
+    `test_caller_limits_equality_after_pickle`,
+    `test_caller_limits_equality_negative`,
+    `test_validation_context_equality_after_pickle`, and
+    `test_validation_context_equality_negative` (covering both
+    differing-profile and differing-caller-limits cases).
 
 11. **Tighten `validate_*_capability_name` signatures to the
     reference's strict form.** Today the wrapper's signature is

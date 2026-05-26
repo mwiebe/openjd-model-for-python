@@ -322,6 +322,19 @@ impl PyModelProfile {
         let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
         Ok((helper, args.into()))
     }
+
+    /// Structural equality. Two profiles are equal iff they share the
+    /// same revision and the same set of extensions. Required by the
+    /// pickle round-trip contract documented in
+    /// `specs/python-model-interface.md` ("Pickle Support") — a
+    /// loaded profile must compare equal to the original. The
+    /// underlying `ModelProfile` upstream doesn't derive
+    /// `PartialEq` (its `extensions` field is a `HashSet`), so we
+    /// implement equality field-by-field at the binding boundary.
+    fn __eq__(&self, other: &Self) -> bool {
+        self.inner.revision() == other.inner.revision()
+            && self.inner.extensions() == other.inner.extensions()
+    }
 }
 
 // Helper for in-tree Rust callers that have a PyModelProfile and need
@@ -433,6 +446,19 @@ impl PyCallerLimits {
         let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
         Ok((helper, args.into()))
     }
+
+    /// Structural equality — required by the pickle round-trip
+    /// contract. Compares all six fields; the underlying
+    /// `CallerLimits` upstream doesn't derive `PartialEq`, so we
+    /// implement equality field-by-field at the binding boundary.
+    fn __eq__(&self, other: &Self) -> bool {
+        self.inner.max_step_count == other.inner.max_step_count
+            && self.inner.max_env_count == other.inner.max_env_count
+            && self.inner.max_task_count == other.inner.max_task_count
+            && self.inner.max_step_script_size == other.inner.max_step_script_size
+            && self.inner.max_environment_size == other.inner.max_environment_size
+            && self.inner.max_template_size == other.inner.max_template_size
+    }
 }
 
 impl Default for PyCallerLimits {
@@ -515,5 +541,18 @@ impl PyValidationContext {
         )?;
         let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
         Ok((helper, args.into()))
+    }
+
+    /// Structural equality — required by the pickle round-trip
+    /// contract. A context is equal to another iff both its
+    /// `profile` and its `caller_limits` are equal. Composes the
+    /// per-component `__eq__` we just added on `PyModelProfile` and
+    /// `PyCallerLimits`.
+    fn __eq__(&self, other: &Self) -> bool {
+        let p_self = PyModelProfile { inner: self.inner.profile.clone() };
+        let p_other = PyModelProfile { inner: other.inner.profile.clone() };
+        let cl_self = PyCallerLimits { inner: self.inner.caller_limits.clone() };
+        let cl_other = PyCallerLimits { inner: other.inner.caller_limits.clone() };
+        p_self.__eq__(&p_other) && cl_self.__eq__(&cl_other)
     }
 }

@@ -331,6 +331,14 @@ class CallerLimits:
         optional fields as keyword arguments.
         """
 
+    def __eq__(self, other: CallerLimits) -> builtins.bool:
+        r"""
+        Structural equality — required by the pickle round-trip
+        contract. Compares all six fields; the underlying
+        `CallerLimits` upstream doesn't derive `PartialEq`, so we
+        implement equality field-by-field at the binding boundary.
+        """
+
 @typing.final
 class CancelationMode:
     @property
@@ -1573,6 +1581,18 @@ class ModelProfile:
         extensions=...)`.
         """
 
+    def __eq__(self, other: ModelProfile) -> builtins.bool:
+        r"""
+        Structural equality. Two profiles are equal iff they share the
+        same revision and the same set of extensions. Required by the
+        pickle round-trip contract documented in
+        `specs/python-model-interface.md` ("Pickle Support") — a
+        loaded profile must compare equal to the original. The
+        underlying `ModelProfile` upstream doesn't derive
+        `PartialEq` (its `extensions` field is a `HashSet`), so we
+        implement equality field-by-field at the binding boundary.
+        """
+
 @typing.final
 class ParsedExpression:
     @property
@@ -2471,6 +2491,15 @@ class ValidationContext:
         r"""
         Pickle support — round-trips through `__init__(profile,
         caller_limits=...)`.
+        """
+
+    def __eq__(self, other: ValidationContext) -> builtins.bool:
+        r"""
+        Structural equality — required by the pickle round-trip
+        contract. A context is equal to another iff both its
+        `profile` and its `caller_limits` are equal. Composes the
+        per-component `__eq__` we just added on `PyModelProfile` and
+        `PyCallerLimits`.
         """
 
 @typing.final
