@@ -7,13 +7,15 @@ name: Rust Quality
 # not run `cargo test` (which covers doctests and any pure-Rust unit
 # tests added to the bindings crate).
 #
-# The bindings' Cargo.toml references the openjd-rs workspace via
-# `path = "../../openjd-rs/crates/..."`. This workflow clones openjd-rs
-# alongside this repo so those paths resolve.
+# The bindings' `openjd-*` dependencies come from crates.io at the
+# versions pinned in `rust-bindings/Cargo.toml`. There is no sibling
+# repository requirement — local-development overrides are documented
+# in a commented-out `[patch.crates-io]` block at the bottom of that
+# file.
 #
-# TODO: once the Rust sources are `cargo fmt`ed and the clippy findings
-# (including 10 pyo3-0.28 FromPyObject deprecations) are addressed, add
-# `cargo fmt --check` and `cargo clippy -- -D warnings` as hard gates.
+# TODO: once the Rust sources are `cargo fmt`ed, add `cargo fmt
+# --check` as a hard gate. (Clippy is already a hard gate via
+# `-D warnings` below.)
 
 on:
   pull_request:
@@ -42,18 +44,7 @@ jobs:
       - name: Checkout openjd-model-for-python
         uses: actions/checkout@v4
         with:
-          path: openjd-model-for-python
           ref: ${{ inputs.branch || inputs.tag || github.ref }}
-
-      - name: Checkout openjd-rs (sibling workspace)
-        # The bindings' Cargo.toml references openjd-rs crates via
-        # path = "../../openjd-rs/crates/...". Clone openjd-rs alongside this
-        # repo so those paths resolve.
-        uses: actions/checkout@v4
-        with:
-          repository: OpenJobDescription/openjd-rs
-          path: openjd-rs
-          ref: main
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -66,29 +57,21 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            openjd-model-for-python/target
-          key: cargo-${{ matrix.os }}-${{ hashFiles('openjd-model-for-python/Cargo.lock', 'openjd-model-for-python/rust-bindings/Cargo.toml') }}
+            target
+          key: cargo-${{ matrix.os }}-${{ hashFiles('Cargo.lock', 'rust-bindings/Cargo.toml') }}
           restore-keys: |
             cargo-${{ matrix.os }}-
 
       - name: cargo build
-        working-directory: openjd-model-for-python
         run: cargo build --manifest-path rust-bindings/Cargo.toml --all-targets
 
-      - name: cargo clippy (informational)
-        working-directory: openjd-model-for-python
-        # Not failing the build on warnings yet — see TODO at the top of
-        # this file. Clippy output is visible in the CI log so regressions
-        # can be reviewed before they compound.
-        run: cargo clippy --manifest-path rust-bindings/Cargo.toml --all-targets
-        continue-on-error: true
+      - name: cargo clippy
+        run: cargo clippy --manifest-path rust-bindings/Cargo.toml --all-targets -- -D warnings
 
       - name: cargo test
-        working-directory: openjd-model-for-python
         run: cargo test --manifest-path rust-bindings/Cargo.toml
 
       - name: cargo test --doc
-        working-directory: openjd-model-for-python
         # Runs separately from `cargo test` above so a docstring regression
         # (e.g. a Python example rustdoc tries to compile as Rust) is
         # clearly visible in the CI log.

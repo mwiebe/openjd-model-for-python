@@ -8,9 +8,9 @@ name = "_openjd_rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-openjd-expr = { path = "../../openjd-rs/crates/openjd-expr" }
-openjd-model = { path = "../../openjd-rs/crates/openjd-model" }
-openjd-sessions = { path = "../../openjd-rs/crates/openjd-sessions" }
+openjd-expr = "0.1.1"
+openjd-model = "0.2.0"
+openjd-sessions = "0.2.2"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 uuid = { version = "1", features = ["v4"] }
 serde_yaml = "0.9"
@@ -33,3 +33,23 @@ stub-gen = ["pyo3-stub-gen"]
 windows = { version = "0.62", features = [
     "Win32_Foundation",
 ] }
+
+# ── Local-development overrides (opt-in) ──────────────────────────────
+#
+# By default, `openjd-expr`, `openjd-model`, and `openjd-sessions` are
+# resolved from crates.io at the versions pinned above. When iterating
+# on `openjd-rs` alongside this repo, uncomment the patch block below
+# to redirect the dependency resolver to a sibling `~/openjd-rs`
+# checkout. Cargo will use the local source for builds in this
+# workspace without any version-bump dance — useful for cross-repo
+# work where you'd otherwise need to publish a new openjd-* version
+# on every iteration.
+#
+# Leave this commented out for committed work and CI; the published
+# wheel is built against the crates.io versions, which is what the
+# Cargo.lock file pins.
+#
+# [patch.crates-io]
+# openjd-expr     = { path = "../../openjd-rs/crates/openjd-expr" }
+# openjd-model    = { path = "../../openjd-rs/crates/openjd-model" }
+# openjd-sessions = { path = "../../openjd-rs/crates/openjd-sessions" }

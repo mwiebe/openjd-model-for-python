@@ -4,7 +4,7 @@
 
 `openjd-model-for-python` is the Python distribution of [Open Job Description](https://github.com/OpenJobDescription)'s data model, the expression language used inside templates, and the session runtime types those models drive. It ships a single PyPI package (`openjd-model`) with three import roots — `openjd.expr`, `openjd.model`, and (consumed from a sibling repo) `openjd.sessions` — backed by a single PyO3 extension module, `openjd._openjd_rs`.
 
-The canonical specification lives in [openjd-specifications](https://github.com/OpenJobDescription/openjd-specifications). The Rust implementation that this repository wraps lives in [openjd-rs](https://github.com/OpenJobDescription/openjd-rs); the bindings depend on it via `path = "../../openjd-rs/crates/..."` in `rust-bindings/Cargo.toml`, so the two repos must be checked out side by side.
+The canonical specification lives in [openjd-specifications](https://github.com/OpenJobDescription/openjd-specifications). The Rust implementation that this repository wraps lives in [openjd-rs](https://github.com/OpenJobDescription/openjd-rs) and is consumed via crates.io: `rust-bindings/Cargo.toml` pins `openjd-expr`, `openjd-model`, and `openjd-sessions` to specific published versions. A commented-out `[patch.crates-io]` block at the bottom of that file documents how to redirect to a sibling `~/openjd-rs` checkout when iterating across both repos; see "Working with `openjd-rs` in flight" below.
 
 This package is currently in transition from a pure-Python implementation to Rust-backed bindings:
 
@@ -216,7 +216,7 @@ PRs run these checks (all must pass):
 | Workflow | What it does |
 |----------|--------------|
 | **Code Quality** (`code_quality.yml`) | Python build + tests on `{ubuntu, windows, macos} × {3.9, 3.10, 3.11, 3.12, 3.13, 3.14}`. Uses the shared `OpenJobDescription/.github` reusable workflow, which runs `hatch run lint`, `hatch run typing`, and `hatch run test`. Transitively builds the Rust extension via the `maturin develop` step in `hatch.toml`. |
-| **Rust Quality** (`rust_quality.yml`) | `cargo build --all-targets`, `cargo test`, and `cargo test --doc` against `rust-bindings/`. `cargo clippy` is informational (`continue-on-error: true`) — see the TODO at the top of `rust_quality.yml`. Runs on `{ubuntu, windows, macos}`. Clones `OpenJobDescription/openjd-rs` alongside this repo so the `path = "../../openjd-rs/..."` references resolve. |
+| **Rust Quality** (`rust_quality.yml`) | `cargo build --all-targets`, `cargo clippy --all-targets -- -D warnings` (hard gate), `cargo test`, and `cargo test --doc` against `rust-bindings/`. Runs on `{ubuntu, windows, macos}`. Resolves `openjd-*` dependencies from crates.io at the versions pinned in `rust-bindings/Cargo.toml`. |
 | **CodeQL** (`codeql.yml`) | GitHub's static analysis. |
 | **PR opened/responded/auto_approve/stale_prs_and_issues/record_pr** | Repo housekeeping; not relevant to code changes. |
 | **Release Bump / Release Publish** (`release_bump.yml`, `release_publish.yml`) | Driven by python-semantic-release; only run on `mainline`/`release` branches. |
@@ -245,26 +245,40 @@ Releases are automated via [python-semantic-release](https://python-semantic-rel
 
 The wheel version comes from git via `setuptools_scm`, plumbed through the in-tree PEP 517 build backend `_build_backend.py` and the developer-facing `scripts/maturin_build.py`. Both write `src/openjd/model/_version.py` and patch `pyproject.toml`'s `dynamic = ["version"]` to a static version for the duration of the build, so the wheel and `__version__` agree. Don't commit `_version.py` — it's gitignored.
 
-## Sibling-Repo Dependency on openjd-rs
+## Working with `openjd-rs` in flight
 
-`rust-bindings/Cargo.toml` references `openjd-rs` crates by relative path:
+`rust-bindings/Cargo.toml` consumes the three Rust workspace crates from crates.io:
 
 ```toml
+openjd-expr     = "0.1.1"
+openjd-model    = "0.2.0"
+openjd-sessions = "0.2.2"
+```
+
+For day-to-day work — including CI — this is the source of truth. No sibling-repo checkout is needed; `cargo build --manifest-path rust-bindings/Cargo.toml` resolves the dependencies straight from the registry.
+
+When a change spans both repos (e.g. a new public API in `openjd-rs` that needs to be wired into `rust-bindings/src/<component>/`), there are two workflows depending on whether the upstream change is shipped or in flight.
+
+**Upstream change is already published.** Bump the version pin in `rust-bindings/Cargo.toml`, run `cargo update -p openjd-<crate>`, then wire the new symbols into the binding source, wrapper module, spec, and tests. Regenerate `_openjd_rs.pyi` if any public binding signature changed.
+
+**Upstream change is still in flight in `~/openjd-rs`.** Uncomment the `[patch.crates-io]` block at the bottom of `rust-bindings/Cargo.toml`:
+
+```toml
+[patch.crates-io]
 openjd-expr     = { path = "../../openjd-rs/crates/openjd-expr" }
 openjd-model    = { path = "../../openjd-rs/crates/openjd-model" }
 openjd-sessions = { path = "../../openjd-rs/crates/openjd-sessions" }
 ```
 
-This means **`openjd-rs` must be checked out at `~/openjd-rs`** (or the equivalent sibling location) for the bindings to build. The CI workflow does this for you by checking out `OpenJobDescription/openjd-rs` at `main` next to this repo. Locally, ensure both repos are present.
+This redirects the dependency resolver to your local `~/openjd-rs` checkout for as long as the patch is active. Iterate freely. **Re-comment the block before committing.** The committed `Cargo.toml` should always resolve from crates.io so CI and any downstream consumer reproduce the exact pinned versions.
 
-When working on a change that spans both repos (e.g. a new public API), prefer:
+The merge sequence for a cross-repo feature is therefore:
 
-1. Land the change in `openjd-rs` first, on whatever branch you are using.
-2. Re-run `cargo build --manifest-path rust-bindings/Cargo.toml` here — the path-dep picks up the new symbols immediately, no version bump needed.
-3. Wire the new symbols into `rust-bindings/src/<component>/`, the wrapper module, the spec, and the tests in this repo.
-4. If the binding signature changed, regenerate `_openjd_rs.pyi`.
+1. Land and publish the change in `openjd-rs` first — get the new version onto crates.io.
+2. Bump the `openjd-*` version in `rust-bindings/Cargo.toml`.
+3. Wire the new symbols into the binding source, the wrapper module, the spec, and the tests in this repo. Regenerate `_openjd_rs.pyi` if any binding signature changed.
 
-If `openjd-rs` is on a branch other than `main`, the CI workflow won't see your in-flight changes — coordinate the merge order so `openjd-rs` lands first.
+The `[patch.crates-io]` block is for the iterative work *between* steps 1 and 2 — it keeps the inner dev loop fast without requiring a publish-per-change cadence.
 
 ## Compliance and Copyright Headers
 
