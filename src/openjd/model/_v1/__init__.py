@@ -55,6 +55,7 @@ from openjd._openjd_rs import (
     create_job,
     preprocess_job_parameters,
     merge_job_parameter_definitions,
+    evaluate_let_bindings,
     # Used by document_string_to_object below
     DocumentType,
     # Used by decode_job_template signature
@@ -599,6 +600,7 @@ __all__ = (
     "decode_job_template_str",
     "decode_template",
     "document_string_to_object",
+    "evaluate_let_bindings",
     "merge_job_parameter_definitions",
     "preprocess_job_parameters",
     # Capability validation (Python-only)

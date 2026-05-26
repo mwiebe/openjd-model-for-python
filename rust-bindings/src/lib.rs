@@ -71,6 +71,7 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyHostContext>()?;
     m.add_class::<PyExprProfile>()?;
     m.add_class::<PyParsedExpression>()?;
+    m.add_class::<PyEvalResult>()?;
     m.add_class::<PyPathMappingRule>()?;
     m.add_class::<PyRangeExpr>()?;
     m.add_class::<PyIntRange>()?;

@@ -1,14 +1,15 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for ``openjd.expr.evaluate_let_bindings``.
+"""Tests for ``openjd.model._v1.evaluate_let_bindings``.
 
 ``evaluate_let_bindings`` is the entry point sessions use to resolve
 step-level ``let:`` bindings at runtime against a symbol table. The
-function is part of the spec'd public surface (``openjd.expr``
-re-export) but until this file landed had no dedicated test coverage —
-all existing call sites were inside the model layer's runtime
-machinery.
+function is implemented in the ``openjd-model`` Rust crate (it produces
+``ModelError`` and is consumed by the model crate's
+``create_job/instantiate.rs`` runtime machinery), so the Python surface
+lives under ``openjd.model._v1`` alongside ``create_job`` and
+``preprocess_job_parameters`` rather than under ``openjd.expr``.
 
 Coverage anchored to the report's recommendation #6:
 * Single binding (the spec example).
@@ -21,12 +22,8 @@ Coverage anchored to the report's recommendation #6:
 
 import pytest
 
-from openjd.expr import (
-    evaluate_let_bindings,
-    ExpressionError,
-    ExprProfile,
-    SymbolTable,
-)
+from openjd.expr import ExpressionError, ExprProfile, SymbolTable
+from openjd.model._v1 import evaluate_let_bindings
 
 
 class TestEvaluateLetBindings:
@@ -40,7 +37,7 @@ class TestEvaluateLetBindings:
 
     def test_single_binding_spec_example(self) -> None:
         """The exact example from
-        ``specs/python-expr-interface.md::evaluate_let_bindings``."""
+        ``specs/python-model-interface.md::evaluate_let_bindings``."""
         st = SymbolTable({"Param.Start": 1, "Param.Count": 10})
         result = evaluate_let_bindings(["end = Param.Start + Param.Count - 1"], st)
         assert result["end"].item() == 10

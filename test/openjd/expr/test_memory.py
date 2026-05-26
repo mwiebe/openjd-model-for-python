@@ -51,49 +51,43 @@ class TestMemoryLimit:
 
 
 class TestPeakMemory:
-    """Tests for peak_memory tracking via ParsedExpression."""
+    """Tests for peak_memory tracking via ParsedExpression.evaluate_with_metrics."""
 
     def test_peak_memory_returned(self) -> None:
-        """ParsedExpression.peak_memory_usage is set after evaluate()."""
+        """ParsedExpression.evaluate_with_metrics() reports peak memory > 0."""
         parsed = parse_expression("1 + 2")
-        parsed.evaluate()
-        assert parsed.peak_memory_usage > 0
+        result = parsed.evaluate_with_metrics()
+        assert result.peak_memory > 0
 
     def test_peak_memory_increases_with_complexity(self) -> None:
         """More complex expressions use more peak memory."""
-        simple = parse_expression("1")
-        simple.evaluate()
-        complex_expr = parse_expression("[1, 2, 3, 4, 5]")
-        complex_expr.evaluate()
-        assert complex_expr.peak_memory_usage > simple.peak_memory_usage
+        simple = parse_expression("1").evaluate_with_metrics()
+        complex_expr = parse_expression("[1, 2, 3, 4, 5]").evaluate_with_metrics()
+        assert complex_expr.peak_memory > simple.peak_memory
 
     def test_peak_memory_for_string(self) -> None:
         """String values contribute to peak memory."""
-        short = parse_expression('"a"')
-        short.evaluate()
-        long = parse_expression('"a" * 100')
-        long.evaluate()
-        assert long.peak_memory_usage > short.peak_memory_usage
+        short = parse_expression('"a"').evaluate_with_metrics()
+        long = parse_expression('"a" * 100').evaluate_with_metrics()
+        assert long.peak_memory > short.peak_memory
 
     def test_intermediate_values_released(self) -> None:
         """Intermediate values are released, keeping peak memory bounded."""
         # (1+2) + (3+4) should release intermediate results
         parsed = parse_expression("(1 + 2) + (3 + 4)")
-        result = parsed.evaluate()
-        assert result.item() == 10
-        assert parsed.peak_memory_usage > 0
+        result = parsed.evaluate_with_metrics()
+        assert result.value.item() == 10
+        assert result.peak_memory > 0
 
-    def test_peak_memory_resets_each_call(self) -> None:
-        """peak_memory_usage is reset on each evaluate() call, not accumulated."""
+    def test_peak_memory_reflects_each_call(self) -> None:
+        """Each evaluate_with_metrics() call reports only that call's peak memory."""
         parsed = parse_expression("Param.X * 100")
         # First call with large string
-        parsed.evaluate(values={"Param.X": "a" * 1000})
-        large_memory = parsed.peak_memory_usage
+        large = parsed.evaluate_with_metrics(values={"Param.X": "a" * 1000})
         # Second call with small value
-        parsed.evaluate(values={"Param.X": "b"})
-        small_memory = parsed.peak_memory_usage
-        # Should reflect only the second call, not accumulate
-        assert small_memory < large_memory
+        small = parsed.evaluate_with_metrics(values={"Param.X": "b"})
+        # Each result reflects only its own call, not the other.
+        assert small.peak_memory < large.peak_memory
 
 
 class TestEvaluateExpressionReturnsExprValue:
@@ -127,17 +121,17 @@ class TestMemoryReleasedInComprehensions:
         of O(inner_list_size).
         """
         # Single iteration baseline
-        single = parse_expression("len([i for i in range(100)])")
-        single.evaluate()
-        single_peak = single.peak_memory_usage
+        single = parse_expression("len([i for i in range(100)])").evaluate_with_metrics()
+        single_peak = single.peak_memory
 
         # 100 iterations — peak should be similar to single, plus the small result list
-        multi = parse_expression("[len([i for i in range(100)]) for k in range(100)]")
-        multi.evaluate()
+        multi = parse_expression(
+            "[len([i for i in range(100)]) for k in range(100)]"
+        ).evaluate_with_metrics()
 
-        # With the leak, multi_peak would be ~100x single_peak.
+        # With the leak, multi.peak_memory would be ~100x single_peak.
         # Without the leak, it should be only modestly larger (result list of 100 ints).
-        assert multi.peak_memory_usage < single_peak * 5
+        assert multi.peak_memory < single_peak * 5
 
     def test_deeply_nested_comprehension_bounded_memory(self) -> None:
         """Triple-nested comprehensions with len() should have bounded peak memory.
@@ -145,22 +139,21 @@ class TestMemoryReleasedInComprehensions:
         This is the pattern from the conformance test. Without the fix,
         N=100 used ~118MB. With the fix, it uses ~55KB.
         """
-        parsed = parse_expression(
+        result = parse_expression(
             "[len([i for i in [len(range(100)) for j in range(100)]]) for k in range(100)]"
-        )
-        parsed.evaluate()
+        ).evaluate_with_metrics()
         # Should be well under 1MB — the result is just 100 ints
-        assert parsed.peak_memory_usage < 1_000_000
+        assert result.peak_memory < 1_000_000
 
     @pytest.mark.skip(reason="Rust memory accounting differs from Python")
     def test_comprehension_function_call_releases_args(self) -> None:
         """Function args evaluated inside a comprehension loop are released properly."""
         # sorted() takes a list arg, processes it, returns a new list.
         # The input arg should be released after each call.
-        parsed = parse_expression("[len(sorted(range(50))) for i in range(50)]")
-        parsed.evaluate()
+        multi = parse_expression(
+            "[len(sorted(range(50))) for i in range(50)]"
+        ).evaluate_with_metrics()
 
-        single = parse_expression("len(sorted(range(50)))")
-        single.evaluate()
+        single = parse_expression("len(sorted(range(50)))").evaluate_with_metrics()
 
-        assert parsed.peak_memory_usage < single.peak_memory_usage * 20
+        assert multi.peak_memory < single.peak_memory * 20

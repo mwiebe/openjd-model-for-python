@@ -52,22 +52,14 @@ parsed.local_bindings     # set()
 result = parsed.evaluate(values={"Param.Start": 10, "Param.Items": [1, 2, 3]})
 result.item()  # 13
 
-# Check resource usage after evaluation
-parsed.peak_memory_usage  # bytes used
-parsed.operation_count    # operations performed
-```
-
-### `evaluate_let_bindings`
-
-Evaluate let bindings against a symbol table. Used by sessions to resolve
-step-level `let` bindings at runtime.
-
-```python
-from openjd.expr import evaluate_let_bindings, SymbolTable
-
-st = SymbolTable({"Param.Start": 1, "Param.Count": 10})
-result = evaluate_let_bindings(["end = Param.Start + Param.Count - 1"], st)
-result["end"].item()  # 10
+# Or, inspect resource usage of a single evaluation by calling
+# `evaluate_with_metrics` instead — it returns an `EvalResult` that
+# bundles the value with the per-call peak-memory and operation-count
+# counters.
+metered = parsed.evaluate_with_metrics(values={"Param.Start": 10, "Param.Items": [1, 2, 3]})
+metered.value.item()       # 13
+metered.peak_memory        # bytes used (>= 0)
+metered.operation_count    # operations performed (>= 0)
 ```
 
 ### `escape_format_string`
@@ -458,11 +450,89 @@ parsed.accessed_symbols    # {"Param.Items"}
 parsed.called_functions    # {"upper", "len"}
 parsed.local_bindings      # {"x"}
 
-result = parsed.evaluate(values={"Param.Items": ["hi", "hello", "yo"]})
-result.item()              # ["HELLO"]
-parsed.peak_memory_usage   # bytes
-parsed.operation_count     # ops
+# Lightweight evaluation — returns just the value.
+value = parsed.evaluate(values={"Param.Items": ["hi", "hello", "yo"]})
+value.item()               # ["HELLO"]
 ```
+
+`ParsedExpression` exposes two evaluation methods, mirroring the
+`evaluate` / `evaluate_with_metrics` split on the underlying
+`openjd_expr::ParsedExpression` Rust type:
+
+* `evaluate(...)` returns an [`ExprValue`](#exprvalue) directly. Use this
+  when you don't need resource-usage metrics — it skips the
+  metric-tracking overhead.
+* `evaluate_with_metrics(...)` returns an [`EvalResult`](#evalresult)
+  that bundles the evaluated `ExprValue` with the per-call resource
+  counters (`peak_memory` in bytes, `operation_count`).
+
+Both methods accept the same keyword-only arguments: `values`,
+`profile`, `target_type`, `path_format`, `memory_limit`,
+`operation_limit`. See the [`evaluate_expression`](#evaluate_expression)
+documentation for argument semantics — `ParsedExpression.evaluate` /
+`evaluate_with_metrics` differ from the top-level entry point only in
+that they reuse a single parse for many evaluations.
+
+```python
+from openjd.expr import parse_expression
+
+parsed = parse_expression("sum(range(Param.N))")
+
+# When metrics matter, use evaluate_with_metrics. The returned
+# EvalResult is local to this call — concurrent or sequential calls
+# do not affect each other.
+r1 = parsed.evaluate_with_metrics(values={"Param.N": 1000})
+r1.value.item()           # 499500
+r1.peak_memory            # bytes
+r1.operation_count        # ops
+
+r2 = parsed.evaluate_with_metrics(values={"Param.N": 5})
+# r1 is unchanged — its peak_memory and operation_count still reflect
+# the earlier large evaluation.
+r1.operation_count > r2.operation_count
+```
+
+### `EvalResult`
+
+The structured return type of
+[`ParsedExpression.evaluate_with_metrics`](#parsedexpression). Mirrors
+the `EvalResult` struct in the underlying `openjd_expr` Rust crate.
+
+```python
+from openjd.expr import EvalResult, ExprValue, parse_expression
+
+# Construction is rarely needed in user code (the binding produces the
+# instance); the constructor is exposed primarily for pickle round-trip.
+r = EvalResult(value=ExprValue(42), peak_memory=128, operation_count=7)
+
+r.value             # ExprValue — the evaluation result
+r.peak_memory       # int — peak bytes consumed by the evaluator
+r.operation_count   # int — operations performed by the evaluator
+```
+
+`EvalResult` is a frozen value class:
+
+* The three fields are read-only and set once at construction.
+* `__eq__` compares all three fields. Value-field equality defers to
+  `ExprValue.equals`, so two `EvalResult`s differing only by
+  int-vs-float on the value field compare equal (consistent with
+  `ExprValue(1) == ExprValue(1.0)`).
+* `__hash__` is **not** implemented — `EvalResult` is unhashable. The
+  `value` field can hold list / path / range values that aren't
+  themselves hashable, so pinning a hash on the wrapper would diverge
+  from `ExprValue` (which deliberately omits `__hash__`).
+* `__reduce__` round-trips through the constructor, so `EvalResult`
+  pickles cleanly.
+* `__repr__` is parseable and includes all three fields:
+  `EvalResult(value=ExprValue(42), peak_memory=128, operation_count=7)`.
+
+The previous `ParsedExpression.peak_memory_usage` and
+`ParsedExpression.operation_count` attributes have been **removed**.
+They were stored in atomics that were overwritten on every `evaluate()`
+call — concurrent or sequential evaluations of the same instance
+produced last-writer-wins values, which made them unsafe to read across
+threads and surprising to read sequentially. `EvalResult` replaces them
+with a per-call value bundle that is local to its caller.
 
 ### `PathFormat`
 
@@ -705,6 +775,51 @@ compare unequal — this preserves source identity rather than
 canonicalising whitespace. Equal format strings hash equal, so the
 type is suitable as a `set` / `dict` key.
 
+**Copying referenced symbol values.**
+``copy_used_symtab_values(source, dest)`` walks every ``{{...}}``
+interpolation in this format string and copies the symbol-table
+entries the expressions reference from ``source`` into ``dest``.
+
+The copy stops at the symbol value — it does **not** descend into
+property or method access on that value. So for
+``"{{Param.Path.stem.upper()}}"`` the copy includes ``Param.Path``
+but not ``Param.Path.stem``: the value is a path, and ``.stem`` is
+evaluated by the expression engine at resolve time. Symbols
+referenced by the format string but absent from ``source`` are
+silently skipped — partial misses are not an error here, on the
+assumption that the caller is staging values for a later
+``resolve`` / ``resolve_string`` that will surface any real gaps.
+
+Mirrors the Rust crate's
+``FormatString::copy_used_symtab_values(source, dest)``. The
+``openjd-model`` crate uses it to build the filtered
+``resolved_symtab`` it stores on resolved environment templates so
+that downstream re-evaluation only sees the symbols the template
+actually referenced.
+
+```python
+from openjd.expr import FormatString, SymbolTable
+
+src = SymbolTable({
+    "Param": {"Frame": 42, "Name": "shot01", "Unused": 99},
+})
+dest = SymbolTable()
+
+FormatString("render --frame {{Param.Frame}} --name {{Param.Name}}") \
+    .copy_used_symtab_values(src, dest)
+
+dest["Param.Frame"].item()   # 42
+dest["Param.Name"].item()    # "shot01"
+"Param.Unused" in dest       # False — not referenced
+
+# .upper() is a method call, so the copy stops at Param.Name —
+# Param.Name.upper is *not* a symbol, it's a value-side method.
+dest2 = SymbolTable()
+FormatString("{{Param.Name.upper()}}").copy_used_symtab_values(src, dest2)
+dest2["Param.Name"].item()       # "shot01"
+"Param.Name.upper" in dest2      # False
+```
+
 ## Exceptions
 
 ```python
@@ -796,6 +911,7 @@ original.
 | ``PathMappingRule`` | ``to_dict()`` / ``from_dict()`` |
 | ``HostContext`` | one of three classmethods (``none``, ``unresolved``, ``with_rules``) |
 | ``ExprProfile`` | constructor arguments (``revision``, ``extensions``, ``host_context``) |
+| ``EvalResult`` | constructor arguments (``value``, ``peak_memory``, ``operation_count``) |
 | ``ExpressionError``, ``ExpressionTypeError``, ``RangeExprError``, ``FormatStringValidationError`` | standard exception pickle, under their canonical ``openjd.expr`` module path |
 
 The runtime type ``ParsedExpression`` is not pickleable — it holds

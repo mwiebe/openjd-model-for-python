@@ -20,7 +20,7 @@ pub(crate) use expr_value::PyExprValue;
 pub(crate) use expr_value::_reconstruct_expr_value;
 pub(crate) use symbol_table::PySymbolTable;
 pub(crate) use profile::{PyExprExtension, PyExprProfile, PyExprRevision, PyHostContext};
-pub(crate) use parsed_expression::{PyParsedExpression, parse_expression};
+pub(crate) use parsed_expression::{PyEvalResult, PyParsedExpression, parse_expression};
 pub(crate) use evaluate::evaluate_expression;
 pub(crate) use path_mapping::PyPathMappingRule;
 pub(crate) use range_expr::{PyIntRange, PyRangeExpr};

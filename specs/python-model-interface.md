@@ -64,7 +64,7 @@ symbol from its canonical location.
 
 | Submodule | Contents |
 |---|---|
-| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `decode_template`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), Python-only compat (`SpecificationRevision`, `TemplateSpecificationVersion`, `ParameterValue`, `ValueReferenceConstants`, `RevisionExtensions`, `CancelationMethod*`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`), capability-validation helpers, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`, `FormatStringError`). Also re-exports `DecodeValidationError`, `ModelValidationError`, and `UnsupportedSchema` from `.errors` for top-level convenience. |
+| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `evaluate_let_bindings`, `decode_template`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), Python-only compat (`SpecificationRevision`, `TemplateSpecificationVersion`, `ParameterValue`, `ValueReferenceConstants`, `RevisionExtensions`, `CancelationMethod*`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`), capability-validation helpers, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`, `FormatStringError`). Also re-exports `DecodeValidationError`, `ModelValidationError`, and `UnsupportedSchema` from `.errors` for top-level convenience. |
 | `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the typed `JobParameterDefinition`/`TaskParameterDefinition`/`*UserInterface` variants, etc. |
 | `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, and the job-time `EmbeddedFile`. |
 | `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `TaskParameterType`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision` (Rust pyclass form), `CallerLimits`, `ValidationContext`. |
@@ -319,6 +319,64 @@ from openjd.model._v1 import decode_job_template, merge_job_parameter_definition
 template = decode_job_template(template={...})
 merged = merge_job_parameter_definitions(job_template=template)
 ```
+
+#### `evaluate_let_bindings`
+
+Evaluate a list of let-binding strings against a symbol table and
+return a new symbol table containing both the original input symbols
+and the new bound names.
+
+The function lives under ``openjd.model._v1`` rather than
+``openjd.expr`` because the binding implementation is in the
+``openjd-model`` Rust crate (``openjd_model::evaluate_let_bindings``)
+— it raises a model-layer ``ExpressionError`` and is consumed by
+the model crate's job-creation runtime (and by the sessions runtime
+when a step's ``script.let`` bindings need to be resolved against
+the current task-scope symbols before ``Session.run_task``).
+
+```python
+from openjd.expr import SymbolTable
+from openjd.model._v1 import evaluate_let_bindings
+
+symtab = SymbolTable({"Param.Start": 1, "Param.Count": 10})
+resolved = evaluate_let_bindings(
+    ["end = Param.Start + Param.Count - 1"],
+    symtab,
+)
+resolved["end"].item()         # 10
+resolved["Param.Start"].item() # 1 — input symbols are preserved
+```
+
+Each binding is parsed and evaluated in left-to-right order against
+the running symbol table, so a later binding may reference names
+introduced by earlier ones:
+
+```python
+result = evaluate_let_bindings(
+    [
+        "a = Param.X + 1",
+        "b = a * 2",
+        "c = a + b",
+    ],
+    SymbolTable({"Param.X": 10}),
+)
+result["a"].item(), result["b"].item(), result["c"].item()  # (11, 22, 33)
+```
+
+The full signature is
+``evaluate_let_bindings(bindings, symtab, *, profile=None) -> SymbolTable``.
+``profile`` accepts an [``ExprProfile``][profile] when the caller
+needs a non-default revision / extension set or a configured
+``HostContext``; omitting it uses the current profile.
+
+[profile]: ./python-expr-interface.md#exprrevision--exprextension--hostcontext--exprprofile
+
+A binding without ``=`` raises ``ExpressionError`` with the
+offending text in the message
+(``"Missing '=' in let binding: <text>"``); a binding whose
+right-hand side fails to parse or evaluate raises
+``ExpressionError`` with a diagnostic that names the offending
+binding (``"Error evaluating let binding '<name>': ..."``).
 
 ### Utility
 
@@ -1205,22 +1263,4 @@ from openjd._openjd_rs import deserialize_step
 
 step = deserialize_step(step_dict_from_service)
 session.run_task(step.script, ...)
-```
-
-### `_openjd_rs.evaluate_let_bindings`
-
-Evaluate a list of let-binding strings against a symbol table and
-return a new symbol table containing the bound names. Used at session
-runtime when a step's ``script.let`` bindings need to be resolved
-against the current task-scope symbols before invoking
-``Session.run_task``.
-
-```python
-from openjd._openjd_rs import evaluate_let_bindings
-
-resolved = evaluate_let_bindings(
-    ["end = Param.Start + Param.Count - 1"],
-    symtab,
-    profile=expr_profile,  # optional; ExprProfile for function-library scope
-)
 ```

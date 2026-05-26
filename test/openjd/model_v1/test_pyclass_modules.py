@@ -38,6 +38,7 @@ from openjd import _openjd_rs
 # under ``openjd.model._v1`` via Python's standard Enum support.
 EXPECTED_MODULES: dict[str, str] = {
     # openjd.expr
+    "EvalResult": "openjd.expr",
     "ExprExtension": "openjd.expr",
     "ExprProfile": "openjd.expr",
     "ExprRevision": "openjd.expr",

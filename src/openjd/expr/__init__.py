@@ -4,7 +4,7 @@
 """OpenJD Expression Language — Rust-backed implementation."""
 
 from openjd._openjd_rs import (
-    evaluate_let_bindings,
+    EvalResult,
     ExprType,
     ExprValue,
     SymbolTable,
@@ -53,6 +53,7 @@ __all__ = [
     "ExprValue",
     "SymbolTable",
     "ParsedExpression",
+    "EvalResult",
     "PathMappingRule",
     "PathFormat",
     "RangeExpr",
@@ -66,7 +67,6 @@ __all__ = [
     # Functions
     "evaluate_expression",
     "parse_expression",
-    "evaluate_let_bindings",
     "escape_format_string",
     # Errors
     "ExpressionError",

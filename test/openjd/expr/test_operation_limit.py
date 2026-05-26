@@ -270,72 +270,61 @@ class TestOperationLimitWithinBounds:
 
 
 class TestOperationCount:
-    """Tests for operation_count tracking via ParsedExpression."""
+    """Tests for operation_count tracking via ParsedExpression.evaluate_with_metrics."""
 
     def test_operation_count_returned(self) -> None:
-        """ParsedExpression.operation_count is set after evaluate()."""
-        parsed = parse_expression("1 + 2")
-        parsed.evaluate()
-        assert parsed.operation_count > 0
+        """evaluate_with_metrics() reports operation count > 0."""
+        result = parse_expression("1 + 2").evaluate_with_metrics()
+        assert result.operation_count > 0
 
     def test_constant_has_zero_operations(self) -> None:
         """A bare constant requires no operations."""
-        parsed = parse_expression("42")
-        parsed.evaluate()
-        assert parsed.operation_count == 0
+        result = parse_expression("42").evaluate_with_metrics()
+        assert result.operation_count == 0
 
     def test_single_function_call_is_one_operation(self) -> None:
         """A single operator is 1 operation."""
-        parsed = parse_expression("1 + 2")
-        parsed.evaluate()
-        assert parsed.operation_count == 1
+        result = parse_expression("1 + 2").evaluate_with_metrics()
+        assert result.operation_count == 1
 
     def test_range_counts_call_plus_iterations(self) -> None:
         """range(N) counts 1 call + N iterations."""
-        parsed = parse_expression("range(10)")
-        parsed.evaluate()
+        result = parse_expression("range(10)").evaluate_with_metrics()
         # 1 call + 10 iterations = 11
-        assert parsed.operation_count == 11
+        assert result.operation_count == 11
 
     def test_sum_range_counts_both(self) -> None:
         """sum(range(N)) counts operations for both range and sum."""
-        parsed = parse_expression("sum(range(10))")
-        parsed.evaluate()
+        result = parse_expression("sum(range(10))").evaluate_with_metrics()
         # range: 1 call + 10 iterations = 11
         # sum: 1 call + 10 iterations = 11
         # total = 22
-        assert parsed.operation_count == 22
+        assert result.operation_count == 22
 
     def test_list_comprehension_counts_iterations(self) -> None:
         """List comprehension counts iterations and per-element operations."""
-        parsed = parse_expression("[x * 2 for x in [1, 2, 3]]")
-        parsed.evaluate()
+        result = parse_expression("[x * 2 for x in [1, 2, 3]]").evaluate_with_metrics()
         # 3 iterations from comprehension + 3 __mul__ calls = 6
-        assert parsed.operation_count == 6
+        assert result.operation_count == 6
 
     def test_operation_count_increases_with_list_size(self) -> None:
         """Larger lists produce higher operation counts."""
-        small = parse_expression("sum(range(10))")
-        small.evaluate()
-        large = parse_expression("sum(range(100))")
-        large.evaluate()
+        small = parse_expression("sum(range(10))").evaluate_with_metrics()
+        large = parse_expression("sum(range(100))").evaluate_with_metrics()
         assert large.operation_count > small.operation_count
 
-    def test_operation_count_resets_each_call(self) -> None:
-        """operation_count is reset on each evaluate() call."""
+    def test_operation_count_reflects_each_call(self) -> None:
+        """Each evaluate_with_metrics() call reports only that call's operation count."""
         parsed = parse_expression("sum(range(Param.N))")
-        parsed.evaluate(values={"Param.N": 100})
-        large_count = parsed.operation_count
-        parsed.evaluate(values={"Param.N": 5})
-        small_count = parsed.operation_count
-        assert small_count < large_count
+        large = parsed.evaluate_with_metrics(values={"Param.N": 100})
+        small = parsed.evaluate_with_metrics(values={"Param.N": 5})
+        assert small.operation_count < large.operation_count
 
     def test_nested_comprehension_accumulates(self) -> None:
         """Nested operations accumulate operation counts."""
-        parsed = parse_expression("[x + 1 for x in range(10)]")
-        parsed.evaluate()
+        result = parse_expression("[x + 1 for x in range(10)]").evaluate_with_metrics()
         # range: 1 call + 10 iterations = 11
         # comprehension: 10 iterations
         # 10 __add__ calls
         # total = 31
-        assert parsed.operation_count == 31
+        assert result.operation_count == 31

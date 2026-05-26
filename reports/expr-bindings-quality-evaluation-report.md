@@ -614,27 +614,136 @@ accuracy or coverage; P3 items are quality-of-life improvements.
 
 ### P3 — Quality of life
 
-9. **Document or fix `ParsedExpression` metric thread safety.** Either
+9. ~~**Document or fix `ParsedExpression` metric thread safety.** Either
    (a) make `evaluate_with_metrics` return a structured `EvaluateResult`
    (value plus metrics) and deprecate the `peak_memory_usage` /
    `operation_count` attributes, or (b) document in the spec that the
    attributes hold *the most recent* evaluation's metrics and racing
-   readers should not rely on them across threads.
-10. **Add `FormatString.copy_used_symtab_values` to the spec or remove
+   readers should not rely on them across threads.~~ **Resolved
+   (option a).** New `EvalResult` pyclass added in
+   `rust-bindings/src/expr/parsed_expression.rs` mirroring the Rust
+   crate's `EvalResult` struct exactly: three frozen fields `value`
+   (`ExprValue`), `peak_memory` (bytes), and `operation_count`. The
+   field names match the Rust struct so the two surfaces stay in
+   lock-step. `ParsedExpression` now exposes two evaluation methods
+   one-to-one with the Rust crate: `evaluate(...) -> ExprValue` (calls
+   the lighter Rust `evaluate()`, no metric-tracking overhead) and
+   `evaluate_with_metrics(...) -> EvalResult` (calls the Rust
+   `evaluate_with_metrics()`). The previous racy `peak_memory_usage` /
+   `operation_count` attributes are **removed** — the underlying
+   `AtomicUsize` fields are gone from `PyParsedExpression`, so the
+   last-writer-wins observability gap is closed at the type level.
+   `EvalResult` is frozen, equal-by-fields (with `ExprValue.equals`
+   for the value field, matching cross-type numeric equality on
+   `ExprValue`), unhashable (consistent with `ExprValue`'s deliberate
+   omission of `__hash__`), and pickleable via `__reduce__` through
+   the constructor. New file `test/openjd/expr/test_eval_result.py`
+   pins the class shape (33 tests across 8 test classes covering
+   construction, fields, repr, eq, unhashable, pickle, module
+   hygiene, end-to-end via `evaluate_with_metrics` including the
+   `test_two_calls_return_independent_results` safety property, and a
+   companion test verifying `parsed.evaluate()` returns `ExprValue`
+   rather than `EvalResult` and that the racy attributes are gone).
+   Existing `test_memory.py`, `test_operation_limit.py`, and
+   `test_string_operation_counting.py` migrated to call
+   `evaluate_with_metrics()` and read `result.peak_memory` /
+   `result.operation_count` instead of the racy attributes. Spec
+   updated: the `parse_expression` example shows both `evaluate()`
+   and `evaluate_with_metrics()`, the `ParsedExpression` section is
+   split between the two methods, a new `EvalResult` subsection
+   documents the value class with its frozen/eq/unhashable/pickle/
+   repr semantics and the migration note explaining why the previous
+   attributes were removed, and the pickle table picks up the new
+   row. `EvalResult` registered in `EXPECTED_MODULES` in
+   `test/openjd/model_v1/test_pyclass_modules.py` so the rust-class
+   allowlist guard accepts it. Stubs regenerated; `hatch run lint`,
+   `hatch run test` (5094 passed, 94.29% coverage),
+   `cargo build --all-targets`, and `cargo clippy --all-targets --
+   -D warnings` all clean.
+10. ~~**Add `FormatString.copy_used_symtab_values` to the spec or remove
     it from the binding.** The method exists in
     `rust-bindings/src/expr/format_string.rs` and is exercised by
     `test/openjd/expr/test_copy_used_symtab.py` but isn't documented in
     `specs/python-expr-interface.md`. If it's used by sessions or model
     code this is a public API that needs a spec entry; if it's an
     internal helper, mark it `_copy_used_symtab_values` and let it stay
-    out of the spec.
-11. **Move or annotate `evaluate_let_bindings` binding source
+    out of the spec.~~ **Resolved (added to spec).** It is a public
+    API — `openjd-model`'s `create_job/instantiate.rs` calls it 15
+    times to build the filtered `resolved_symtab` it stores on
+    resolved environments and steps so the worker host only sees the
+    symbols the template actually referenced. Added a
+    "Copying referenced symbol values" subsection to the
+    `FormatString` section of `specs/python-expr-interface.md`,
+    after the equality/hashability paragraph and before
+    `## Exceptions`. The new section documents:
+    (a) the two-arg shape — copies entries `source -> dest` for
+    every symbol the format string's `{{...}}` interpolations
+    reference;
+    (b) the value-side stopping rule — the copy stops at the symbol
+    value, so `"{{Param.Path.stem.upper()}}"` includes
+    `Param.Path` but **not** `Param.Path.stem` because `.stem` is
+    a path-value method, evaluated by the expression engine at
+    resolve time rather than being a separate symbol-table key;
+    (c) the silent-skip behaviour for symbols absent from `source`
+    (callers stage values for a later `resolve()` that surfaces
+    real misses);
+    (d) the `openjd-model` consumer note, so future readers see why
+    the helper is shaped the way it is;
+    plus runnable examples covering the basic case and the
+    method-stop case. Mirrors the openjd-rs `public-api.md` entry
+    for `FormatString::copy_used_symtab_values(source, dest)`.
+
+11. ~~**Move or annotate `evaluate_let_bindings` binding source
     location.** It currently lives in
     `rust-bindings/src/model/create_job_fns.rs` even though the public
     surface is `openjd.expr`. Either move the `#[pyfunction]` into
     `rust-bindings/src/expr/` and delegate to the `openjd-model`
     crate's `evaluate_let_bindings`, or add a comment in
-    `rust-bindings/src/expr/mod.rs` pointing to the model module.
+    `rust-bindings/src/expr/mod.rs` pointing to the model module.~~
+    **Resolved by realigning the Python surface, not the binding
+    source.** Investigation showed the binding source is correctly
+    placed: `evaluate_let_bindings` is defined in
+    `openjd_model::evaluate_let_bindings` (in the model crate, not
+    the expr crate), it raises `ModelError`, and it is consumed by
+    the model crate's job-creation runtime — so the Rust source and
+    `rust-bindings/src/model/create_job_fns.rs` are already in
+    lock-step. The mismatch was at the **Python surface**:
+    `openjd.expr.evaluate_let_bindings` exposed it on a
+    crate-component boundary it doesn't belong to. Fixed by:
+    (a) dropping `evaluate_let_bindings` from
+    `openjd.expr.__init__.py` (import block, `__all__`, and the
+    dedicated spec section);
+    (b) re-exporting `evaluate_let_bindings` from
+    `openjd.model._v1.__init__.py` alongside `create_job`,
+    `preprocess_job_parameters`, and
+    `merge_job_parameter_definitions`;
+    (c) promoting the function in `specs/python-model-interface.md`
+    from a "Bindings-internal helpers / `_openjd_rs.*`" subsection
+    to a proper top-level `#### evaluate_let_bindings` entry under
+    `### Job Creation`, with a paragraph explaining why the function
+    lives in model rather than expr (Rust source location, error
+    type, consumer), runnable single-binding and chained-bindings
+    examples, full signature, optional `profile=` kwarg with a
+    cross-link to the expr spec's `ExprProfile` section, and the
+    two error-form contracts;
+    (d) updating the `openjd.model._v1` top-level entry in the
+    Module Layout table to list `evaluate_let_bindings`;
+    (e) `git mv test/openjd/expr/test_let_bindings.py ->
+    test/openjd/model_v1/test_let_bindings.py`, updating the module
+    docstring to explain the move, retargeting the import to
+    `from openjd.model._v1 import evaluate_let_bindings` (the
+    `ExpressionError` / `ExprProfile` / `SymbolTable` classes
+    remain in `openjd.expr` and are imported from there), and
+    re-anchoring the spec-example reference. The Rust binding
+    source (`py_evaluate_let_bindings`) was not moved — its current
+    location in `rust-bindings/src/model/create_job_fns.rs` is
+    correct because the underlying Rust definition is in
+    `openjd_model`, not `openjd_expr`. Verification: `cargo build`
+    + `cargo clippy --all-targets -- -D warnings` clean,
+    `hatch run lint` clean, `hatch run test` 5094 passed, 24
+    skipped, 9 xfailed, coverage 94.34%; the regenerated stub diff
+    is identical to the EvalResult-only one from Rec #9 (no
+    pyfunction signature change).
 12. **Update `AGENTS.md` to drop the reference to
     `function_library.rs`.** The "Function library
     (`function_library.rs`) — `get_default_library`,

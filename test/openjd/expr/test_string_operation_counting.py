@@ -25,113 +25,100 @@ class TestStringOperationCounting:
 
     def test_short_string_upper(self) -> None:
         """Short string (<= 256 chars): ceil(5/256) = 1 string op."""
-        parsed = parse_expression("'hello'.upper()")
-        parsed.evaluate()
+        result = parse_expression("'hello'.upper()").evaluate_with_metrics()
         # 1 (upper call) + 1 (ceil(5/256)) = 2
-        assert parsed.operation_count == 2
+        assert result.operation_count == 2
 
     def test_empty_string_upper(self) -> None:
         """Empty string: 0 string ops (length 0)."""
-        parsed = parse_expression("''.upper()")
-        parsed.evaluate()
+        result = parse_expression("''.upper()").evaluate_with_metrics()
         # 1 (upper call) + 0 (empty string) = 1
-        assert parsed.operation_count == 1
+        assert result.operation_count == 1
 
     def test_256_char_string_upper(self) -> None:
         """Exactly 256 chars: ceil(256/256) = 1 string op."""
-        parsed = parse_expression("('a' * 256).upper()")
-        parsed.evaluate()
+        result = parse_expression("('a' * 256).upper()").evaluate_with_metrics()
         # __mul__: 1 call + ceil(256/256)=1 = 2
         # upper: 1 call + ceil(256/256)=1 = 2
         # total = 4
-        assert parsed.operation_count == 4
+        assert result.operation_count == 4
 
     def test_257_char_string_upper(self) -> None:
         """257 chars crosses boundary: ceil(257/256) = 2 string ops."""
-        parsed = parse_expression("('a' * 257).upper()")
-        parsed.evaluate()
+        result = parse_expression("('a' * 257).upper()").evaluate_with_metrics()
         # __mul__: 1 call + ceil(257/256)=2 = 3
         # upper: 1 call + ceil(257/256)=2 = 3
         # total = 6
-        assert parsed.operation_count == 6
+        assert result.operation_count == 6
 
     def test_1000_char_string_upper(self) -> None:
         """1000 chars: ceil(1000/256) = 4 string ops per function."""
-        parsed = parse_expression("('a' * 1000).upper()")
-        parsed.evaluate()
+        result = parse_expression("('a' * 1000).upper()").evaluate_with_metrics()
         # __mul__: 1 + 4 = 5
         # upper: 1 + 4 = 5
         # total = 10
-        assert parsed.operation_count == 10
+        assert result.operation_count == 10
 
     def test_string_replace(self) -> None:
         """replace() counts string ops on the input string."""
-        parsed = parse_expression("('abc' * 100).replace('a', 'x')")
-        parsed.evaluate()
+        result = parse_expression("('abc' * 100).replace('a', 'x')").evaluate_with_metrics()
         # __mul__: 1 + ceil(300/256)=2 = 3
         # replace: 1 + ceil(300/256)=2 = 3
         # total = 6
-        assert parsed.operation_count == 6
+        assert result.operation_count == 6
 
     def test_string_split(self) -> None:
         """split() counts string ops on the input string."""
-        parsed = parse_expression("('a,' * 200).split(',')")
-        parsed.evaluate()
+        result = parse_expression("('a,' * 200).split(',')").evaluate_with_metrics()
         # __mul__: 1 + ceil(400/256)=2 = 3
         # split: 1 + ceil(400/256)=2 = 3
         # total = 6
-        assert parsed.operation_count == 6
+        assert result.operation_count == 6
 
     def test_string_concat(self) -> None:
         """String concatenation counts ops on both operands."""
-        parsed = parse_expression("('a' * 300) + ('b' * 300)")
-        parsed.evaluate()
+        result = parse_expression("('a' * 300) + ('b' * 300)").evaluate_with_metrics()
         # __mul__ for 'a'*300: 1 + ceil(300/256)=2 = 3
         # __mul__ for 'b'*300: 1 + ceil(300/256)=2 = 3
         # __add__: 1 + ceil(600/256)=3 = 4
         # total = 10
-        assert parsed.operation_count == 10
+        assert result.operation_count == 10
 
     def test_string_repetition(self) -> None:
         """String repetition counts ops on the result."""
-        parsed = parse_expression("'a' * 1000")
-        parsed.evaluate()
+        result = parse_expression("'a' * 1000").evaluate_with_metrics()
         # __mul__: 1 + ceil(1000/256)=4 = 5
-        assert parsed.operation_count == 5
+        assert result.operation_count == 5
 
     def test_string_contains(self) -> None:
         """'in' operator on strings counts string ops."""
-        parsed = parse_expression("'x' in ('a' * 500)")
-        parsed.evaluate()
+        result = parse_expression("'x' in ('a' * 500)").evaluate_with_metrics()
         # Rust counts: __mul__ (3) + __contains__ (3) + 1 dispatch = 7
-        assert parsed.operation_count == 7
+        assert result.operation_count == 7
 
     def test_regex_search(self) -> None:
         """re_search() counts string ops on the input string and pattern."""
-        parsed = parse_expression("re_search('a' * 500, r'b')")
-        parsed.evaluate()
+        result = parse_expression("re_search('a' * 500, r'b')").evaluate_with_metrics()
         # __mul__: 1 + ceil(500/256)=2 = 3
         # re_search: 1 + ceil((500+1)/256)=2 = 3
         # total = 6
-        assert parsed.operation_count == 6
+        assert result.operation_count == 6
 
     def test_repr_sh_string(self) -> None:
         """repr_sh() on a string counts string ops."""
-        parsed = parse_expression("repr_sh('a' * 500)")
-        parsed.evaluate()
+        result = parse_expression("repr_sh('a' * 500)").evaluate_with_metrics()
         # __mul__: 1 + ceil(500/256)=2 = 3
         # repr_sh: 1 + ceil(500/256)=2 = 3
         # total = 6
-        assert parsed.operation_count == 6
+        assert result.operation_count == 6
 
     def test_len_does_not_count_string_ops(self) -> None:
         """len() is a simple lookup and does NOT add string ops."""
-        parsed = parse_expression("len('a' * 1000)")
-        parsed.evaluate()
+        result = parse_expression("len('a' * 1000)").evaluate_with_metrics()
         # __mul__: 1 + ceil(1000/256)=4 = 5
         # len: 1 (just the function call, no string processing)
         # total = 6
-        assert parsed.operation_count == 6
+        assert result.operation_count == 6
 
 
 class TestPathOperationCounting:
@@ -139,39 +126,35 @@ class TestPathOperationCounting:
 
     def test_path_name(self) -> None:
         """path.name counts string ops on the path string."""
-        parsed = parse_expression("path('/a/b/c/d/e/f').name")
-        parsed.evaluate()
+        result = parse_expression("path('/a/b/c/d/e/f').name").evaluate_with_metrics()
         # path(): 1 + ceil(12/256)=1 = 2
         # .name: 1 + ceil(12/256)=1 = 2
         # total = 4
-        assert parsed.operation_count == 4
+        assert result.operation_count == 4
 
     def test_path_parent(self) -> None:
         """path.parent counts string ops."""
-        parsed = parse_expression("path('/a/b/c').parent")
-        parsed.evaluate()
+        result = parse_expression("path('/a/b/c').parent").evaluate_with_metrics()
         # path(): 1 + ceil(6/256)=1 = 2
         # .parent: 1 + ceil(6/256)=1 = 2
         # total = 4
-        assert parsed.operation_count == 4
+        assert result.operation_count == 4
 
     def test_path_join(self) -> None:
         """path / child counts string ops on both operands."""
-        parsed = parse_expression("path('/a/b') / 'c/d'")
-        parsed.evaluate()
+        result = parse_expression("path('/a/b') / 'c/d'").evaluate_with_metrics()
         # path(): 1 + ceil(4/256)=1 = 2
         # /: 1 + ceil(8/256)=1 = 2
         # total = 4
-        assert parsed.operation_count == 4
+        assert result.operation_count == 4
 
     def test_path_add_suffix(self) -> None:
         """path + suffix counts string ops."""
-        parsed = parse_expression("path('/a/b/file') + '.txt'")
-        parsed.evaluate()
+        result = parse_expression("path('/a/b/file') + '.txt'").evaluate_with_metrics()
         # path(): 1 + ceil(8/256)=1 = 2
         # +: 1 + ceil(12/256)=1 = 2
         # total = 4
-        assert parsed.operation_count == 4
+        assert result.operation_count == 4
 
 
 class TestStringOpLimitExceeded:
@@ -283,23 +266,20 @@ class TestStringOpCountPrecise:
     )
     def test_short_string_functions(self, expr: str, expected_count: int) -> None:
         """Short string functions add 1 string op (ceil(len/256) for len <= 256)."""
-        parsed = parse_expression(expr)
-        parsed.evaluate()
-        assert parsed.operation_count == expected_count
+        result = parse_expression(expr).evaluate_with_metrics()
+        assert result.operation_count == expected_count
 
     def test_join_counts_list_and_string(self) -> None:
         """join() counts list iteration AND string ops on separator processing."""
         # join(['a','b','c'], ',') = 1 call + 3 list iterations = 4
         # (join counts list items, not string ops on the items themselves)
-        parsed = parse_expression("['a','b','c'].join(',')")
-        parsed.evaluate()
-        assert parsed.operation_count == 4
+        result = parse_expression("['a','b','c'].join(',')").evaluate_with_metrics()
+        assert result.operation_count == 4
 
     def test_zfill_counts_string_ops(self) -> None:
         """zfill() counts string ops on the input."""
-        parsed = parse_expression("('a' * 300).zfill(500)")
-        parsed.evaluate()
+        result = parse_expression("('a' * 300).zfill(500)").evaluate_with_metrics()
         # __mul__: 1 + ceil(300/256)=2 = 3
         # zfill: 1 + ceil(300/256)=2 = 3
         # total = 6
-        assert parsed.operation_count == 6
+        assert result.operation_count == 6

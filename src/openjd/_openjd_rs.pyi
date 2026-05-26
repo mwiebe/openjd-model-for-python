@@ -26,6 +26,7 @@ __all__ = [
     "EnvironmentActions",
     "EnvironmentScript",
     "EnvironmentTemplate",
+    "EvalResult",
     "ExprExtension",
     "ExprProfile",
     "ExprRevision",
@@ -517,6 +518,50 @@ class EnvironmentTemplate:
         """
 
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class EvalResult:
+    r"""
+    Result of :meth:`ParsedExpression.evaluate_with_metrics`.
+
+    Bundles the evaluated :class:`ExprValue` together with the
+    per-call resource counters tracked by the evaluator. Mirrors
+    the ``EvalResult`` struct in the underlying ``openjd_expr`` Rust
+    crate (``value``, ``peak_memory``, ``operation_count``).
+
+    All three fields are populated atomically by a single call —
+    unlike the previous racy ``ParsedExpression.peak_memory_usage``
+    / ``operation_count`` attributes, an ``EvalResult`` is local to
+    its caller and safe to share or compare across threads.
+    """
+
+    @property
+    def value(self) -> ExprValue:
+        r"""
+        The evaluated value.
+        """
+
+    @property
+    def peak_memory(self) -> builtins.int:
+        r"""
+        Peak memory consumed during evaluation, in bytes.
+        """
+
+    @property
+    def operation_count(self) -> builtins.int:
+        r"""
+        Number of evaluator operations performed.
+        """
+
+    def __new__(
+        cls, value: ExprValue, peak_memory: builtins.int, operation_count: builtins.int
+    ) -> EvalResult: ...
+    def __repr__(self) -> builtins.str: ...
+    def __eq__(self, other: EvalResult) -> builtins.bool: ...
+    def __reduce__(self) -> tuple[type, tuple[ExprValue, builtins.int, builtins.int]]:
+        r"""
+        Pickle support — round-trips through the constructor.
+        """
 
 @typing.final
 class ExprExtension:
@@ -1675,10 +1720,6 @@ class ParsedExpression:
     def local_bindings(self) -> builtins.set[builtins.str]: ...
     @property
     def expr(self) -> builtins.str: ...
-    @property
-    def peak_memory_usage(self) -> builtins.int: ...
-    @property
-    def operation_count(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
     def evaluate(
         self,
@@ -1689,7 +1730,33 @@ class ParsedExpression:
         path_format: typing.Optional[PathFormat] = None,
         memory_limit: typing.Optional[builtins.int] = None,
         operation_limit: typing.Optional[builtins.int] = None,
-    ) -> ExprValue: ...
+    ) -> ExprValue:
+        r"""
+        Evaluate the expression and return the resulting :class:`ExprValue`.
+
+        Use :meth:`evaluate_with_metrics` instead when you also need the
+        resource-usage counters (peak memory, operation count).
+        """
+
+    def evaluate_with_metrics(
+        self,
+        *,
+        values: typing.Optional[typing.Any] = None,
+        profile: typing.Optional[ExprProfile] = None,
+        target_type: typing.Optional[ExprType] = None,
+        path_format: typing.Optional[PathFormat] = None,
+        memory_limit: typing.Optional[builtins.int] = None,
+        operation_limit: typing.Optional[builtins.int] = None,
+    ) -> EvalResult:
+        r"""
+        Evaluate the expression and return an :class:`EvalResult` with the
+        resulting value alongside the per-call resource-usage metrics
+        (``peak_memory`` in bytes, ``operation_count``).
+
+        This mirrors ``ParsedExpression::evaluate_with_metrics`` on the
+        underlying ``openjd_expr`` Rust crate. Use :meth:`evaluate` when
+        you don't need the metrics — it skips the metric-tracking overhead.
+        """
 
 @typing.final
 class PathMappingRule:
