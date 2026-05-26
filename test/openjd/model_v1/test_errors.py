@@ -3,7 +3,6 @@
 from openjd.model._v1 import (
     CompatibilityError,
     ExpressionError,
-    TokenError,
     decode_environment_template,
     decode_job_template,
     merge_job_parameter_definitions,
@@ -41,15 +40,6 @@ class TestExpressionError:
 
         # THEN
         assert str(error) == "Test message"
-
-
-class TestTokenError:
-    def test_msg(self):
-        # GIVEN
-        error = TokenError("0123456789", "5", 5)
-
-        # THEN
-        assert str(error) == "Unexpected '5' in '0123456789' after '01234'"
 
 
 class TestCompatibilityError:

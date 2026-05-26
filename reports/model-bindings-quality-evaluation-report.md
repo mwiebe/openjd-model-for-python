@@ -599,30 +599,66 @@ with `~~ ... ~~ **Resolved.**` as items are addressed.
 
 ### P2 — Reference-parity gaps (smaller surface)
 
-5. **Decide and document `JobParameter.description`**. v0 carries
+5. ~~**Decide and document `JobParameter.description`**. v0 carries
    `description` from the parameter definition into the materialised
    `JobParameter`; the Rust `job::JobParameter` struct
    (`openjd-rs/crates/openjd-model/src/job/mod.rs`) doesn't. Either
    add the field upstream and expose it, or document the dropping
-   rationale in the spec. (Rust crate + binding; not a v1-only fix.)
+   rationale in the spec. (Rust crate + binding; not a v1-only fix.)~~
+   **Resolved (documented).** Added a "No `description` field"
+   callout to the `JobParameter` section in
+   `specs/python-model-interface.md` explaining that the Rust
+   `job::JobParameter` struct deliberately omits `description` —
+   the description belongs to the *definition* on the template,
+   not the resolved `(name, type, value)` triple. Callers that
+   need the description should read it from
+   `JobTemplate.parameter_definitions` instead. The binding
+   mirrors the Rust struct.
 
-6. **Add `StepParameterSpaceIterator.validate_containment(params)`**.
+6. ~~**Add `StepParameterSpaceIterator.validate_containment(params)`**.
    v0 exposes a method that raises a specific `ValueError` if `params`
    does not match a position in the iterator's space. v1 has the same
    underlying capability via `__contains__` but no equivalent of the
    structured-error variant. Implement as a thin wrapper over the
    Rust iterator's `contains()` plus a message-construction helper.
    (`rust-bindings/src/model/step_param_space.rs`,
-   `test/openjd/model_v1/test_known_gaps.py::test_step_parameter_space_iterator_validate_containment`)
+   `test/openjd/model_v1/test_known_gaps.py::test_step_parameter_space_iterator_validate_containment`)~~
+   **Resolved.** Added a `validate_containment` method on
+   `PyStepParameterSpaceIterator` in
+   `rust-bindings/src/model/step_param_space.rs`. Thin wrapper
+   around the Rust iterator's pre-existing
+   `validate_containment(&TaskParameterSet) -> Result<(), String>`
+   method (the structured-error counterpart of `contains()` —
+   the diagnostic helper was already there in the Rust crate;
+   the binding just hadn't surfaced it). Returns `None` (Python's
+   implicit-`None` from a `()`-returning Rust function) on success
+   and translates `Err(msg)` into `PyValueError::new_err(msg)`,
+   matching the v0 contract. The xfail
+   `test_step_parameter_space_iterator_validate_containment`
+   graduated to
+   `test/openjd/model_v1/test_create_job.py::TestStepParameterSpaceIteratorValidateContainment`
+   (5 tests covering: method exposure, success returns None,
+   missing-name diagnostic, extra-name diagnostic, and
+   out-of-range value diagnostic).
 
-7. **Add `StepDependencyGraph.max_indegree` and `.max_outdegree`**
+7. ~~**Add `StepDependencyGraph.max_indegree` and `.max_outdegree`**
    properties. v0 callers (notably the dependencies-graph
    visualiser in `openjd-cli`) read these directly. Implement as
    `O(V)` walks over `_nodes` like the v0 reference. (`rust-bindings/
    src/model/step_dependency_graph.rs`,
-   `test/openjd/model_v1/test_known_gaps.py::test_step_dependency_graph_max_degree_properties`)
+   `test/openjd/model_v1/test_known_gaps.py::test_step_dependency_graph_max_degree_properties`)~~
+   **Resolved.** Added `max_indegree` and `max_outdegree`
+   getters on `PyStepDependencyGraph` as thin pass-throughs to
+   the existing Rust crate methods of the same name (which
+   already implement the `O(V)` walk over the node list and
+   return `0` for empty graphs). Both are `#[getter]`-annotated
+   so they read as Python properties, matching the v0 reference.
+   The xfail `test_step_dependency_graph_max_degree_properties`
+   graduated to
+   `TestStepDependencyGraphMaxDegreeProperties` (4 tests: chain
+   dependency, fan-in, fan-out, no-dependencies).
 
-8. **Reconcile `UnsupportedSchema` constructor with v0**. v0:
+8. ~~**Reconcile `UnsupportedSchema` constructor with v0**. v0:
    `UnsupportedSchema(version_str)` produces
    `str(e) == "Unsupported schema version: {version_str}"` and
    exposes `e._version`. v1: `UnsupportedSchema(msg)` is a plain
@@ -633,9 +669,26 @@ with `~~ ... ~~ **Resolved.**` as items are addressed.
    Option (a) is friendlier for v0 callers but couples the binding
    to the v0 message format. (`rust-bindings/src/model/errors.rs`,
    `specs/python-model-interface.md` Exceptions section,
-   `test/openjd/model_v1/test_known_gaps.py::test_unsupported_schema_constructor_parity`)
+   `test/openjd/model_v1/test_known_gaps.py::test_unsupported_schema_constructor_parity`)~~
+   **Resolved (option b — documented).** Added an
+   "`UnsupportedSchema` constructor divergence from v0" callout
+   to the Exceptions section of `specs/python-model-interface.md`
+   explaining: v0 wraps the version string in
+   `"Unsupported schema version: {version_str}"` and exposes a
+   private `_version` attribute; v1 treats the constructor
+   argument as the message verbatim and has no `_version`. The
+   exception class identity and the `ValueError` base are
+   preserved, so any v0 caller catching `UnsupportedSchema`
+   (or its base) still catches v1's. The Rust crate's
+   `ModelError::UnsupportedSchema` already crafts a
+   human-readable message — re-wrapping it in the v0 template
+   would be redundant. The xfail
+   `test_unsupported_schema_constructor_parity` and the
+   surrounding `test/openjd/model_v1/test_known_gaps.py` file
+   were both **deleted**: this is documented divergence, not an
+   open gap, so a permanent xfail-as-marker added no value.
 
-9. **Restore `TokenError → ExpressionError` inheritance**. v0
+9. ~~**Restore `TokenError → ExpressionError` inheritance**. v0
    defines `TokenError(ExpressionError)`, so `except ExpressionError`
    catches it. v1's wrapper module defines `TokenError(Exception)`
    directly. Fix: change `class TokenError(Exception)` →
@@ -645,9 +698,29 @@ with `~~ ... ~~ **Resolved.**` as items are addressed.
    `TokenError | ExpressionError` (transitively `ValueError`).
    (`src/openjd/model/_v1/__init__.py`,
    `specs/python-model-interface.md` Exceptions section,
-   `test/openjd/model_v1/test_known_gaps.py::test_token_error_inherits_expression_error`)
+   `test/openjd/model_v1/test_known_gaps.py::test_token_error_inherits_expression_error`)~~
+   **Resolved by removal.** Investigation showed that nothing in
+   the v1 surface raises `TokenError` — every `raise TokenError(...)`
+   in this repository lives in v0 (pure-Python) modules
+   (`_format_strings/_parser.py`, `_internal/_combination_expr.py`,
+   `_tokenstream.py`, `_range_expr.py`) and imports its
+   `TokenError` from `openjd.model._errors` (the v0 reference).
+   The v1 `class TokenError(Exception)` was a v0-compat shim
+   re-export with no v1 path that could ever produce it — dead
+   code. Dropped the class definition, the `__all__` entry, and
+   the stale comment-block reference from
+   `src/openjd/model/_v1/__init__.py`; dropped the
+   `TestTokenError` class from `test/openjd/model_v1/test_errors.py`;
+   removed the `TokenError | Exception` row from the Exceptions
+   table in `specs/python-model-interface.md`. The xfail
+   `test_token_error_inherits_expression_error` graduated to
+   `TestTokenErrorRemovedFromV1` (2 tests pinning the absence:
+   `not hasattr(v1, "TokenError")` /
+   `"TokenError" not in v1.__all__`, and that
+   `from openjd.model._v1 import TokenError` raises
+   `ImportError`).
 
-10. **Decide `Action.timeout` shape**. v0 returns `int` for integer
+10. ~~**Decide `Action.timeout` shape**. v0 returns `int` for integer
     timeouts and `FormatString` for format-string timeouts (under
     FEATURE_BUNDLE_1). v1 returns `str` (always — the FormatString's
     `raw()`). Either:
@@ -662,11 +735,25 @@ with `~~ ... ~~ **Resolved.**` as items are addressed.
     `Action.timeout` (`Optional[FormatString]`).
     (`rust-bindings/src/model/job.rs::PyAction::timeout`,
     `specs/python-model-interface.md` job-time Action section,
-    `test/openjd/model_v1/test_known_gaps.py::test_action_timeout_int_round_trip`)
+    `test/openjd/model_v1/test_known_gaps.py::test_action_timeout_int_round_trip`)~~
+    **Resolved (option b — return `Optional[FormatString]`).**
+    Changed `PyAction::timeout` in
+    `rust-bindings/src/model/job.rs` from
+    `Option<String>` (the `FormatString.raw()` flattening — the
+    "strange middle ground" the report called out) to
+    `Option<PyFormatString>`. Now mirrors the template-time
+    `Action.timeout` shape exactly; callers can both call
+    `.raw()` to read the unresolved template form and
+    `.resolve(...)` to evaluate against runtime symbols. Spec
+    entry updated under the job-time `Action` section. The
+    xfail `test_action_timeout_int_round_trip` graduated to
+    `TestActionTimeoutShape` with two tests: integer timeout
+    `60` round-trips through a `FormatString` whose `.raw()` is
+    `"60"`, and an omitted timeout reports `None`.
 
 ### P3 — Spec / build polish
 
-11. **Document the `merge_job_parameter_definitions` return shape**.
+11. ~~**Document the `merge_job_parameter_definitions` return shape**.
     The spec example shows `merged = merge_job_parameter_definitions(...)`
     but doesn't specify the return type. v0 returns
     `list[JobParameterDefinition]`; v1 returns `list[dict]` with
@@ -683,18 +770,35 @@ with `~~ ... ~~ **Resolved.**` as items are addressed.
     output for `preprocess_job_parameters`.
     (`specs/python-model-interface.md`
     `merge_job_parameter_definitions` subsection,
-    `rust-bindings/src/model/create_job_fns.rs::py_merge_job_parameter_definitions`)
+    `rust-bindings/src/model/create_job_fns.rs::py_merge_job_parameter_definitions`)~~
+    **Resolved (option b — documented).** Expanded the
+    `merge_job_parameter_definitions` subsection in
+    `specs/python-model-interface.md` to document the full
+    `list[dict]` return shape with every key (`name`, `type`,
+    `source`, optional `default` / `objectType` / `dataFlow`),
+    including the rationale: the dict shape is consistent with
+    `preprocess_job_parameters`, avoids re-materialising twelve
+    typed pyclass variants for what is most commonly a quick
+    "show the user every parameter and ask for values" pass, and
+    mirrors the underlying Rust struct field set.
 
-12. **Remove the unused `PyType` import in `task_parameter.rs`**
+12. ~~**Remove the unused `PyType` import in `task_parameter.rs`**
     (line 40). The cfg-gated `use PyType as _;` workaround at line
     581 only suppresses the warning under `--no-default-features`;
     when stub-gen is enabled the warning fires. Either drop
     `PyType` from the import list and remove the `as _;` line, or
     invert the `cfg` predicate to apply when stub-gen *is*
     enabled. Today the `cargo build --features stub-gen` log is
-    not fully clean. (`rust-bindings/src/model/task_parameter.rs`)
+    not fully clean. (`rust-bindings/src/model/task_parameter.rs`)~~
+    **Resolved.** Dropped `PyType` from the
+    `pyo3::types::{PyDict, PyList, PyType}` import in
+    `rust-bindings/src/model/task_parameter.rs` and removed the
+    `#[cfg(not(feature = "stub-gen"))] use PyType as _;`
+    workaround. Verified `cargo build --all-targets` (default
+    features) and `cargo build --all-targets --features stub-gen`
+    are now both warning-free.
 
-13. **Spec callout: "1 validation error" vs "1 validation errors"**
+13. ~~**Spec callout: "1 validation error" vs "1 validation errors"**
     and the "Parameter 'X': value Y exceeds maximum Z" vs "Value (Y)
     for parameter X must be at most Z." rewording in
     `ModelValidationError` / `DecodeValidationError` messages. The
@@ -707,7 +811,21 @@ with `~~ ... ~~ **Resolved.**` as items are addressed.
     field path, not the literal message" would help v0 callers
     migrate. (`specs/python-model-interface.md` — add a new
     "Migration notes" subsection or extend the existing
-    Pydantic-vs-no-Pydantic discussion.)
+    Pydantic-vs-no-Pydantic discussion.)~~
+    **Resolved.** Added a "Validation error messages are not
+    byte-identical to v0" callout to the Exceptions section of
+    `specs/python-model-interface.md` (right after the
+    `UnsupportedSchema` divergence note). Documents that v0's
+    messages inherit Pydantic phrasing — including the
+    "1 validation errors" pluralisation typo, template strings
+    like "Parameter 'X': value Y exceeds maximum Z", and
+    Pydantic's loc-tuple field-path formatting — while v1
+    produces messages from the Rust crate's own validator with
+    correct singular/plural agreement and concise
+    operator-anchored phrasings. Recommends matching by
+    exception class plus the field-path prefix (which both
+    bindings emit in the same `steps[0] -> script -> ...:`
+    shape) rather than literal message bytes.
 
 14. **Spec gap: `StepDependencyGraph.step_node` accepts both
     positional and keyword `stepname`** in v1, but v0 is kw-only.

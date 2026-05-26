@@ -1359,3 +1359,205 @@ class TestJobTimeFieldExposure:
         ef = embedded[0]
         assert ef.end_of_line is None
         assert ef.endOfLine is None
+
+
+class TestStepParameterSpaceIteratorValidateContainment:
+    """``validate_containment`` mirrors the v0 reference: returns ``None``
+    on success, raises ``ValueError`` with a detailed diagnostic on
+    failure. Wraps the underlying Rust crate's
+    ``StepParameterSpaceIterator::validate_containment``."""
+
+    def _build_iter(self):
+        from openjd.model._v1.job import StepParameterSpaceIterator
+
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [
+                    {
+                        "name": "S",
+                        "parameterSpace": {
+                            "taskParameterDefinitions": [
+                                {"name": "Frame", "type": "INT", "range": [1, 2, 3]},
+                            ],
+                        },
+                        "script": {"actions": {"onRun": {"command": "echo"}}},
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        return StepParameterSpaceIterator(space=j.steps[0].parameterSpace)
+
+    def _v(self, value: str):
+        """Build a TaskParameterValue with type INT (matching the
+        space's `Frame` parameter)."""
+        from openjd.model._v1.types import (
+            TaskParameterType,
+            TaskParameterValue,
+        )
+
+        return TaskParameterValue(type=TaskParameterType.INT, value=value)
+
+    def test_method_is_exposed(self) -> None:
+        it = self._build_iter()
+        assert hasattr(it, "validate_containment")
+        assert callable(it.validate_containment)
+
+    def test_returns_none_on_contained_value(self) -> None:
+        """A parameter set inside the space returns ``None``
+        (matching the v0 reference's implicit-``None`` shape)."""
+        it = self._build_iter()
+        result = it.validate_containment({"Frame": self._v("1")})
+        assert result is None
+
+    def test_raises_value_error_on_missing_name(self) -> None:
+        """A parameter set missing a name from the space raises
+        ``ValueError`` with a diagnostic message that names both the
+        observed and expected parameter sets."""
+        it = self._build_iter()
+        with pytest.raises(ValueError) as excinfo:
+            it.validate_containment({})
+        msg = str(excinfo.value)
+        # Pin substantive substrings rather than the whole message —
+        # the precise wording is set by the Rust crate.
+        assert "do not match" in msg
+        assert "Frame" in msg
+
+    def test_raises_value_error_on_extra_name(self) -> None:
+        """Extra parameter names raise ``ValueError`` for the same
+        reason — the names must match the space's names exactly."""
+        it = self._build_iter()
+        with pytest.raises(ValueError) as excinfo:
+            it.validate_containment({"Frame": self._v("1"), "Extra": self._v("0")})
+        msg = str(excinfo.value)
+        assert "do not match" in msg
+        assert "Extra" in msg
+
+    def test_raises_value_error_on_out_of_range_value(self) -> None:
+        """A parameter value outside the declared range raises
+        ``ValueError`` with a message naming the offending parameter."""
+        it = self._build_iter()
+        with pytest.raises(ValueError) as excinfo:
+            it.validate_containment({"Frame": self._v("999")})
+        msg = str(excinfo.value)
+        # The Rust crate's diagnostic names the offending parameter.
+        assert "Frame" in msg
+
+
+class TestStepDependencyGraphMaxDegreeProperties:
+    """``max_indegree`` and ``max_outdegree`` mirror the v0 reference's
+    properties; both are ``O(V)`` walks over the node list and return
+    ``0`` for an empty graph."""
+
+    def _build_graph(self, deps_spec):
+        """Build a graph from a list of (step_name, [depends_on_names])
+        tuples. Returns a StepDependencyGraph."""
+        from openjd.model._v1.job import StepDependencyGraph
+
+        steps = []
+        for name, deps in deps_spec:
+            step = {
+                "name": name,
+                "script": {"actions": {"onRun": {"command": "echo"}}},
+            }
+            if deps:
+                step["dependencies"] = [{"dependsOn": d} for d in deps]
+            steps.append(step)
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": steps,
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        return StepDependencyGraph(job=j)
+
+    def test_chain_dependency(self) -> None:
+        """A → B → C: max in-degree and max out-degree are both 1."""
+        g = self._build_graph([("A", []), ("B", ["A"]), ("C", ["B"])])
+        assert g.max_indegree == 1
+        assert g.max_outdegree == 1
+
+    def test_fan_in(self) -> None:
+        """A → C ← B: max in-degree is 2, max out-degree is 1."""
+        g = self._build_graph([("A", []), ("B", []), ("C", ["A", "B"])])
+        assert g.max_indegree == 2
+        assert g.max_outdegree == 1
+
+    def test_fan_out(self) -> None:
+        """A → B, A → C: max in-degree is 1, max out-degree is 2."""
+        g = self._build_graph([("A", []), ("B", ["A"]), ("C", ["A"])])
+        assert g.max_indegree == 1
+        assert g.max_outdegree == 2
+
+    def test_no_dependencies(self) -> None:
+        """A graph with no edges reports zero for both degrees."""
+        g = self._build_graph([("A", []), ("B", []), ("C", [])])
+        assert g.max_indegree == 0
+        assert g.max_outdegree == 0
+
+
+class TestActionTimeoutShape:
+    """``Action.timeout`` returns ``Optional[FormatString]`` — mirroring
+    template-time ``Action.timeout``. Callers can read the unresolved
+    template form via ``.raw()`` or evaluate against runtime symbols
+    via ``.resolve(...)``."""
+
+    def test_integer_timeout_returns_format_string(self) -> None:
+        from openjd.expr import FormatString
+
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {
+                            "actions": {"onRun": {"command": "echo", "timeout": 60}},
+                        },
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        timeout = j.steps[0].script.actions.onRun.timeout
+        assert isinstance(timeout, FormatString)
+        assert timeout.raw() == "60"
+
+    def test_no_timeout_returns_none(self) -> None:
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {"actions": {"onRun": {"command": "echo"}}},
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        assert j.steps[0].script.actions.onRun.timeout is None
+
+
+class TestTokenErrorRemovedFromV1:
+    """``TokenError`` is intentionally **not** part of the v1 surface.
+    It existed as a v0-compat re-export shim, but no v1 code path
+    raises it — every actual raise lives in the v0 (pure-Python)
+    parser modules. Pinning the absence so a future refactor doesn't
+    silently re-introduce a dead-code shim."""
+
+    def test_not_in_v1_top_level(self) -> None:
+        import openjd.model._v1 as v1
+
+        assert not hasattr(v1, "TokenError")
+        assert "TokenError" not in v1.__all__
+
+    def test_import_raises_import_error(self) -> None:
+        with pytest.raises(ImportError):
+            from openjd.model._v1 import TokenError  # type: ignore[attr-defined]  # noqa: F401

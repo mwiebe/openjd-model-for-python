@@ -138,7 +138,7 @@ class Action:
     @property
     def args(self) -> typing.Optional[builtins.list[FormatString]]: ...
     @property
-    def timeout(self) -> typing.Optional[builtins.str]: ...
+    def timeout(self) -> typing.Optional[FormatString]: ...
     @property
     def cancelation(self) -> typing.Optional[CancelationMode]: ...
     def __new__(
@@ -2164,6 +2164,24 @@ class StepDependencyEdge:
 class StepDependencyGraph:
     @property
     def _nodes(self) -> builtins.list[StepDependencyNode]: ...
+    @property
+    def max_indegree(self) -> builtins.int:
+        r"""
+        Maximum in-degree across all nodes — the largest number of
+        dependencies any single step has. Returns ``0`` for an empty
+        graph. Mirrors the underlying Rust crate's
+        ``StepDependencyGraph::max_indegree``.
+        """
+
+    @property
+    def max_outdegree(self) -> builtins.int:
+        r"""
+        Maximum out-degree across all nodes — the largest number of
+        steps that depend on any single step. Returns ``0`` for an
+        empty graph. Mirrors the underlying Rust crate's
+        ``StepDependencyGraph::max_outdegree``.
+        """
+
     def __new__(cls, *, job: Job) -> StepDependencyGraph: ...
     def step_node(self, stepname: builtins.str) -> StepDependencyNode: ...
     def topo_sorted(self) -> builtins.list[Step]: ...
@@ -2256,6 +2274,17 @@ class StepParameterSpaceIterator:
 
     def __next__(self) -> dict: ...
     def __contains__(self, item: dict) -> builtins.bool: ...
+    def validate_containment(self, params: dict) -> None:
+        r"""
+        Validate that ``params`` is contained in this iterator's
+        parameter space. Returns ``None`` on success (matching the
+        v0 reference's implicit-``None`` return). Raises
+        :class:`ValueError` with a detailed diagnostic message on
+        failure — naming the offending parameter or the mismatching
+        name set as appropriate. Mirrors the underlying Rust
+        crate's ``StepParameterSpaceIterator::validate_containment``.
+        """
+
     def reset_iter(self) -> None: ...
 
 @typing.final

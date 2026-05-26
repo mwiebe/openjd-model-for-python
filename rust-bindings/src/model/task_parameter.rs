@@ -37,7 +37,7 @@
 //! struct field declaration.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyType};
+use pyo3::types::{PyDict, PyList};
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
@@ -576,6 +576,5 @@ fn int_ranges_equal(a: &TaskParamRange<i64>, b: &TaskParamRange<i64>) -> bool {
 }
 
 // Suppress unused-import warning when stub-gen is disabled.
-#[cfg(not(feature = "stub-gen"))]
-#[allow(unused_imports)]
-use PyType as _;
+// (PyType import removed in Rec #12 cleanup; the cfg-gated suppression
+// is no longer needed.)

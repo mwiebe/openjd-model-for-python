@@ -207,6 +207,20 @@ impl PyStepParameterSpaceIterator {
         Ok(iter.contains(&params))
     }
 
+    /// Validate that ``params`` is contained in this iterator's
+    /// parameter space. Returns ``None`` on success (matching the
+    /// v0 reference's implicit-``None`` return). Raises
+    /// :class:`ValueError` with a detailed diagnostic message on
+    /// failure — naming the offending parameter or the mismatching
+    /// name set as appropriate. Mirrors the underlying Rust
+    /// crate's ``StepParameterSpaceIterator::validate_containment``.
+    fn validate_containment(&self, params: &Bound<'_, PyDict>) -> PyResult<()> {
+        let params = extract_task_parameter_set(params)?;
+        let iter = self.iter.lock().unwrap();
+        iter.validate_containment(&params)
+            .map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+
     fn reset_iter(&self) {
         let mut iter = self.iter.lock().unwrap();
         iter.reset();

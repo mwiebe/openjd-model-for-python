@@ -311,7 +311,11 @@ params = preprocess_job_parameters(
 
 #### `merge_job_parameter_definitions`
 
-Merge parameter definitions from a job template and environment templates.
+Merge parameter definitions from a job template and a list of
+environment templates into a single deduplicated, conflict-checked
+list. Used by callers (notably ``openjd-cli``) that need to
+present the union of every parameter the user might be asked to
+supply across a job and its attached environments.
 
 ```python
 from openjd.model._v1 import decode_job_template, merge_job_parameter_definitions
@@ -319,6 +323,40 @@ from openjd.model._v1 import decode_job_template, merge_job_parameter_definition
 template = decode_job_template(template={...})
 merged = merge_job_parameter_definitions(job_template=template)
 ```
+
+**Return shape — `list[dict]`, not typed pyclasses.** Each entry
+in the returned list is a plain Python ``dict`` with the
+following keys:
+
+* ``name`` (``str``) — the parameter name.
+* ``type`` (``str``) — the parameter's spec-form type name
+  (``"INT"``, ``"PATH"``, ``"STRING"``, …).
+* ``source`` (``str``) — the name of the template the
+  definition came from (the job template's name, or the name of
+  the environment template that contributed the definition).
+* ``default`` (present only if the source template provided a
+  default) — the default value, in its native Python type
+  (``int`` / ``float`` / ``str`` / ``list`` / …) per the
+  parameter's type.
+* ``objectType`` (``str``, present only for ``PATH`` parameters
+  with an ``objectType`` declared) — ``"FILE"`` or
+  ``"DIRECTORY"``.
+* ``dataFlow`` (``str``, present only for ``PATH`` parameters
+  with a ``dataFlow`` declared) — ``"NONE"``, ``"IN"``,
+  ``"OUT"``, or ``"INOUT"``.
+
+This is a deliberate divergence from the v0 reference, which
+returns a ``list[JobParameterDefinition]`` (typed pyclass per
+variant). The dict shape is consistent with the binding's other
+parameter-shaped outputs (``preprocess_job_parameters`` also
+returns a dict-keyed payload) and avoids the cost of
+re-materialising 12 typed pyclass variants for what is most
+commonly a quick "show the user every parameter and ask for
+values" pass. The underlying Rust crate's
+``openjd_model::merge_job_parameter_definitions`` returns a
+struct with ``source`` / ``name`` / ``param_type`` / ``default`` /
+``object_type`` / ``data_flow`` fields; the binding flattens
+that struct into the dict above.
 
 #### `evaluate_let_bindings`
 
@@ -461,7 +499,9 @@ script.embeddedFiles        # Optional[list[EmbeddedFile]]
 action = step.script.actions.onRun
 action.command              # FormatString — resolve at runtime with .resolve(symtab, library)
 action.args                 # Optional[list[FormatString]]
-action.timeout              # Optional[str]
+action.timeout              # Optional[FormatString] — resolve at runtime to
+                            # get the integer-string form, or call .raw()
+                            # to read the unresolved template form
 action.cancelation          # Optional[CancelationMode]
 
 # At runtime (in sessions):
@@ -525,6 +565,19 @@ the underlying Rust ``job::JobParameter.param_type`` field. Like
 (``param.type is JobParameterType.INT``), or call
 ``str(param.type)`` / ``param.type.as_str()`` when you need the
 spec-form string.
+
+**No ``description`` field.** The v0 reference's
+``JobParameter`` carried a ``description: Optional[str]`` field
+copied from the parameter definition into the materialised
+``JobParameter`` at job-creation time. The Rust crate's
+``job::JobParameter`` struct deliberately does **not** carry
+``description`` — a job-time parameter is the resolved
+``(name, type, value)`` triple, and the description belongs to
+the *definition* on the template. Callers that need the
+description should read it from the corresponding
+``JobParameterDefinition`` on ``JobTemplate.parameter_definitions``
+instead. The binding mirrors the Rust struct and intentionally
+does not expose ``description``.
 
 ### `StepParameterSpace`
 
@@ -1234,7 +1287,43 @@ except DecodeValidationError as e:
 | `ExpressionError` | `ValueError` |
 | `FormatStringError` | `ValueError` |
 | `CompatibilityError` | `ValueError` |
-| `TokenError` | `Exception` |
+
+**`UnsupportedSchema` constructor divergence from v0.** The v0
+reference defines ``UnsupportedSchema(version_str)`` such that
+``str(e) == "Unsupported schema version: {version_str}"`` and the
+instance carries a private ``_version`` attribute. The v1 binding
+treats the constructor argument as the message itself —
+``UnsupportedSchema(msg)`` produces ``str(e) == msg`` and no
+``_version`` attribute is exposed. The exception class identity
+and the ``ValueError`` base are preserved, so any v0 caller that
+catches ``UnsupportedSchema`` (or its base) still catches v1's
+``UnsupportedSchema``; only callers that introspect the message
+or read ``_version`` will see the difference. The Rust
+``openjd_model::ModelError::UnsupportedSchema`` already crafts a
+human-readable message at the source — re-wrapping it in the
+v0 template would be redundant.
+
+**Validation error messages are not byte-identical to v0.** The
+v0 reference's ``ModelValidationError`` /
+``DecodeValidationError`` messages are derived from Pydantic and
+inherit Pydantic's phrasing — including the well-known
+pluralisation typo (``"1 validation errors for ..."`` for the
+single-error case), template strings like ``"Parameter 'X':
+value Y exceeds maximum Z"``, and Pydantic's loc-tuple
+formatting for the field path. The v1 binding produces messages
+from the Rust crate's own validator, which uses a stricter and
+more concise phrasing — correct singular/plural agreement
+(``"1 validation error for ..."``), and shorter operator-anchored
+phrasings like ``"Value (Y) for parameter X must be at most Z."``.
+
+Match by exception class and the field path inside the message
+(both bindings emit the path-prefix shape
+``steps[0] -> script -> actions -> onRun -> command:\\n\\tmust not be empty.``)
+rather than by literal message bytes. Downstream tooling that
+greps the entire message for v0 wording will need to update its
+patterns; tooling that catches the exception class and reads
+``e.field`` / ``e.location`` (where exposed) will continue to
+work.
 
 ## Pickle Support
 

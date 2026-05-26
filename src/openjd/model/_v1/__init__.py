@@ -515,7 +515,7 @@ def decode_environment_template_str(
 #
 # * Python-only compat classes for the v0 API (CancelationMethodTerminate,
 #   CancelationMethodNotifyThenTerminate, ValueReferenceConstants,
-#   CompatibilityError, TokenError, EmbeddedFileText, EmbeddedFiles).
+#   CompatibilityError, EmbeddedFileText, EmbeddedFiles).
 #
 # * Aliases (CommandString, ArgString,
 #   StepDependencyGraphNode, StepDependencyGraphStepToStepEdge) for v0
@@ -575,14 +575,6 @@ class CompatibilityError(ValueError):
     pass
 
 
-class TokenError(Exception):
-    def __init__(self, source: str, token: str, position: int):
-        self.source = source
-        self.token = token
-        self.position = position
-        super().__init__(f"Unexpected '{token}' in '{source}' after '{source[:position]}'")
-
-
 from .._version import version  # noqa: E402
 
 
@@ -618,7 +610,6 @@ __all__ = (
     "CancelationMethodNotifyThenTerminate",
     "CancelationMethodTerminate",
     "CompatibilityError",
-    "TokenError",
     "ValueReferenceConstants",
     # Opaque type aliases
     "JobParameterDefinition",

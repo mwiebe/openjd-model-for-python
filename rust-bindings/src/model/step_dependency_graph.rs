@@ -88,6 +88,24 @@ impl PyStepDependencyGraph {
     fn step_names(&self) -> PyResult<Vec<String>> {
         self.inner.topo_sorted_names().map_err(model_err_to_py)
     }
+
+    /// Maximum in-degree across all nodes — the largest number of
+    /// dependencies any single step has. Returns ``0`` for an empty
+    /// graph. Mirrors the underlying Rust crate's
+    /// ``StepDependencyGraph::max_indegree``.
+    #[getter]
+    fn max_indegree(&self) -> usize {
+        self.inner.max_indegree()
+    }
+
+    /// Maximum out-degree across all nodes — the largest number of
+    /// steps that depend on any single step. Returns ``0`` for an
+    /// empty graph. Mirrors the underlying Rust crate's
+    /// ``StepDependencyGraph::max_outdegree``.
+    #[getter]
+    fn max_outdegree(&self) -> usize {
+        self.inner.max_outdegree()
+    }
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]

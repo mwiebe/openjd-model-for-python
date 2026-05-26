@@ -313,8 +313,11 @@ impl PyAction {
     }
 
     #[getter]
-    fn timeout(&self) -> Option<String> {
-        self.inner.timeout.as_ref().map(|t| t.raw().to_string())
+    fn timeout(&self) -> Option<crate::expr::PyFormatString> {
+        self.inner
+            .timeout
+            .as_ref()
+            .map(|t| crate::expr::PyFormatString { inner: t.clone() })
     }
 
     #[getter]
