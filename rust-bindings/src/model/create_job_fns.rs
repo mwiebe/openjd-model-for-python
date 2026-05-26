@@ -115,9 +115,19 @@ pub(crate) fn py_preprocess_job_parameters(
 ) -> PyResult<Py<PyDict>> {
     let input_values = extract_input_values(job_parameter_values)?;
     let env_templates = extract_env_templates(environment_templates);
-    let tdir_str = job_template_dir.to_str().unwrap_or("");
+    // Pass ``job_template_dir`` through verbatim so the upstream
+    // diagnostic ("The value supplied for the job template dir, X,
+    // is not an absolute path.") names the path the caller actually
+    // supplied — earlier versions rewrote `"."` to `""` here, which
+    // leaked into the diagnostic as an empty placeholder.
+    let tdir = job_template_dir.to_str().unwrap_or("");
+    // ``current_working_dir`` keeps the `"."` → `""` rewrite. The
+    // CWD never appears in any error message, and upstream's
+    // PATH-value handling treats an empty CWD as "skip the join"
+    // (see ``preprocess_job_parameters`` in the upstream crate);
+    // a literal `"."` would prepend `./` to relative path values,
+    // diverging from the v0 reference's behaviour.
     let cwd_str = current_working_dir.to_str().unwrap_or("");
-    let tdir = if tdir_str == "." { "" } else { tdir_str };
     let cwd = if cwd_str == "." { "" } else { cwd_str };
     let path_opts = PathParameterOptions {
         job_template_dir: tdir,

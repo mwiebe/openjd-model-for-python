@@ -1489,7 +1489,7 @@ fix should land, and (where applicable) suggests a
       `type="TEXT"`.
     Stubs regenerated. 5008 tests pass; lint clean.
 
-17. **Fix `preprocess_job_parameters` error message for
+17. ~~**Fix `preprocess_job_parameters` error message for
     relative paths.** When the caller passes a relative
     `job_template_dir`, the error message reports the empty
     string instead of the user-supplied path:
@@ -1500,7 +1500,40 @@ fix should land, and (where applicable) suggests a
 
     The empty rewrite is gone for absolute paths but remains
     in the error path. Surface:
+    `rust-bindings/src/model/create_job_fns.rs::py_preprocess_job_parameters`.~~
+    **Resolved.** Stopped rewriting `"."` to `""` for the
+    `job_template_dir` argument in
     `rust-bindings/src/model/create_job_fns.rs::py_preprocess_job_parameters`.
+    Earlier versions did the rewrite to match the v0
+    `Path()`-as-sentinel convention, but that leaked into
+    upstream's `"The value supplied for the job template dir,
+    {}, is not an absolute path."` format-string and produced
+    the empty placeholder. Now the diagnostic names whatever
+    path the caller actually passed (`Path(".")` → `"."`,
+    `Path("rel/dir")` → `"rel/dir"`, `Path("")` → `"."` because
+    PathBuf normalises `""` to `"."` — matching v0).
+
+    The `"."` → `""` rewrite is *retained* for
+    `current_working_dir` because the CWD never appears in any
+    error message, and upstream's PATH-value handling treats an
+    empty CWD as "skip the join" — passing `"."` literal would
+    prepend `./` to relative path values, breaking parity with
+    the v0 reference's path-joining behaviour.
+
+    Pinned by 5 new tests in
+    `test/openjd/model_v1/test_create_job.py::TestPreprocessJobParameters_2023_09`:
+    a parametrised
+    `test_preprocess_relative_path_error_includes_path` that
+    asserts each of `Path(".")` / `Path("")` / `Path("rel/dir")`
+    / `Path("relative")` produces a diagnostic naming the
+    user-supplied form, plus
+    `test_preprocess_walk_up_true_accepts_dot_path` that
+    confirms the same path is *accepted* when
+    `allow_job_template_dir_walk_up=True` (the inverse case
+    that `create_job` itself relies on internally). Also
+    extended the existing
+    `test_preprocess_relative_path_error` test to assert the
+    relative path appears in the message.
 
 18. **Spec drift: document the binding-side surface more
     explicitly.** The spec already covers the major shapes,

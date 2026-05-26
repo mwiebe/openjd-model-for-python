@@ -236,6 +236,78 @@ class TestPreprocessJobParameters_2023_09:  # noqa: N801
         # THEN
         assert "the job template dir" in str(excinfo.value)
         assert "is not an absolute path. It must be absolute to enforce that" in str(excinfo.value)
+        # Regression for report rec #17: the user-supplied relative
+        # path must appear verbatim in the diagnostic. Earlier
+        # versions stripped it (the message read "..., , is not an
+        # absolute path." with an empty placeholder).
+        assert "relative/path" in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "tdir,expected_in_message",
+        [
+            pytest.param(Path("."), ".", id="dot-path"),
+            pytest.param(Path(""), ".", id="empty-path"),  # PathBuf normalises "" -> "."
+            pytest.param(Path("rel/dir"), "rel/dir", id="relative-multi-segment"),
+            pytest.param(Path("relative"), "relative", id="relative-single-segment"),
+        ],
+    )
+    def test_preprocess_relative_path_error_includes_path(
+        self, tdir: Path, expected_in_message: str
+    ) -> None:
+        """``preprocess_job_parameters`` rejects relative or sentinel
+        ``job_template_dir`` values when ``allow_job_template_dir_walk_up``
+        is False, and the diagnostic must name the user-supplied
+        path so the caller can identify which value was wrong.
+        Regression for report rec #17 — earlier versions emitted
+        ``"the job template dir, ,"`` with an empty placeholder for
+        ``Path(".")`` and ``Path("")`` because the binding rewrote
+        them to ``""`` before validation."""
+        job_template = decode_job_template(
+            template=dict(
+                specificationVersion="jobtemplate-2023-09",
+                name="test",
+                steps=minimal_steps_v2023_09,
+                parameterDefinitions=[{"name": "Foo", "type": "PATH", "default": "defaultValue"}],
+            )
+        )
+        with pytest.raises(ValueError) as excinfo:
+            preprocess_job_parameters(
+                job_template=job_template,
+                job_parameter_values={},
+                job_template_dir=tdir,
+                current_working_dir=self.current_working_dir,
+            )
+        msg = str(excinfo.value)
+        # The path appears verbatim in the diagnostic.
+        assert (
+            f"the job template dir, {expected_in_message}," in msg
+        ), f"Expected path {expected_in_message!r} in {msg!r}"
+
+    def test_preprocess_walk_up_true_accepts_dot_path(self) -> None:
+        """With ``allow_job_template_dir_walk_up=True``, the
+        ``"."`` / ``""`` sentinel paths are accepted (used by
+        ``create_job`` itself when the caller hasn't supplied a
+        real template directory). This is the inverse of
+        ``test_preprocess_relative_path_error_includes_path``: the
+        same path that's rejected with walk-up disabled is
+        accepted with walk-up enabled."""
+        job_template = decode_job_template(
+            template=dict(
+                specificationVersion="jobtemplate-2023-09",
+                name="test",
+                steps=minimal_steps_v2023_09,
+                parameterDefinitions=[{"name": "Foo", "type": "STRING", "default": "x"}],
+            )
+        )
+        # No exception.
+        result = preprocess_job_parameters(
+            job_template=job_template,
+            job_parameter_values={},
+            job_template_dir=Path("."),
+            current_working_dir=Path("."),
+            allow_job_template_dir_walk_up=True,
+        )
+        assert "Foo" in result
 
     @pytest.mark.parametrize(
         "escaping_dir",
