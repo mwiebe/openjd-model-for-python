@@ -1563,7 +1563,7 @@ fix should land, and (where applicable) suggests a
     regressions that the current binding-side test surface
     misses.
 
-20. **Switch the dict→json.dumps→serde_json round-trip in
+20. ~~**Switch the dict→json.dumps→serde_json round-trip in
     `decode_*_dict` to a direct `pythonize::depythonize` (or
     equivalent) conversion.** Today's detour
     (`rust-bindings/src/model/decode.rs::dict_to_json_value`)
@@ -1572,5 +1572,39 @@ fix should land, and (where applicable) suggests a
     (`Decimal`, `Path`, custom objects). Worth measuring
     against the existing `test_yaml_loader_performance.py`
     benchmark before committing to make sure it's an actual
-    win.
+    win.~~ **Resolved as won't-fix after measurement.** Built
+    a microbenchmark for `decode_job_template(template=dict)`
+    on a small template and a medium one (20 steps × 20
+    parameter definitions, with format-string args
+    referencing every parameter), 200 warm iterations each.
+    Then prototyped the change against `pythonize 0.28`
+    (compatible with our `pyo3 = 0.28`) and re-measured:
+
+    | Scenario | json.dumps + serde_json (baseline) | pythonize::depythonize | Delta |
+    |---|---|---|---|
+    | Small template | 157 µs median, 197 µs p95 | 176 µs median, 226 µs p95 | **+12% slower** |
+    | Medium template | 7190 µs median, 7504 µs p95 | 7581 µs median, 8148 µs p95 | **+5% slower** |
+
+    Why: profiling shows `json.dumps` on the medium template
+    is ~46 µs, which is ~0.6% of the end-to-end decode cost.
+    The remaining 7+ ms is template validation in the
+    underlying `openjd-model` Rust crate. Even fully
+    eliminating the conversion step wouldn't be visible to
+    callers; switching to `pythonize` actually regresses
+    end-to-end because pythonize's PyO3-driven recursive
+    walk does more per-element work than CPython's C-level
+    `json.dumps` followed by Rust's `serde_json::from_str`.
+
+    The non-JSON-serialisable types claim from the
+    recommendation also doesn't pan out: pythonize rejects
+    `Decimal` with the same `unsupported type Decimal` error
+    that `json.dumps` does. No round-trip improvement either.
+
+    Decision: keep the existing
+    `json.dumps`/`serde_json::from_str` path. Reverted the
+    prototype (no source code change beyond this note).
+    Note for future revisits: if the medium-template decode
+    cost itself becomes a bottleneck (it isn't today), the
+    productive optimisation is in the upstream Rust
+    validator, not in the Python→Rust conversion shim.
 
