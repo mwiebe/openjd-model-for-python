@@ -143,6 +143,26 @@ impl PyStep {
         })
     }
 
+    /// Job-time host requirements for this step. ``None`` if the
+    /// template did not declare any. Returns the resolved
+    /// :class:`HostRequirements` from
+    /// :mod:`openjd.model._v1.job` (distinct from the
+    /// template-time :class:`TemplateHostRequirements`).
+    #[getter]
+    fn host_requirements(&self) -> Option<PyHostRequirements> {
+        self.inner
+            .host_requirements
+            .as_ref()
+            .map(|hr| PyHostRequirements { inner: hr.clone() })
+    }
+
+    /// camelCase alias for ``host_requirements``.
+    #[getter]
+    #[pyo3(name = "hostRequirements")]
+    fn host_requirements_camel(&self) -> Option<PyHostRequirements> {
+        self.host_requirements()
+    }
+
     fn __repr__(&self) -> String {
         format!("Step(name={:?})", self.inner.name)
     }
@@ -500,6 +520,34 @@ impl PyEmbeddedFile {
     fn data(&self) -> Option<String> {
         self.inner.data.as_ref().map(|d| d.raw().to_string())
     }
+
+    /// Whether this embedded file should be marked executable when
+    /// the session materialises it on disk. ``None`` means the
+    /// template did not set the field. Mirrors v0's
+    /// ``EmbeddedFile.runnable``.
+    #[getter]
+    fn runnable(&self) -> Option<bool> {
+        self.inner.runnable
+    }
+
+    /// End-of-line policy for this embedded file: ``"LF"``,
+    /// ``"CRLF"``, ``"AUTO"``, or ``None`` if the template did not
+    /// set the field. Mirrors v0's ``EmbeddedFile.endOfLine``.
+    #[getter]
+    fn end_of_line(&self) -> Option<&'static str> {
+        self.inner.end_of_line.map(|e| match e {
+            openjd_model::types::EndOfLine::Lf => "LF",
+            openjd_model::types::EndOfLine::Crlf => "CRLF",
+            openjd_model::types::EndOfLine::Auto => "AUTO",
+        })
+    }
+
+    /// camelCase alias for ``end_of_line``.
+    #[getter]
+    #[pyo3(name = "endOfLine")]
+    fn end_of_line_camel(&self) -> Option<&'static str> {
+        self.end_of_line()
+    }
 }
 
 // ── PyJobParameter ──
@@ -524,6 +572,15 @@ impl PyJobParameter {
         self.inner.param_type.as_spec_str()
     }
 
+    /// Alias for ``param_type`` matching the v0 reference's
+    /// ``JobParameter.type`` field. Returns the same spec-form
+    /// string (``"INT"``, ``"STRING"``, ``"PATH"``, …).
+    #[getter]
+    #[pyo3(name = "type")]
+    fn type_alias(&self) -> &'static str {
+        self.inner.param_type.as_spec_str()
+    }
+
     #[getter]
     fn value(&self) -> PyExprValue {
         PyExprValue { inner: self.inner.value.clone() }
@@ -531,6 +588,119 @@ impl PyJobParameter {
 
     fn __repr__(&self) -> String {
         format!("JobParameter(name={:?}, type={:?})", self.inner.name, self.inner.param_type.as_spec_str())
+    }
+}
+
+// ── PyHostRequirements / PyAmountRequirement / PyAttributeRequirement ──
+//
+// Job-time host requirements. Distinct from the template-time
+// `Template{HostRequirements,AmountRequirement,AttributeRequirement}`
+// pyclasses in `template_types.rs`: there, `min`/`max` and
+// `any_of`/`all_of` are `FormatString` (raw template syntax). Here,
+// after `create_job` has resolved the template, the format strings
+// have been evaluated to concrete `f64` (for amounts) and `String`
+// (for attributes).
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model._v1.job", name = "AmountRequirement", from_py_object)]
+#[derive(Clone)]
+pub(crate) struct PyAmountRequirement {
+    inner: job::AmountRequirement,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyAmountRequirement {
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    #[getter]
+    fn min(&self) -> Option<f64> {
+        self.inner.min
+    }
+
+    #[getter]
+    fn max(&self) -> Option<f64> {
+        self.inner.max
+    }
+
+    fn __repr__(&self) -> String {
+        format!("AmountRequirement(name={:?})", self.inner.name)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model._v1.job", name = "AttributeRequirement", from_py_object)]
+#[derive(Clone)]
+pub(crate) struct PyAttributeRequirement {
+    inner: job::AttributeRequirement,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyAttributeRequirement {
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    #[getter]
+    fn any_of(&self) -> Option<Vec<String>> {
+        self.inner.any_of.clone()
+    }
+
+    #[getter]
+    #[pyo3(name = "anyOf")]
+    fn any_of_camel(&self) -> Option<Vec<String>> {
+        self.any_of()
+    }
+
+    #[getter]
+    fn all_of(&self) -> Option<Vec<String>> {
+        self.inner.all_of.clone()
+    }
+
+    #[getter]
+    #[pyo3(name = "allOf")]
+    fn all_of_camel(&self) -> Option<Vec<String>> {
+        self.all_of()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("AttributeRequirement(name={:?})", self.inner.name)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.model._v1.job", name = "HostRequirements", from_py_object)]
+#[derive(Clone)]
+pub(crate) struct PyHostRequirements {
+    inner: job::HostRequirements,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyHostRequirements {
+    #[getter]
+    fn amounts(&self) -> Option<Vec<PyAmountRequirement>> {
+        self.inner
+            .amounts
+            .as_ref()
+            .map(|v| v.iter().map(|a| PyAmountRequirement { inner: a.clone() }).collect())
+    }
+
+    #[getter]
+    fn attributes(&self) -> Option<Vec<PyAttributeRequirement>> {
+        self.inner
+            .attributes
+            .as_ref()
+            .map(|v| v.iter().map(|a| PyAttributeRequirement { inner: a.clone() }).collect())
+    }
+
+    fn __repr__(&self) -> String {
+        "HostRequirements(...)".to_string()
     }
 }
 

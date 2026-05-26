@@ -25,20 +25,20 @@ from openjd._openjd_rs import (
     EnvironmentTemplate,
     # Structural types — Template-prefixed to disambiguate from job-time
     TemplateAction,
+    TemplateAmountRequirement,
+    TemplateAttributeRequirement,
     TemplateCancelationMode,
     TemplateEmbeddedFile,
     TemplateEnvironment,
     TemplateEnvironmentActions,
     TemplateEnvironmentScript,
+    TemplateHostRequirements,
     TemplateStepActions,
     TemplateStepDependency,
     TemplateStepScript,
     # Structural types with no name collision
     StepTemplate,
     SimpleAction,
-    HostRequirements,
-    AmountRequirement,
-    AttributeRequirement,
     # JobParameterDefinition — 12 typed variants returned by
     # ``JobTemplate.parameter_definitions`` and
     # ``EnvironmentTemplate.parameter_definitions``.
@@ -85,11 +85,14 @@ from openjd._openjd_rs import (
 # Short aliases for ergonomics. Both names refer to the same class
 # object — ``Action is TemplateAction`` is True.
 Action = TemplateAction
+AmountRequirement = TemplateAmountRequirement
+AttributeRequirement = TemplateAttributeRequirement
 CancelationMode = TemplateCancelationMode
 EmbeddedFile = TemplateEmbeddedFile
 Environment = TemplateEnvironment
 EnvironmentActions = TemplateEnvironmentActions
 EnvironmentScript = TemplateEnvironmentScript
+HostRequirements = TemplateHostRequirements
 StepActions = TemplateStepActions
 StepDependency = TemplateStepDependency
 StepScript = TemplateStepScript
@@ -117,11 +120,14 @@ __all__ = (
     # Disambiguating aliases (same classes; useful in pickle bytes
     # and where users want to be explicit about template vs job time)
     "TemplateAction",
+    "TemplateAmountRequirement",
+    "TemplateAttributeRequirement",
     "TemplateCancelationMode",
     "TemplateEmbeddedFile",
     "TemplateEnvironment",
     "TemplateEnvironmentActions",
     "TemplateEnvironmentScript",
+    "TemplateHostRequirements",
     "TemplateStepActions",
     "TemplateStepDependency",
     "TemplateStepScript",

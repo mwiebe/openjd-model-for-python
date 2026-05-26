@@ -101,11 +101,14 @@ __all__ = [
     "TaskParameterType",
     "TaskParameterValue",
     "TemplateAction",
+    "TemplateAmountRequirement",
+    "TemplateAttributeRequirement",
     "TemplateCancelationMode",
     "TemplateEmbeddedFile",
     "TemplateEnvironment",
     "TemplateEnvironmentActions",
     "TemplateEnvironmentScript",
+    "TemplateHostRequirements",
     "TemplateSpecificationVersion",
     "TemplateStepActions",
     "TemplateStepDependency",
@@ -246,40 +249,24 @@ class AmountRequirement:
     @property
     def name(self) -> builtins.str: ...
     @property
-    def min(self) -> typing.Optional[FormatString]: ...
+    def min(self) -> typing.Optional[builtins.float]: ...
     @property
-    def max(self) -> typing.Optional[FormatString]: ...
-    def __new__(
-        cls,
-        *,
-        name: builtins.str,
-        min: typing.Optional[FormatString] = None,
-        max: typing.Optional[FormatString] = None,
-    ) -> AmountRequirement: ...
+    def max(self) -> typing.Optional[builtins.float]: ...
     def __repr__(self) -> builtins.str: ...
-    def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
 @typing.final
 class AttributeRequirement:
     @property
     def name(self) -> builtins.str: ...
     @property
-    def any_of(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    def any_of(self) -> typing.Optional[builtins.list[builtins.str]]: ...
     @property
-    def anyOf(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    def anyOf(self) -> typing.Optional[builtins.list[builtins.str]]: ...
     @property
-    def all_of(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    def all_of(self) -> typing.Optional[builtins.list[builtins.str]]: ...
     @property
-    def allOf(self) -> typing.Optional[builtins.list[FormatString]]: ...
-    def __new__(
-        cls,
-        *,
-        name: builtins.str,
-        any_of: typing.Optional[typing.Sequence[FormatString]] = None,
-        all_of: typing.Optional[typing.Sequence[FormatString]] = None,
-    ) -> AttributeRequirement: ...
+    def allOf(self) -> typing.Optional[builtins.list[builtins.str]]: ...
     def __repr__(self) -> builtins.str: ...
-    def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
 @typing.final
 class BoolUserInterface:
@@ -423,6 +410,29 @@ class EmbeddedFile:
     def filename(self) -> typing.Optional[builtins.str]: ...
     @property
     def data(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def runnable(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Whether this embedded file should be marked executable when
+        the session materialises it on disk. ``None`` means the
+        template did not set the field. Mirrors v0's
+        ``EmbeddedFile.runnable``.
+        """
+
+    @property
+    def end_of_line(self) -> typing.Optional[builtins.str]:
+        r"""
+        End-of-line policy for this embedded file: ``"LF"``,
+        ``"CRLF"``, ``"AUTO"``, or ``None`` if the template did not
+        set the field. Mirrors v0's ``EmbeddedFile.endOfLine``.
+        """
+
+    @property
+    def endOfLine(self) -> typing.Optional[builtins.str]:
+        r"""
+        camelCase alias for ``end_of_line``.
+        """
+
     def __new__(
         cls,
         *,
@@ -1015,14 +1025,7 @@ class HostRequirements:
     def amounts(self) -> typing.Optional[builtins.list[AmountRequirement]]: ...
     @property
     def attributes(self) -> typing.Optional[builtins.list[AttributeRequirement]]: ...
-    def __new__(
-        cls,
-        *,
-        amounts: typing.Optional[typing.Sequence[AmountRequirement]] = None,
-        attributes: typing.Optional[typing.Sequence[AttributeRequirement]] = None,
-    ) -> HostRequirements: ...
     def __repr__(self) -> builtins.str: ...
-    def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
 @typing.final
 class IntRange:
@@ -1372,6 +1375,14 @@ class JobParameter:
     def name(self) -> builtins.str: ...
     @property
     def param_type(self) -> builtins.str: ...
+    @property
+    def type(self) -> builtins.str:
+        r"""
+        Alias for ``param_type`` matching the v0 reference's
+        ``JobParameter.type`` field. Returns the same spec-form
+        string (``"INT"``, ``"STRING"``, ``"PATH"``, …).
+        """
+
     @property
     def value(self) -> ExprValue: ...
     def __repr__(self) -> builtins.str: ...
@@ -2100,6 +2111,22 @@ class Step:
     def parameterSpace(self) -> typing.Optional[StepParameterSpace]: ...
     @property
     def dependencies(self) -> typing.Optional[builtins.list[StepDependency]]: ...
+    @property
+    def host_requirements(self) -> typing.Optional[HostRequirements]:
+        r"""
+        Job-time host requirements for this step. ``None`` if the
+        template did not declare any. Returns the resolved
+        :class:`HostRequirements` from
+        :mod:`openjd.model._v1.job` (distinct from the
+        template-time :class:`TemplateHostRequirements`).
+        """
+
+    @property
+    def hostRequirements(self) -> typing.Optional[HostRequirements]:
+        r"""
+        camelCase alias for ``host_requirements``.
+        """
+
     def __repr__(self) -> builtins.str: ...
     def __eq__(self, other: Step) -> builtins.bool: ...
     def __hash__(self) -> builtins.int: ...
@@ -2262,9 +2289,9 @@ class StepTemplate:
     @property
     def stepEnvironments(self) -> typing.Optional[builtins.list[TemplateEnvironment]]: ...
     @property
-    def host_requirements(self) -> typing.Optional[HostRequirements]: ...
+    def host_requirements(self) -> typing.Optional[TemplateHostRequirements]: ...
     @property
-    def hostRequirements(self) -> typing.Optional[HostRequirements]: ...
+    def hostRequirements(self) -> typing.Optional[TemplateHostRequirements]: ...
     @property
     def parameter_space(self) -> typing.Optional[StepParameterSpaceDefinition]:
         r"""
@@ -2462,6 +2489,46 @@ class TemplateAction:
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
 @typing.final
+class TemplateAmountRequirement:
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def min(self) -> typing.Optional[FormatString]: ...
+    @property
+    def max(self) -> typing.Optional[FormatString]: ...
+    def __new__(
+        cls,
+        *,
+        name: builtins.str,
+        min: typing.Optional[FormatString] = None,
+        max: typing.Optional[FormatString] = None,
+    ) -> TemplateAmountRequirement: ...
+    def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]: ...
+
+@typing.final
+class TemplateAttributeRequirement:
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def any_of(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    @property
+    def anyOf(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    @property
+    def all_of(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    @property
+    def allOf(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    def __new__(
+        cls,
+        *,
+        name: builtins.str,
+        any_of: typing.Optional[typing.Sequence[FormatString]] = None,
+        all_of: typing.Optional[typing.Sequence[FormatString]] = None,
+    ) -> TemplateAttributeRequirement: ...
+    def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]: ...
+
+@typing.final
 class TemplateCancelationMode:
     @property
     def mode(self) -> builtins.str: ...
@@ -2563,6 +2630,21 @@ class TemplateEnvironmentScript:
         let_bindings: typing.Optional[typing.Sequence[builtins.str]] = None,
         embedded_files: typing.Optional[typing.Sequence[TemplateEmbeddedFile]] = None,
     ) -> TemplateEnvironmentScript: ...
+    def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]: ...
+
+@typing.final
+class TemplateHostRequirements:
+    @property
+    def amounts(self) -> typing.Optional[builtins.list[TemplateAmountRequirement]]: ...
+    @property
+    def attributes(self) -> typing.Optional[builtins.list[TemplateAttributeRequirement]]: ...
+    def __new__(
+        cls,
+        *,
+        amounts: typing.Optional[typing.Sequence[TemplateAmountRequirement]] = None,
+        attributes: typing.Optional[typing.Sequence[TemplateAttributeRequirement]] = None,
+    ) -> TemplateHostRequirements: ...
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 

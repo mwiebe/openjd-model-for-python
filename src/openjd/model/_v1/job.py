@@ -24,6 +24,9 @@ from openjd._openjd_rs import (
     EnvironmentActions,
     EmbeddedFile,
     JobParameter,
+    HostRequirements,
+    AmountRequirement,
+    AttributeRequirement,
     StepParameterSpace,
     StepDependency,
     CancelationMode,
@@ -45,6 +48,8 @@ from openjd._openjd_rs import (
 
 __all__ = (
     "Action",
+    "AmountRequirement",
+    "AttributeRequirement",
     "CancelationMode",
     "ChunkIntTaskParameter",
     "EmbeddedFile",
@@ -52,6 +57,7 @@ __all__ = (
     "EnvironmentActions",
     "EnvironmentScript",
     "FloatTaskParameter",
+    "HostRequirements",
     "IntTaskParameter",
     "Job",
     "JobParameter",

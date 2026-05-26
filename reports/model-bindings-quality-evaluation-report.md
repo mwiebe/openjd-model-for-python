@@ -493,38 +493,90 @@ with `~~ ... ~~ **Resolved.**` as items are addressed.
 
 ### P1 — Reference-parity gaps (job-time field coverage)
 
-1. **Expose `JobParameter.type`** on the v1 binding as a getter that
+1. ~~**Expose `JobParameter.type`** on the v1 binding as a getter that
    returns the `JobParameterType` enum (or, if the spec's "string spec
    name" preference for `param_type` is intentional, add a `.type`
    alias returning the same string). v0 callers, including `openjd-cli`
    (`hatch run python -c "from openjd.cli ..."`), read
    `param.type`. The current `param.param_type` getter alone breaks
    them silently. (`rust-bindings/src/model/job.rs::PyJobParameter`,
-   `test/openjd/model_v1/test_known_gaps.py::test_job_parameter_has_type_alias`)
+   `test/openjd/model_v1/test_known_gaps.py::test_job_parameter_has_type_alias`)~~
+   **Resolved.** Added a `type_alias` getter on `PyJobParameter` in
+   `rust-bindings/src/model/job.rs` registered as `#[pyo3(name = "type")]`.
+   Returns the same spec-form string as `param_type` (e.g. `"INT"`,
+   `"PATH"`); the two attributes are interchangeable. The xfail
+   `test_job_parameter_has_type_alias` graduated to
+   `test/openjd/model_v1/test_create_job.py::TestJobTimeFieldExposure`.
+   Spec entry updated in `specs/python-model-interface.md` under the
+   `JobParameter` section.
 
-2. **Expose `Step.host_requirements` / `hostRequirements`** on the
+2. ~~**Expose `Step.host_requirements` / `hostRequirements`** on the
    v1 job-time `PyStep`. The Rust `job::Step` struct already has the
    field; add a getter returning `Option<HostRequirements>` plus a
    camelCase alias, then update the spec's job-time `Step` example to
    list it. (`rust-bindings/src/model/job.rs::PyStep`,
    `specs/python-model-interface.md` job-time `Step` section,
-   `test/openjd/model_v1/test_known_gaps.py::test_step_exposes_host_requirements`)
+   `test/openjd/model_v1/test_known_gaps.py::test_step_exposes_host_requirements`)~~
+   **Resolved.** Added job-time pyclasses `PyHostRequirements`,
+   `PyAmountRequirement`, `PyAttributeRequirement` to
+   `rust-bindings/src/model/job.rs`, wrapping `job::HostRequirements`,
+   `job::AmountRequirement`, `job::AttributeRequirement` (which
+   carry resolved `f64` for amounts and resolved `Vec<String>` for
+   attributes — distinct from the template-time variants which carry
+   `FormatString`). `PyStep` got `host_requirements` + the camelCase
+   `hostRequirements` alias. To make room for the unprefixed Python
+   names on the job side, the existing template-time pyclass `name`
+   attributes were renamed to `TemplateHostRequirements`,
+   `TemplateAmountRequirement`, `TemplateAttributeRequirement`,
+   matching the existing `TemplateAction` / `TemplateEmbeddedFile`
+   convention; the wrapper module `src/openjd/model/_v1/template.py`
+   re-establishes the unprefixed aliases (`HostRequirements =
+   TemplateHostRequirements` etc.) so existing imports through
+   `openjd.model._v1.template` continue to work without source-code
+   changes. The wrapper module `src/openjd/model/_v1/job.py` exports
+   the three new job-time names. The xfail
+   `test_step_exposes_host_requirements` graduated to
+   `TestJobTimeFieldExposure`, with companion tests covering: the
+   `None` case when no `hostRequirements` is declared, and the
+   class-identity contract that template-time and job-time
+   `HostRequirements` are distinct pyclasses. Spec entries: the
+   `Step` Output-Types section now lists `host_requirements`; a new
+   `HostRequirements / AmountRequirement / AttributeRequirement`
+   subsection in Output Types documents the job-time class shape;
+   the StepTemplate convention paragraph now lists all three
+   colliding names with a note that the template-time and job-time
+   variants are different Rust pyclasses with different field types.
 
-3. **Expose `EmbeddedFile.runnable`** on the v1 job-time
+3. ~~**Expose `EmbeddedFile.runnable`** on the v1 job-time
    `PyEmbeddedFile`. Field is in the Rust struct, exposed on
    template-time `PyEmbeddedFile`, and used by `openjd-sessions` to
    set the executable bit when materialising the file. Without it,
    v1-driven sessions cannot honour `runnable: True` from the
    template. (`rust-bindings/src/model/job.rs::PyEmbeddedFile`,
    `specs/python-model-interface.md` job-time `EmbeddedFile` section,
-   `test/openjd/model_v1/test_known_gaps.py::test_embedded_file_exposes_runnable`)
+   `test/openjd/model_v1/test_known_gaps.py::test_embedded_file_exposes_runnable`)~~
+   **Resolved.** Added a `runnable` getter on the job-time
+   `PyEmbeddedFile` returning `Option<bool>`, mirroring the existing
+   template-time getter. The xfail `test_embedded_file_exposes_runnable`
+   graduated to `TestJobTimeFieldExposure` with a companion test
+   confirming `None` when the template doesn't set the field. Spec
+   entry updated under the job-time `EmbeddedFile` section.
 
-4. **Expose `EmbeddedFile.endOfLine` / `end_of_line`** on the v1
+4. ~~**Expose `EmbeddedFile.endOfLine` / `end_of_line`** on the v1
    job-time `PyEmbeddedFile`. Same rationale as Rec #3 — the field
    is in the Rust struct and on the template-time pyclass, but the
    job-time pyclass omits it. Sessions need it to convert line
    endings before writing the file. (Same files as Rec #3,
-   `test/openjd/model_v1/test_known_gaps.py::test_embedded_file_exposes_end_of_line`)
+   `test/openjd/model_v1/test_known_gaps.py::test_embedded_file_exposes_end_of_line`)~~
+   **Resolved.** Added `end_of_line` getter (returns
+   `Option<&'static str>` mapping the Rust `EndOfLine::{Lf,Crlf,Auto}`
+   variants to `"LF"`, `"CRLF"`, `"AUTO"`) plus the camelCase alias
+   `#[pyo3(name = "endOfLine")]`. The xfail
+   `test_embedded_file_exposes_end_of_line` graduated to
+   `TestJobTimeFieldExposure` with a parametrised
+   ``"LF"`` / ``"CRLF"`` test plus a companion `None`-when-omitted
+   test. Spec entry updated under the job-time `EmbeddedFile`
+   section.
 
 ### P2 — Reference-parity gaps (smaller surface)
 

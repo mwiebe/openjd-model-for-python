@@ -757,7 +757,7 @@ impl PyEnvironment {
 // ── HostRequirements / AmountRequirement / AttributeRequirement ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1.template", name = "AmountRequirement", from_py_object)]
+#[pyclass(module = "openjd.model._v1.template", name = "TemplateAmountRequirement", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyAmountRequirement {
     pub(crate) inner: AmountRequirement,
@@ -821,7 +821,7 @@ impl PyAmountRequirement {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1.template", name = "AttributeRequirement", from_py_object)]
+#[pyclass(module = "openjd.model._v1.template", name = "TemplateAttributeRequirement", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyAttributeRequirement {
     pub(crate) inner: AttributeRequirement,
@@ -907,7 +907,7 @@ impl PyAttributeRequirement {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1.template", name = "HostRequirements", from_py_object)]
+#[pyclass(module = "openjd.model._v1.template", name = "TemplateHostRequirements", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyHostRequirements {
     pub(crate) inner: HostRequirements,

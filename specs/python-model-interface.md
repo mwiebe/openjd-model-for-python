@@ -434,6 +434,7 @@ step.script                 # StepScript
 step.parameterSpace         # Optional[StepParameterSpace]
 step.stepEnvironments       # Optional[list[Environment]]
 step.dependencies           # Optional[list[StepDependency]]
+step.host_requirements      # Optional[HostRequirements] (alias: hostRequirements)
 step.resolvedBindings       # Optional[list[str]] — let binding strings
 step.resolved_symtab        # Optional[SymbolTable] — resolved at step scope
 ```
@@ -494,8 +495,12 @@ env.script.embeddedFiles    # Optional[list[EmbeddedFile]]
 ef = step.script.embeddedFiles[0]
 ef.name                     # "run.sh"
 ef.type                     # "TEXT"
-ef.filename                 # "run.sh"
-ef.data                     # file content string
+ef.filename                 # Optional[str]
+ef.data                     # Optional[str] — file content
+ef.runnable                 # Optional[bool] — set the executable bit
+                            # when materialising the file
+ef.end_of_line              # Optional[str] — "LF" / "CRLF" / "AUTO"
+                            # (alias: endOfLine)
 ```
 
 ### `JobParameter`
@@ -504,6 +509,8 @@ ef.data                     # file content string
 param = job.parameters["Count"]
 param.name                  # "Count"
 param.param_type            # "INT"
+param.type                  # "INT" — alias for param_type matching
+                            # the v0 reference's JobParameter.type
 param.value                 # ExprValue — use .item() to get native value
 param.value.item()          # 5
 ```
@@ -584,6 +591,35 @@ cancel.mode                 # "TERMINATE" or "NOTIFY_THEN_TERMINATE"
 cancel.notify_period_in_seconds  # Optional[int]
 ```
 
+### `HostRequirements` / `AmountRequirement` / `AttributeRequirement`
+
+Job-time host requirements. Distinct from the template-time
+``HostRequirements`` / ``AmountRequirement`` / ``AttributeRequirement``
+(see `openjd.model._v1.template`): the template-time variants carry
+unresolved ``FormatString`` values for ``min`` / ``max`` / ``anyOf`` /
+``allOf``, while these job-time variants carry the post-``create_job``
+resolved ``f64`` (amounts) and ``str`` (attributes) values.
+
+```python
+hr = step.host_requirements        # alias: step.hostRequirements
+hr.amounts                         # Optional[list[AmountRequirement]]
+hr.attributes                      # Optional[list[AttributeRequirement]]
+
+amount = hr.amounts[0]
+amount.name                        # "amount.worker.vcpu"
+amount.min                         # Optional[float]
+amount.max                         # Optional[float]
+
+attr = hr.attributes[0]
+attr.name                          # "attr.worker.os.family"
+attr.any_of                        # Optional[list[str]]  (alias: anyOf)
+attr.all_of                        # Optional[list[str]]  (alias: allOf)
+```
+
+The classes are exposed under ``openjd.model._v1.job``. Use
+``isinstance(hr, openjd.model._v1.job.HostRequirements)`` to
+discriminate from the template-time class of the same short name.
+
 ## Template Types (from Rust, opaque)
 
 Templates are produced by `decode_*` functions and passed to `create_job`.
@@ -619,12 +655,20 @@ from openjd.model._v1.template import (
 ```
 
 The classes whose names collide with their job-time counterparts at
-``openjd.model._v1.job`` (``Action``, ``Environment``,
-``CancelationMode``, ``EmbeddedFile``, ``EnvironmentScript``,
-``EnvironmentActions``, ``StepScript``, ``StepActions``,
-``StepDependency``) are exposed under both their short name and a
+``openjd.model._v1.job`` (``Action``, ``AmountRequirement``,
+``AttributeRequirement``, ``CancelationMode``, ``EmbeddedFile``,
+``Environment``, ``EnvironmentActions``, ``EnvironmentScript``,
+``HostRequirements``, ``StepActions``, ``StepDependency``,
+``StepScript``) are exposed under both their short name and a
 ``Template``-prefixed alias (e.g. ``Action`` and ``TemplateAction``
-are the same class).
+are the same class). On the job-time side under
+``openjd.model._v1.job`` the unprefixed name resolves to a
+**different** Rust pyclass — for example, the template-time
+``HostRequirements`` carries ``FormatString`` fields while the
+job-time ``HostRequirements`` carries the post-``create_job``
+resolved ``f64`` / ``str`` values. Use ``isinstance`` checks
+against the import path that matches the lifecycle stage you
+care about.
 
 ### `StepTemplate`
 

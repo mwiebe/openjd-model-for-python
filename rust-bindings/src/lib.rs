@@ -142,6 +142,9 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEnvironmentActions>()?;
     m.add_class::<PyEmbeddedFile>()?;
     m.add_class::<PyJobParameter>()?;
+    m.add_class::<PyHostRequirements>()?;
+    m.add_class::<PyAmountRequirement>()?;
+    m.add_class::<PyAttributeRequirement>()?;
     m.add_class::<PyStepParameterSpace>()?;
     m.add_class::<PyStepDependency>()?;
     m.add_class::<PyCancelationMode>()?;
@@ -157,14 +160,14 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyChunkIntTaskParameter>()?;
     // Template-time structural pyclasses (mirror openjd_model::template::*)
     m.add_class::<PyTemplateAction>()?;
-    m.add_class::<PyAmountRequirement>()?;
-    m.add_class::<PyAttributeRequirement>()?;
+    m.add_class::<PyTemplateAmountRequirement>()?;
+    m.add_class::<PyTemplateAttributeRequirement>()?;
     m.add_class::<PyTemplateCancelationMode>()?;
     m.add_class::<PyTemplateEmbeddedFile>()?;
     m.add_class::<PyTemplateEnvironment>()?;
     m.add_class::<PyTemplateEnvironmentActions>()?;
     m.add_class::<PyTemplateEnvironmentScript>()?;
-    m.add_class::<PyHostRequirements>()?;
+    m.add_class::<PyTemplateHostRequirements>()?;
     m.add_class::<PySimpleAction>()?;
     m.add_class::<PyTemplateStepActions>()?;
     m.add_class::<PyTemplateStepDependency>()?;

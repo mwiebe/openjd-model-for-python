@@ -25,6 +25,7 @@ pub(crate) use job::{
     PyJob, PyStep, PyStepScript, PyStepActions, PyAction, PyEnvironment,
     PyEnvironmentScript, PyEnvironmentActions, PyEmbeddedFile, PyJobParameter,
     PyStepParameterSpace, PyStepDependency, PyCancelationMode,
+    PyHostRequirements, PyAmountRequirement, PyAttributeRequirement,
 };
 pub(crate) use create_job_fns::{py_create_job, py_create_environment, py_deserialize_step, py_preprocess_job_parameters, py_merge_job_parameter_definitions, py_evaluate_let_bindings};
 pub(crate) use step_param_space::PyStepParameterSpaceIterator;
@@ -34,12 +35,14 @@ pub(crate) use task_parameter::{
     PyStringTaskParameter, PyTaskChunksDefinition,
 };
 pub(crate) use template_types::{
-    PyAction as PyTemplateAction, PyAmountRequirement, PyAttributeRequirement,
+    PyAction as PyTemplateAction, PyAmountRequirement as PyTemplateAmountRequirement,
+    PyAttributeRequirement as PyTemplateAttributeRequirement,
     PyCancelationMode as PyTemplateCancelationMode, PyEmbeddedFile as PyTemplateEmbeddedFile,
     PyEnvironment as PyTemplateEnvironment,
     PyEnvironmentActions as PyTemplateEnvironmentActions,
-    PyEnvironmentScript as PyTemplateEnvironmentScript, PyHostRequirements,
-    PySimpleAction, PyStepActions as PyTemplateStepActions,
+    PyEnvironmentScript as PyTemplateEnvironmentScript,
+    PyHostRequirements as PyTemplateHostRequirements, PySimpleAction,
+    PyStepActions as PyTemplateStepActions,
     PyStepDependency as PyTemplateStepDependency, PyStepScript as PyTemplateStepScript,
     PyStepTemplate,
 };

@@ -1069,3 +1069,283 @@ class TestParametersDict:
         # default.
         j = create_job(job_template=t, job_parameter_values={})
         assert j.parameters["Frame"].value.item() == 5
+
+
+class TestJobTimeFieldExposure:
+    """Job-time pyclass field-coverage tests covering the P1 recommendations
+    in ``reports/model-bindings-quality-evaluation-report.md``: the
+    ``JobParameter.type`` alias, ``Step.host_requirements`` /
+    ``hostRequirements``, and ``EmbeddedFile.runnable`` /
+    ``end_of_line`` / ``endOfLine`` getters.
+
+    These cover the v0-parity contract: every field that the v0 reference
+    materialised onto its job-time pydantic models must have an equivalent
+    accessor on the v1 Rust-backed pyclasses.
+    """
+
+    def test_job_parameter_has_type_alias(self) -> None:
+        """``JobParameter.type`` is exposed as an alias for ``param_type``,
+        matching the v0 reference. Existing v0 callers (deadline-cloud,
+        openjd-cli) read ``param.type``; before this fix, the v1 binding
+        only exposed ``param.param_type`` and broke them silently."""
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "parameterDefinitions": [{"name": "Count", "type": "INT", "default": 5}],
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {"actions": {"onRun": {"command": "echo"}}},
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        param = j.parameters["Count"]
+        # Both getters return the same spec-form string.
+        assert param.type == "INT"
+        assert param.param_type == "INT"
+        assert param.type == param.param_type
+
+    def test_step_exposes_host_requirements(self) -> None:
+        """``Step.host_requirements`` (and the camelCase alias
+        ``hostRequirements``) returns a job-time
+        :class:`HostRequirements` from ``openjd.model._v1.job`` —
+        distinct from the template-time ``TemplateHostRequirements``."""
+        from openjd.model._v1.job import (
+            AmountRequirement as JobAmountRequirement,
+            AttributeRequirement as JobAttributeRequirement,
+            HostRequirements as JobHostRequirements,
+        )
+
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [
+                    {
+                        "name": "S",
+                        "hostRequirements": {
+                            "amounts": [{"name": "amount.worker.vcpu", "min": 4, "max": 8}],
+                            "attributes": [
+                                {
+                                    "name": "attr.worker.os.family",
+                                    "anyOf": ["linux"],
+                                }
+                            ],
+                        },
+                        "script": {"actions": {"onRun": {"command": "echo"}}},
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        step = j.steps[0]
+
+        hr = step.host_requirements
+        assert hr is not None
+        assert isinstance(hr, JobHostRequirements)
+
+        # camelCase alias resolves to the same shape.
+        hr_camel = step.hostRequirements
+        assert hr_camel is not None
+        assert isinstance(hr_camel, JobHostRequirements)
+
+        # Amounts: resolved to concrete f64.
+        assert hr.amounts is not None
+        assert len(hr.amounts) == 1
+        amount = hr.amounts[0]
+        assert isinstance(amount, JobAmountRequirement)
+        assert amount.name == "amount.worker.vcpu"
+        assert amount.min == 4.0
+        assert amount.max == 8.0
+
+        # Attributes: resolved to concrete strings, with both snake_case and
+        # camelCase aliases on the ``any_of`` / ``all_of`` getters.
+        assert hr.attributes is not None
+        assert len(hr.attributes) == 1
+        attr = hr.attributes[0]
+        assert isinstance(attr, JobAttributeRequirement)
+        assert attr.name == "attr.worker.os.family"
+        assert attr.any_of == ["linux"]
+        assert attr.anyOf == ["linux"]
+        assert attr.all_of is None
+        assert attr.allOf is None
+
+    def test_step_host_requirements_none_when_omitted(self) -> None:
+        """A step with no ``hostRequirements`` reports ``None``."""
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {"actions": {"onRun": {"command": "echo"}}},
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        step = j.steps[0]
+        assert step.host_requirements is None
+        assert step.hostRequirements is None
+
+    def test_step_host_requirements_distinct_from_template_class(self) -> None:
+        """Job-time and template-time ``HostRequirements`` are distinct
+        pyclass types — the job-time pyclass exposes resolved ``f64`` /
+        ``str`` fields, the template-time pyclass exposes raw
+        ``FormatString`` fields. Pinning the class identity here so a
+        future refactor doesn't accidentally collapse them into one."""
+        from openjd.model._v1.job import (
+            HostRequirements as JobHostRequirements,
+        )
+        from openjd.model._v1.template import (
+            HostRequirements as TemplateHR_alias,
+            TemplateHostRequirements,
+        )
+
+        # Template-side aliases collapse onto the same class object.
+        assert TemplateHR_alias is TemplateHostRequirements
+
+        # Job-time and template-time are distinct.
+        assert JobHostRequirements is not TemplateHostRequirements
+        assert JobHostRequirements.__module__ == "openjd.model._v1.job"
+        assert TemplateHostRequirements.__module__ == "openjd.model._v1.template"
+
+    def test_embedded_file_exposes_runnable(self) -> None:
+        """``EmbeddedFile.runnable`` is exposed on the job-time pyclass
+        (and matches the template-time pyclass's existing field). The
+        sessions runtime reads this to set the executable bit when
+        materialising the file."""
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {
+                            "actions": {"onRun": {"command": "./run.sh"}},
+                            "embeddedFiles": [
+                                {
+                                    "name": "RunScript",
+                                    "type": "TEXT",
+                                    "filename": "run.sh",
+                                    "data": "#!/bin/sh\necho hi",
+                                    "runnable": True,
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        embedded = j.steps[0].script.embeddedFiles
+        assert embedded is not None
+        ef = embedded[0]
+        assert ef.runnable is True
+
+    def test_embedded_file_runnable_none_when_omitted(self) -> None:
+        """Omitted ``runnable`` reports ``None`` — distinct from
+        ``False``, since the template did not state a preference."""
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {
+                            "actions": {"onRun": {"command": "echo"}},
+                            "embeddedFiles": [
+                                {
+                                    "name": "Note",
+                                    "type": "TEXT",
+                                    "data": "hello",
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        embedded = j.steps[0].script.embeddedFiles
+        assert embedded is not None
+        ef = embedded[0]
+        assert ef.runnable is None
+
+    @pytest.mark.parametrize(
+        ("eol_input", "expected"),
+        [
+            ("LF", "LF"),
+            ("CRLF", "CRLF"),
+        ],
+    )
+    def test_embedded_file_exposes_end_of_line(self, eol_input: str, expected: str) -> None:
+        """``EmbeddedFile.end_of_line`` (and camelCase alias
+        ``endOfLine``) returns the spec-form string. Sessions need
+        this to convert line endings before writing the file."""
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "extensions": ["FEATURE_BUNDLE_1"],
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {
+                            "actions": {"onRun": {"command": "echo"}},
+                            "embeddedFiles": [
+                                {
+                                    "name": "Note",
+                                    "type": "TEXT",
+                                    "data": "hello",
+                                    "endOfLine": eol_input,
+                                }
+                            ],
+                        },
+                    }
+                ],
+            },
+            supported_extensions=["FEATURE_BUNDLE_1"],
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        embedded = j.steps[0].script.embeddedFiles
+        assert embedded is not None
+        ef = embedded[0]
+        assert ef.end_of_line == expected
+        assert ef.endOfLine == expected
+
+    def test_embedded_file_end_of_line_none_when_omitted(self) -> None:
+        """Omitted ``endOfLine`` reports ``None``."""
+        t = decode_job_template(
+            template={
+                "specificationVersion": "jobtemplate-2023-09",
+                "name": "T",
+                "steps": [
+                    {
+                        "name": "S",
+                        "script": {
+                            "actions": {"onRun": {"command": "echo"}},
+                            "embeddedFiles": [
+                                {
+                                    "name": "Note",
+                                    "type": "TEXT",
+                                    "data": "hello",
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
+        j = create_job(job_template=t, job_parameter_values={})
+        embedded = j.steps[0].script.embeddedFiles
+        assert embedded is not None
+        ef = embedded[0]
+        assert ef.end_of_line is None
+        assert ef.endOfLine is None
