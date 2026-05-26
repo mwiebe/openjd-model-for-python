@@ -72,7 +72,6 @@ Rust-only. There is no pure-Python predecessor — the Python interface spec and
 - **Range expressions** (`range_expr.rs`) — `PyRangeExpr`, `PyRangeExprError`.
 - **Path mapping** (`path_mapping.rs`, `path_format.rs`) — `PyPathMappingRule`, `PyPathFormat`.
 - **Errors** (`errors.rs`) — `PyExpressionError`, `PyExpressionTypeError`.
-- **Function library** (`function_library.rs`) — `get_default_library`, `FunctionLibrary.with_host_context`.
 
 Spec entry point: `specs/python-expr-interface.md`. Python wrapper: `src/openjd/expr/__init__.py`. Tests: `test/openjd/expr/`. Reference branch for parity: `mwiebe/openjd-model-for-python` `expr`.
 

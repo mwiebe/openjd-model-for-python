@@ -117,6 +117,9 @@ line-length = 100
 
 [tool.pytest.ini_options]
 xfail_strict = false
+markers = [
+    "fuzz: Hypothesis-based fuzz tests (test/openjd/expr/test_fuzz.py)",
+]
 # Use importlib import mode so test files with identical names in different
 # directories (e.g. test/openjd/model_v0/test_parse.py and
 # test/openjd/model_v1/test_parse.py) coexist in the same pytest run. The

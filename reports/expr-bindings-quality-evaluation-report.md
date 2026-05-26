@@ -744,16 +744,28 @@ accuracy or coverage; P3 items are quality-of-life improvements.
     skipped, 9 xfailed, coverage 94.34%; the regenerated stub diff
     is identical to the EvalResult-only one from Rec #9 (no
     pyfunction signature change).
-12. **Update `AGENTS.md` to drop the reference to
+12. ~~**Update `AGENTS.md` to drop the reference to
     `function_library.rs`.** The "Function library
     (`function_library.rs`) — `get_default_library`,
     `FunctionLibrary.with_host_context`" line in the expr section is
     stale; the file does not exist and the symbols it advertised were
-    removed.
-13. **Register the `pytest.mark.fuzz` custom marker in
+    removed.~~ **Resolved.** Removed the bullet from the expr
+    component map in `AGENTS.md`. The function-library facility was
+    replaced by `ExprProfile` / `HostContext` when the bindings were
+    rewritten on top of openjd-rs; no source file with that name
+    exists under `rust-bindings/src/expr/`.
+
+13. ~~**Register the `pytest.mark.fuzz` custom marker in
     `pyproject.toml`** to silence the eight `PytestUnknownMarkWarning`
     warnings produced by `test/openjd/expr/test_fuzz.py`. Add to
     `[tool.pytest.ini_options]`:
     ```toml
     markers = ["fuzz: hypothesis fuzz tests"]
-    ```
+    ```~~ **Resolved.** Added a `markers = [...]` entry to
+    `[tool.pytest.ini_options]` in `pyproject.toml` registering the
+    `fuzz` marker (with a one-line description pointing at the sole
+    consumer, `test/openjd/expr/test_fuzz.py`, which sets
+    `pytestmark = pytest.mark.fuzz` at module level). Verified by
+    re-running `hatch run test`: the `8 warnings` line that
+    accompanied the prior `5094 passed, 24 skipped, 9 xfailed`
+    summary is gone.
