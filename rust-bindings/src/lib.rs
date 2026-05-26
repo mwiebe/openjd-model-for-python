@@ -73,6 +73,7 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyParsedExpression>()?;
     m.add_class::<PyPathMappingRule>()?;
     m.add_class::<PyRangeExpr>()?;
+    m.add_class::<PyIntRange>()?;
     m.add_class::<PyFormatString>()?;
 
     m.add_function(wrap_pyfunction!(evaluate_expression, m)?)?;

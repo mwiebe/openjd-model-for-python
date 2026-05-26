@@ -443,7 +443,7 @@ len(r)          # 10
 r[0]            # 1
 r[-1]           # 10
 list(r)         # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-r.ranges()      # [(1, 10, 1)]
+r.ranges()      # [IntRange(start=1, end=10, step=1)]
 r.start         # 1
 r.end           # 10
 
@@ -452,7 +452,9 @@ list(r)         # [1, 4, 7, 10]
 
 r = RangeExpr("1-3,10-12")
 list(r)         # [1, 2, 3, 10, 11, 12]
-r.ranges()      # [(1, 3, 1), (10, 12, 1)]
+r.ranges()
+# [IntRange(start=1, end=3, step=1),
+#  IntRange(start=10, end=12, step=1)]
 
 # Build from a list of values (ints or numeric strings, mixed allowed).
 # Duplicates are removed and the result is sorted ascending.
@@ -463,6 +465,43 @@ RangeExpr.from_list(["1", "2", "3"])      # 1-3
 
 `RangeExpr.from_list([])` raises `ValueError`. Two `RangeExpr` values
 that compare equal also hash equal (suitable as `set` / `dict` keys).
+
+### `IntRange`
+
+A single contiguous integer range — the element type returned by
+``RangeExpr.ranges()``. Both ``start`` and ``end`` are always
+*inclusive*, and ``step`` is always positive (descending input ranges
+are normalised to ascending form upstream).
+
+```python
+from openjd.expr import IntRange
+
+ir = IntRange(1, 10, 2)
+ir.start        # 1
+ir.end          # 9 — last value reached by stepping from start
+ir.step         # 2
+len(ir)         # 5
+3 in ir         # True
+4 in ir         # False
+list(ir)        # [1, 3, 5, 7, 9]
+
+# Constructor accepts a descending range with a negative step and
+# normalises it to ascending form — matches the upstream IntRange
+# constructor and the v0 IntRange shape.
+IntRange(10, 1, -1)        # IntRange(start=1, end=10, step=1)
+IntRange(1, 10, 0)         # raises RangeExprError
+IntRange(1, 10, -1)        # raises (ascending range needs positive step)
+
+# Equality and hashing — IntRange instances are usable as set/dict keys.
+IntRange(1, 10, 1) == IntRange(1, 10, 1)   # True
+IntRange(1, 10, 1) == IntRange(1, 10, 2)   # False (different step)
+hash(IntRange(1, 10, 1))                    # stable within a process
+
+# Pickleable via the standard constructor round-trip.
+import pickle
+loaded = pickle.loads(pickle.dumps(IntRange(1, 10, 1)))
+assert loaded == IntRange(1, 10, 1)
+```
 
 ### `FormatString`
 

@@ -39,6 +39,7 @@ __all__ = [
     "HiddenOnlyUserInterface",
     "HostContext",
     "HostRequirements",
+    "IntRange",
     "IntTaskParameter",
     "IntTaskParameterDefinition",
     "IntUserInterface",
@@ -72,6 +73,7 @@ __all__ = [
     "PathTaskParameterDefinition",
     "PathUserInterface",
     "PosixSessionUser",
+    "PyIntRangeIter",
     "RangeExpr",
     "RangeExprUserInterface",
     "ScriptRunnerState",
@@ -953,6 +955,51 @@ class HostRequirements:
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
 @typing.final
+class IntRange:
+    r"""
+    A single contiguous integer range: ``[start, end]`` inclusive
+    with a positive ``step``. Both ``start`` and ``end`` are always
+    included in the iteration set, and ``step`` is always positive
+    (descending input ranges are normalised to ascending form
+    upstream).
+
+    Returned by ``RangeExpr.ranges()``. Pinned for parity with the
+    v0 reference's ``IntRange`` shape.
+    """
+
+    @property
+    def start(self) -> builtins.int:
+        r"""
+        Smallest value in the range (always <= ``end``).
+        """
+
+    @property
+    def end(self) -> builtins.int:
+        r"""
+        Largest value in the range (always >= ``start``).
+        """
+
+    @property
+    def step(self) -> builtins.int:
+        r"""
+        Step between successive values (always > 0).
+        """
+
+    def __new__(
+        cls, start: builtins.int, end: builtins.int, step: builtins.int = 1
+    ) -> IntRange: ...
+    def __len__(self) -> builtins.int: ...
+    def __contains__(self, value: builtins.int) -> builtins.bool: ...
+    def __iter__(self) -> PyIntRangeIter: ...
+    def __eq__(self, other: IntRange) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[type, tuple[builtins.int, builtins.int, builtins.int]]:
+        r"""
+        Pickle support — round-trips through the constructor.
+        """
+
+@typing.final
 class IntTaskParameter:
     r"""
     Resolved INT task parameter: a `range` (list of ints OR a
@@ -1743,6 +1790,11 @@ class PyExprValueIter:
     def __next__(self) -> ExprValue: ...
 
 @typing.final
+class PyIntRangeIter:
+    def __iter__(self) -> PyIntRangeIter: ...
+    def __next__(self) -> typing.Optional[builtins.int]: ...
+
+@typing.final
 class PyRangeExprIter:
     def __iter__(self) -> "PyRangeExprIter": ...
     def __next__(self) -> builtins.int: ...
@@ -1782,7 +1834,7 @@ class RangeExpr:
     def __iter__(self) -> PyRangeExprIter: ...
     def __str__(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
-    def ranges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.int]]: ...
+    def ranges(self) -> builtins.list[IntRange]: ...
     def __hash__(self) -> builtins.int:
         r"""
         Hash defers to the Rust `RangeExpr` impl (which hashes the

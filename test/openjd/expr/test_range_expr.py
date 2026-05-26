@@ -4,7 +4,7 @@
 
 import pytest
 from openjd.expr import evaluate_expression, SymbolTable, ExpressionError, TypeCode
-from openjd.expr import RangeExpr
+from openjd.expr import RangeExpr, IntRange
 
 
 class TestRangeExpr:
@@ -242,3 +242,115 @@ class TestExprValueRangeExprProtocols:
         result = evaluate_expression("42")
         with pytest.raises(TypeError):
             list(result)
+
+
+class TestIntRange:
+    """``IntRange`` is the element type returned by
+    ``RangeExpr.ranges()``. It exposes ``start``/``end``/``step``
+    getters, supports iteration / containment / hashing / equality /
+    pickle, and matches the v0 reference's ``IntRange`` shape."""
+
+    def test_constructor_ascending(self) -> None:
+        ir = IntRange(1, 10, 1)
+        assert ir.start == 1
+        assert ir.end == 10
+        assert ir.step == 1
+
+    def test_constructor_with_step(self) -> None:
+        # Last value reached by stepping (not the parameter end).
+        ir = IntRange(1, 10, 2)
+        assert ir.start == 1
+        assert ir.end == 9
+        assert ir.step == 2
+        assert list(ir) == [1, 3, 5, 7, 9]
+
+    def test_constructor_normalises_descending(self) -> None:
+        # IntRange(10, 1, -1) is normalised to ascending form, matching
+        # the upstream ``IntRange::new`` and the v0 reference's
+        # constructor behaviour.
+        ir = IntRange(10, 1, -1)
+        assert ir.start == 1
+        assert ir.end == 10
+        assert ir.step == 1
+
+    def test_constructor_zero_step_raises(self) -> None:
+        with pytest.raises(Exception, match="step must not be zero"):
+            IntRange(1, 10, 0)
+
+    def test_constructor_ascending_with_negative_step_raises(self) -> None:
+        with pytest.raises(Exception, match="ascending range"):
+            IntRange(1, 10, -1)
+
+    def test_len_step_1(self) -> None:
+        assert len(IntRange(1, 10, 1)) == 10
+
+    def test_len_with_step(self) -> None:
+        assert len(IntRange(1, 9, 2)) == 5  # [1, 3, 5, 7, 9]
+
+    def test_iter(self) -> None:
+        assert list(IntRange(1, 5, 1)) == [1, 2, 3, 4, 5]
+
+    def test_contains(self) -> None:
+        ir = IntRange(1, 9, 2)
+        assert 1 in ir
+        assert 3 in ir
+        assert 9 in ir
+        assert 2 not in ir
+        assert 10 not in ir
+
+    def test_repr(self) -> None:
+        assert repr(IntRange(1, 10, 1)) == "IntRange(start=1, end=10, step=1)"
+        assert repr(IntRange(5, 15, 2)) == "IntRange(start=5, end=15, step=2)"
+
+    def test_eq(self) -> None:
+        assert IntRange(1, 10, 1) == IntRange(1, 10, 1)
+        assert IntRange(1, 10, 1) != IntRange(1, 10, 2)
+        assert IntRange(1, 10, 1) != IntRange(2, 10, 1)
+        assert IntRange(1, 10, 1) != IntRange(1, 11, 1)
+
+    def test_hashable(self) -> None:
+        # Same values hash to the same value.
+        assert hash(IntRange(1, 10, 1)) == hash(IntRange(1, 10, 1))
+        # Usable as set / dict key.
+        s = {IntRange(1, 10, 1), IntRange(1, 10, 2), IntRange(1, 10, 1)}
+        assert len(s) == 2  # the duplicate is collapsed
+
+    def test_pickle_round_trip(self) -> None:
+        import pickle
+
+        original = IntRange(1, 10, 2)
+        loaded = pickle.loads(pickle.dumps(original))
+        assert loaded == original
+        assert (loaded.start, loaded.end, loaded.step) == (1, 9, 2)
+
+
+class TestRangeExprRangesReturnsIntRange:
+    """``RangeExpr.ranges()`` returns a list of ``IntRange``
+    instances (not bare ``(start, end, step)`` tuples). This matches
+    the v0 reference's shape and lets callers attribute-access the
+    components (``.start`` / ``.end`` / ``.step``) without
+    positional-tuple bookkeeping."""
+
+    def test_single_range_returns_intrange(self) -> None:
+        r = RangeExpr("1-10")
+        ranges = r.ranges()
+        assert len(ranges) == 1
+        assert isinstance(ranges[0], IntRange)
+        assert ranges[0] == IntRange(1, 10, 1)
+
+    def test_multi_range_returns_intrange_list(self) -> None:
+        r = RangeExpr("1-3,10-12")
+        ranges = r.ranges()
+        assert len(ranges) == 2
+        assert all(isinstance(ir, IntRange) for ir in ranges)
+        assert ranges[0] == IntRange(1, 3, 1)
+        assert ranges[1] == IntRange(10, 12, 1)
+
+    def test_stepped_range(self) -> None:
+        r = RangeExpr("1-10:3")
+        ranges = r.ranges()
+        assert len(ranges) == 1
+        # Upstream normalises: the last value reachable by stepping is 10.
+        assert ranges[0] == IntRange(1, 10, 3)
+        # Confirm the iteration shape matches RangeExpr's iteration.
+        assert list(ranges[0]) == list(r)

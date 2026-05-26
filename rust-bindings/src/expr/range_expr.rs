@@ -6,9 +6,123 @@ use pyo3::types::PyType;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
-use openjd_expr::range_expr::RangeExpr;
+use openjd_expr::range_expr::{IntRange, RangeExpr};
 
 use crate::expr::errors::PyRangeExprError;
+
+/// A single contiguous integer range: ``[start, end]`` inclusive
+/// with a positive ``step``. Both ``start`` and ``end`` are always
+/// included in the iteration set, and ``step`` is always positive
+/// (descending input ranges are normalised to ascending form
+/// upstream).
+///
+/// Returned by ``RangeExpr.ranges()``. Pinned for parity with the
+/// v0 reference's ``IntRange`` shape.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.expr", name = "IntRange", frozen, from_py_object)]
+#[derive(Clone)]
+pub(crate) struct PyIntRange {
+    pub(crate) inner: IntRange,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyIntRange {
+    #[new]
+    #[pyo3(signature = (start, end, step=1))]
+    fn new(start: i64, end: i64, step: i64) -> PyResult<Self> {
+        IntRange::new(start, end, step)
+            .map(|inner| PyIntRange { inner })
+            .map_err(|e| PyRangeExprError::new_err(e.to_string()))
+    }
+
+    /// Smallest value in the range (always <= ``end``).
+    #[getter]
+    fn start(&self) -> i64 {
+        self.inner.start
+    }
+
+    /// Largest value in the range (always >= ``start``).
+    #[getter]
+    fn end(&self) -> i64 {
+        self.inner.end
+    }
+
+    /// Step between successive values (always > 0).
+    #[getter]
+    fn step(&self) -> i64 {
+        self.inner.step
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __contains__(&self, value: i64) -> bool {
+        self.inner.contains(value)
+    }
+
+    fn __iter__(&self) -> PyIntRangeIter {
+        PyIntRangeIter {
+            values: self.inner.iter().collect(),
+            pos: 0,
+        }
+    }
+
+    fn __eq__(&self, other: &PyIntRange) -> bool {
+        self.inner == other.inner
+    }
+
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        self.inner.hash(&mut h);
+        h.finish()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "IntRange(start={}, end={}, step={})",
+            self.inner.start, self.inner.end, self.inner.step
+        )
+    }
+
+    /// Pickle support — round-trips through the constructor.
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyType>, (i64, i64, i64))> {
+        Ok((
+            py.get_type::<Self>(),
+            (self.inner.start, self.inner.end, self.inner.step),
+        ))
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(module = "openjd.expr")]
+pub(crate) struct PyIntRangeIter {
+    values: Vec<i64>,
+    pos: usize,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyIntRangeIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<i64> {
+        if self.pos < self.values.len() {
+            let v = self.values[self.pos];
+            self.pos += 1;
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.expr", name = "RangeExpr", from_py_object)]
@@ -124,8 +238,12 @@ impl PyRangeExpr {
         format!("RangeExpr(\"{}\")", self.inner)
     }
 
-    fn ranges(&self) -> Vec<(i64, i64, i64)> {
-        self.inner.ranges().iter().map(|r| (r.start, r.end, r.step)).collect()
+    fn ranges(&self) -> Vec<PyIntRange> {
+        self.inner
+            .ranges()
+            .iter()
+            .map(|r| PyIntRange { inner: r.clone() })
+            .collect()
     }
 
     /// Hash defers to the Rust `RangeExpr` impl (which hashes the

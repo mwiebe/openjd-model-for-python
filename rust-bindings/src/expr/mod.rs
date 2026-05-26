@@ -23,5 +23,5 @@ pub(crate) use profile::{PyExprExtension, PyExprProfile, PyExprRevision, PyHostC
 pub(crate) use parsed_expression::{PyParsedExpression, parse_expression};
 pub(crate) use evaluate::evaluate_expression;
 pub(crate) use path_mapping::PyPathMappingRule;
-pub(crate) use range_expr::PyRangeExpr;
+pub(crate) use range_expr::{PyIntRange, PyRangeExpr};
 pub(crate) use format_string::{PyFormatString, escape_format_string};

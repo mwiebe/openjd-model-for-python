@@ -16,6 +16,7 @@ from openjd._openjd_rs import (
     PathMappingRule,
     PathFormat,
     RangeExpr,
+    IntRange,
     RangeExprError,
     FormatString,
     FormatStringValidationError,
@@ -55,6 +56,7 @@ __all__ = [
     "PathMappingRule",
     "PathFormat",
     "RangeExpr",
+    "IntRange",
     "FormatString",
     # Profile
     "ExprProfile",
