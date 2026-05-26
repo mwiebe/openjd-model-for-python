@@ -177,8 +177,9 @@ ExprValue("/tmp", type="path", path_format=PathFormat.POSIX)  # Path
 ExprValue("1-5", type="range_expr")       # RangeExpr
 
 # Special constructors
+ExprValue.from_float(3.14)                # Float (canonical Display form: "3.14")
 ExprValue.from_float(3.14, "3.140")       # Float preserving original string
-ExprValue.unresolved("int")              # Unresolved placeholder for type checking
+ExprValue.unresolved("int")               # Unresolved placeholder for type checking
 
 # Properties
 v = ExprValue(42)
@@ -477,6 +478,41 @@ and `__hash__` over the three fields. Two rules compare equal when
 they have identical `source_path_format`, `source_path`, and
 `destination_path`; equal rules hash equal so the type is suitable
 as a `set` / `dict` key.
+
+**`source_path` is always a `str`, regardless of input.** The
+constructor accepts either a `str` or the matching pathlib type
+(`PurePosixPath` for `PathFormat.POSIX`, `PureWindowsPath` for
+`PathFormat.WINDOWS`, `str`-only for `PathFormat.URI`), but the
+stored field — and the `source_path` getter — is always a
+`str`. This is a deliberate divergence from the pure-Python
+reference (which preserves whatever the constructor was given) so
+that the rule is cheap to serialise, pickle, and round-trip
+through `to_dict`/`from_dict` without needing per-format
+discriminator logic on the consumer side. Callers porting from the
+reference that need a `PurePath`-shaped value should re-wrap the
+getter result themselves:
+
+```python
+from pathlib import PurePosixPath, PureWindowsPath
+
+rule = PathMappingRule(
+    source_path_format=PathFormat.POSIX,
+    source_path=PurePosixPath("/mnt/shared"),
+    destination_path="/local/cache",
+)
+rule.source_path                     # "/mnt/shared" (str, not PurePosixPath)
+type(rule.source_path)               # <class 'str'>
+
+# Re-wrap if needed:
+if rule.source_path_format == PathFormat.POSIX:
+    src = PurePosixPath(rule.source_path)
+elif rule.source_path_format == PathFormat.WINDOWS:
+    src = PureWindowsPath(rule.source_path)
+else:
+    src = rule.source_path           # URI: stays str
+```
+
+`destination_path` follows the same rule: `str` in, `str` out.
 
 ### `RangeExpr`
 

@@ -215,10 +215,26 @@ impl PyExprValue {
         Ok(PyExprValue { inner: ExprValue::Unresolved(expr_type) })
     }
 
+    /// Construct a Float-typed ``ExprValue`` from a ``f64``.
+    ///
+    /// The optional ``original_str`` argument carries the
+    /// user-supplied source string for diagnostics — when present,
+    /// it's surfaced verbatim in error messages and ``__str__``,
+    /// preserving information that would otherwise be lost in the
+    /// f64 round-trip (e.g. trailing zeros: ``"3.140"`` vs
+    /// ``3.14``). When omitted (or ``None``), the canonical Rust
+    /// ``f64`` ``Display`` form is used.
+    ///
+    /// Mirrors the pure-Python reference:
+    /// ``ExprValue.from_float(value, original_str=None)``.
     #[staticmethod]
-    fn from_float(value: f64, original_str: String) -> PyResult<Self> {
-        let float = openjd_expr::value::Float64::with_str(value, original_str)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    #[pyo3(signature = (value, original_str=None))]
+    fn from_float(value: f64, original_str: Option<String>) -> PyResult<Self> {
+        let float = match original_str {
+            Some(s) => openjd_expr::value::Float64::with_str(value, s),
+            None => openjd_expr::value::Float64::new(value),
+        }
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(PyExprValue { inner: ExprValue::Float(float) })
     }
 

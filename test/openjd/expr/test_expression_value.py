@@ -14,10 +14,50 @@ class TestFromFloat:
         assert v.item() == 3.14
         assert str(v) == "3.14"
 
+    def test_from_float_one_arg(self) -> None:
+        # ``original_str`` is optional; when omitted the canonical
+        # f64 ``Display`` form is used. Pinned for parity with the
+        # pure-Python reference's
+        # ``ExprValue.from_float(value, original_str=None)``
+        # signature.
+        v = ExprValue.from_float(3.14)
+        assert v.item() == 3.14
+        assert str(v) == "3.14"
+
+    def test_from_float_explicit_none(self) -> None:
+        # Explicit ``None`` is equivalent to omitting the argument.
+        v = ExprValue.from_float(3.14, None)
+        assert v.item() == 3.14
+        assert str(v) == "3.14"
+
     def test_from_float_with_original_str(self) -> None:
         v = ExprValue.from_float(3.14, "3.140")
         assert v.item() == 3.14
         assert str(v) == "3.140"
+
+    def test_from_float_one_arg_loses_trailing_zero(self) -> None:
+        # Without ``original_str``, the f64 → str round-trip drops
+        # trailing zeros (Rust's ``f64`` ``Display`` shows the
+        # shortest round-trippable form: ``1.0`` not ``1.000``).
+        # With it, the user-supplied form is preserved verbatim.
+        assert str(ExprValue.from_float(1.0)) == "1.0"
+        assert str(ExprValue.from_float(1.0, "1.000")) == "1.000"
+
+    def test_from_float_rejects_nan(self) -> None:
+        import math
+
+        with pytest.raises(ValueError) as excinfo:
+            ExprValue.from_float(math.nan)
+        # AGENTS.md "Test Quality Standard": pin the full message.
+        assert str(excinfo.value) == "Float operation produced NaN"
+
+    def test_from_float_rejects_nan_with_original_str(self) -> None:
+        # The optional-arg path doesn't bypass NaN validation.
+        import math
+
+        with pytest.raises(ValueError) as excinfo:
+            ExprValue.from_float(math.nan, "nan")
+        assert str(excinfo.value) == "Float operation produced NaN"
 
     def test_from_float_decimal(self) -> None:
         v = ExprValue(Decimal("3.140"))
