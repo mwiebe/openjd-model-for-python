@@ -155,7 +155,15 @@ pub(crate) fn expr_value_to_py(py: Python<'_>, val: &ExprValue) -> PyResult<Py<p
                 .collect::<PyResult<_>>()?;
             Ok(PyList::new(py, items)?.into_any().unbind())
         }
-        _ => Ok(py.None()),
+        // `ExprValue` is `#[non_exhaustive]`; if a new variant is added
+        // crate-side it MUST be mirrored above. Surfacing a panic at
+        // the binding boundary is preferable to silently converting
+        // future variants to Python `None` (the previous fallback),
+        // which would corrupt round-trips and mask the missing handler.
+        v => unreachable!(
+            "openjd-expr added a new ExprValue variant ({v:?}) but the Python binding has no mapping; \
+             add a match arm in `rust-bindings/src/expr/expr_value.rs::expr_value_to_py`"
+        ),
     }
 }
 

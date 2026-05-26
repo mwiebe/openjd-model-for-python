@@ -406,7 +406,7 @@ test suite, not just by trusting `**Resolved**` markers. The
 following are *new* findings from this evaluation; all are
 documentation / minor-hardening level (P2 / P3). No P1.
 
-1. **Replace the `_ => Ok(py.None())` catch-all in
+1. ~~**Replace the `_ => Ok(py.None())` catch-all in
    `rust-bindings/src/expr/expr_value.rs::expr_value_to_py`
    with an `unreachable!` arm**, mirroring the hardening
    already applied to `expr/expr_type.rs::From<TypeCode>`. As
@@ -414,9 +414,14 @@ documentation / minor-hardening level (P2 / P3). No P1.
    variant introduced upstream would today be silently
    converted to Python `None`. `unreachable!` surfaces the
    missing handler at the binding boundary instead of
-   masking it. *(P2)*
+   masking it. *(P2)*~~ **Resolved.** Replaced the catch-all
+   with `v => unreachable!(...)` matching the existing
+   `expr_type.rs::From<TypeCode>` pattern. The panic message
+   names the file path (`rust-bindings/src/expr/expr_value.rs::
+   expr_value_to_py`) so a future maintainer adding an
+   `ExprValue` variant has a clear pointer to the right place.
 
-2. **Document the `PathFormat` `str, Enum` mixin loss in
+2. ~~**Document the `PathFormat` `str, Enum` mixin loss in
    `specs/python-expr-interface.md`**, mirroring the existing
    `TypeCode`-not-IntEnum note. The new note should call out
    that `PathFormat.POSIX == "POSIX"` is `False` and
@@ -424,34 +429,76 @@ documentation / minor-hardening level (P2 / P3). No P1.
    suggested rewrite for callers (`fmt == PathFormat.POSIX` /
    `fmt is PathFormat.POSIX`). Code-review for downstream
    consumers may also be worthwhile (`deadline-cloud`,
-   `openjd-sessions-for-python` wrapper). *(P2)*
+   `openjd-sessions-for-python` wrapper). *(P2)*~~ **Resolved
+   (spec note added).** Added a "Not a `str` mixin Enum"
+   callout to the `PathFormat` section paralleling the
+   existing `TypeCode` callout. Covers (a) the comparison /
+   isinstance divergence with the recommended migrations
+   (`fmt is PathFormat.POSIX` / `fmt == PathFormat.POSIX` /
+   `fmt.name`), and (b) the iteration / value-lookup losses
+   (`list(PathFormat)`, `for fmt in PathFormat`,
+   `PathFormat["POSIX"]` all raise `TypeError`). The
+   downstream-consumer code review is out of scope for this
+   commit; it's tracked separately by the consumer
+   repositories.
 
-3. **Extend the `TypeCode` "not an `IntEnum`" note in the spec
+3. ~~**Extend the `TypeCode` "not an `IntEnum`" note in the spec
    to also flag the enum-protocol surface that doesn't carry
    over** — `list(TypeCode)`, `TypeCode["INT"]`, `TypeCode(2)`,
    and `for tc in TypeCode: ...` all fail. Recommended phrasing
    parallels the existing isinstance note: "Iteration and
    value-lookup operations from `IntEnum` are not supported.
    Use direct attribute access (`TypeCode.INT`) and an explicit
-   tuple of members where iteration is needed." *(P3)*
+   tuple of members where iteration is needed." *(P3)*~~
+   **Resolved.** Added a second paragraph to the existing
+   "Not an `IntEnum` subclass" callout in the `TypeCode`
+   section. Lists each operation that raises `TypeError`
+   (`list(TypeCode)`, `for tc in TypeCode`,
+   `TypeCode["INT"]`, `TypeCode(2)`) and recommends direct
+   attribute access plus an explicit member tuple where
+   iteration is needed.
 
-4. **Document `RangeExpr.from_str` in
+4. ~~**Document `RangeExpr.from_str` in
    `specs/python-expr-interface.md`** under the `RangeExpr`
    section. It mirrors the v0 reference's classmethod and is
    called by some test code; readers shouldn't have to read
-   the source to discover it. *(P3)*
+   the source to discover it. *(P3)*~~ **Resolved.** Added an
+   inline `RangeExpr.from_str(...)` example block to the
+   `RangeExpr` section, between the existing constructor and
+   `from_list` examples, with the explicit note that it is a
+   `@staticmethod` equivalent to the constructor and mirrors
+   the v0 reference's `from_str` classmethod. Extended the
+   trailing error-summary paragraph to cover `RangeExprError`
+   on malformed input from both the constructor and
+   `from_str`.
 
-5. **Document `HostContext.is_enabled()` and
+5. ~~**Document `HostContext.is_enabled()` and
    `HostContext.is_unresolved()` in the `HostContext` section
    of the spec.** They're useful predicates (e.g. for
    conditional path-mapping setup) and are exposed but
-   undocumented. *(P3)*
+   undocumented. *(P3)*~~ **Resolved.** Added a "Predicates on
+   a `HostContext`" example block to the combined
+   `ExprRevision` / `ExprExtension` / `HostContext` /
+   `ExprProfile` section, right after the three-states list.
+   Covers all four shapes (`none()`, `unresolved()`,
+   `with_rules([])`, `with_rules([rule, ...])`) showing the
+   `is_enabled` / `is_unresolved` mapping, with an explicit
+   inline note that `with_rules([])` is enabled (passing
+   zero rules is **not** the same as passing no host context
+   at all).
 
-6. **Surface `ExprRevision.CURRENT` as an example in the
+6. ~~**Surface `ExprRevision.CURRENT` as an example in the
    `ExprRevision` section.** The spec currently says
    "[`ExprProfile.current()`] selects the current revision"
    but doesn't show the `ExprRevision.CURRENT` constant
-   directly. *(P3)*
+   directly. *(P3)*~~ **Resolved.** Added an
+   `ExprRevision.CURRENT` example block to the end of the
+   profile section's example. Shows that the constant equals
+   `ExprRevision.V2026_02` today, that `str(...)` returns
+   `"2026-02"` and `.name` returns `"V2026_02"`, with the
+   explicit note that it tracks the upstream
+   `openjd_expr::ExprRevision::CURRENT` constant and rolls
+   forward as new revisions ship.
 
 Cross-reference for the report-driven workflow: when an item
 is resolved, replace the line with `~~ ... ~~ **Resolved.**`

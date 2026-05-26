@@ -155,6 +155,15 @@ TypeCode.UNRESOLVED   # placeholder for unknown values during type checking
 > via `isinstance(..., int)` checks should switch to
 > `isinstance(..., TypeCode)` or to value comparison
 > (`code == TypeCode.INT`).
+>
+> **Iteration and value-lookup operations from `IntEnum` are not
+> supported.** `list(TypeCode)`, `for tc in TypeCode: ...`,
+> `TypeCode["INT"]`, and `TypeCode(2)` (look up by discriminant)
+> all raise `TypeError` on the Rust-backed binding — the pyo3 enum
+> protocol exposes the variants as class attributes only. Use
+> direct attribute access (`TypeCode.INT`, `TypeCode.LIST`, …) and,
+> where a stable ordered iteration is needed, an explicit tuple of
+> the members defined above.
 
 ### `ExprValue`
 
@@ -327,11 +336,27 @@ HostContext.none()                      # default — apply_path_mapping is not 
 HostContext.unresolved()                # template-validation time — returns unresolved[T]
 HostContext.with_rules([rule, ...])     # runtime — real apply_path_mapping with rules
 
+# Predicates on a HostContext (no-arg, return bool):
+HostContext.none().is_enabled()         # False — no host functions registered
+HostContext.unresolved().is_enabled()   # True
+HostContext.unresolved().is_unresolved()  # True — uses stub implementations
+HostContext.with_rules([]).is_enabled()   # True — empty rules ≠ no host context
+HostContext.with_rules([]).is_unresolved()  # False — uses real implementations
+
 # Inspecting a profile
 profile.revision      # ExprRevision.V2026_02
 profile.extensions    # [] today
 profile.host_context  # HostContext.unresolved()
 profile.has_extension(ext)  # False today
+
+# `ExprRevision.CURRENT` is the canonical handle for the current
+# revision and tracks the upstream `ExprRevision::CURRENT` constant
+# in `openjd_expr`. Today it equals `ExprRevision.V2026_02`; it
+# rolls forward as new revisions ship.
+ExprRevision.CURRENT                    # ExprRevision.V2026_02
+ExprRevision.CURRENT == ExprRevision.V2026_02  # True
+str(ExprRevision.CURRENT)               # "2026-02"
+ExprRevision.CURRENT.name               # "V2026_02"
 ```
 
 `ExprExtension` is empty today — no expression-level extensions exist
@@ -548,6 +573,24 @@ PathFormat.URI       # URI paths (s3://, https://)
 PathFormat.POSIX.name  # "POSIX"
 ```
 
+> **Not a `str` mixin Enum.** The pure-Python reference declares
+> `class PathFormat(str, Enum)`, so reference values *are* strings —
+> `PathFormat.POSIX == "POSIX"` is `True` and
+> `isinstance(PathFormat.POSIX, str)` is `True`. The Rust-backed
+> binding is a pyo3 enum that compares equal to its integer
+> discriminant only; on this binding both expressions are `False`.
+> Code that ducks-types a `PathFormat` as a string via
+> `isinstance(..., str)` checks or via `==` against a string literal
+> should switch to `fmt is PathFormat.POSIX` /
+> `fmt == PathFormat.POSIX`, or read `fmt.name` when a string is
+> genuinely needed.
+>
+> Iteration and value-lookup operations from `Enum` are also not
+> supported — `list(PathFormat)`, `for fmt in PathFormat: ...`, and
+> `PathFormat["POSIX"]` all raise `TypeError`. Use direct attribute
+> access (`PathFormat.POSIX`, …) and an explicit tuple of members
+> where iteration is needed.
+
 ### `PathMappingRule`
 
 A rule for mapping paths from one location to another, used by
@@ -645,6 +688,12 @@ r.ranges()
 # [IntRange(start=1, end=3, step=1),
 #  IntRange(start=10, end=12, step=1)]
 
+# Build from a spec-form string. `RangeExpr.from_str(s)` is a
+# `@staticmethod` that mirrors the v0 reference's `from_str`
+# classmethod and is equivalent to the constructor:
+RangeExpr.from_str("1-10")        # same as RangeExpr("1-10")
+RangeExpr.from_str("1-10:2,15")   # same as RangeExpr("1-10:2,15")
+
 # Build from a list of values (ints or numeric strings, mixed allowed).
 # Duplicates are removed and the result is sorted ascending.
 RangeExpr.from_list([1, 3, 5, 7, 9])      # 1-9:2
@@ -652,8 +701,10 @@ RangeExpr.from_list([9, 8, 7, 6])         # 6-9
 RangeExpr.from_list(["1", "2", "3"])      # 1-3
 ```
 
-`RangeExpr.from_list([])` raises `ValueError`. Two `RangeExpr` values
-that compare equal also hash equal (suitable as `set` / `dict` keys).
+`RangeExpr.from_list([])` raises `ValueError`. `RangeExpr("...")` and
+`RangeExpr.from_str("...")` raise `RangeExprError` on a malformed
+input string. Two `RangeExpr` values that compare equal also hash
+equal (suitable as `set` / `dict` keys).
 
 ### `IntRange`
 
