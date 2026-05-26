@@ -76,6 +76,42 @@ The evaluation checks all four artifacts plus the pure-Python reference for alig
 4. **Bindings ↔ Underlying Rust Crate**: The bindings **SHOULD** be a thin shim. The bindings **MUST NOT** silently introduce behavior that contradicts the Rust crate they wrap, because the Python contract is supposed to be the same as the Rust contract — divergence here makes the bindings unreliable for users porting between Python and Rust. The PyO3-specific glue (type conversions, GIL release, exception mapping) **SHOULD** stay idiomatic and minimal.
 5. **Tests ↔ Reference Tests**: For each test file in the reference repo, there **SHOULD** be a corresponding test in this repo exercising the same behavior through the binding. Note tests that exist in the reference but have no analog here, and tests that exist here but cover behavior the reference never had.
 
+### Isolation Requirement: `_v1` Stands Alone
+
+The Rust-backed `_v1` surface **MUST NOT** depend on the v0
+(pure-Python, pydantic-based) implementation in any way. The
+intent is that v0 and `_v1` are independent ports of the same
+specification — v0 will be removed once `_v1` is fully adopted,
+and any v1 code that delegates to v0 would silently break at that
+moment.
+
+Concretely, the evaluator **MUST** verify the following at every
+step of the review:
+
+* `src/openjd/model/_v1/`, `src/openjd/sessions_v1/`, and the
+  Rust binding source under `rust-bindings/src/<component>/`
+  **MUST NOT** import from any v0 module. That includes
+  `openjd.model` (top-level — it currently *is* the v0 module),
+  `openjd.model.v0`, `openjd.model.v2023_09`, the v0
+  `_capabilities`, `_create_job`, `_format_strings`,
+  `_merge_job_parameter`, `_parse`, `_range_expr`, `_types`
+  modules, and any other internal v0 helper.
+* If a v1 function needs behaviour that today lives only in v0,
+  the right resolution is to **re-implement** that behaviour in
+  v1 using the Rust-backed types (e.g. `openjd.expr.FormatString`
+  instead of v0's `openjd.model._format_strings.FormatString`),
+  not to delegate or re-export. If a re-implementation is
+  non-trivial, raise it as a recommendation in the report.
+* Tests in `test/openjd/model_v1/`, `test/openjd/sessions-v1/`,
+  and `test/openjd/expr/` **MUST NOT** import from v0 modules
+  either. v0 tests live in `test/openjd/model_v0/` and
+  `test/openjd/sessions-v0/` and use v0 imports — those are
+  separate suites that exist only as long as v0 itself does.
+
+When the report's parity table in §5 calls out a gap, the
+recommendation **MUST** specify a v1-internal fix path — never
+"delegate to v0".
+
 ### PyO3-Specific Concerns
 
 When reviewing `rust-bindings/src/<component>/`, the agent **MUST** check the following items, because they are common sources of behavior drift between the binding and the underlying Rust crate:
@@ -99,7 +135,21 @@ Follow these steps in order:
 5. **Read and understand the tests** in the corresponding `test/openjd/...` subdirectory.
 6. **Compare with the pure-Python reference** (see Pure-Python Reference Branch table). Use `git show <ref>:<path>` or a worktree at the reference branch. For each public symbol in the reference, verify the binding has a behaviorally equivalent counterpart.
 7. **Build and test**: Run `python scripts/maturin_build.py develop` (or `python scripts/maturin_build.py develop --features stub-gen` if regenerating stubs) and `python -m pytest test/openjd/<component>` (or `model_v0` and `model_v1` for `model`). Confirm clean compilation (no errors or warnings) and all tests pass. Run `cargo clippy --workspace -- -D warnings` against `rust-bindings/`.
-8. **Exploratory testing**: Actively try to find behavior gaps between the binding and the reference. Common probes:
+8. **Verify v0 isolation**: Grep the v1 surface for any imports
+   from v0. The following commands **MUST** all return zero
+   matches for `model` and `sessions`:
+   ```bash
+   grep -rn 'from openjd\.model[^._]' src/openjd/model/_v1/ rust-bindings/src/ test/openjd/model_v1/ \
+     | grep -v 'from openjd\.model\._v1' \
+     | grep -v 'from openjd\.model\.errors\|from openjd\.model\.types'  # standalone v1 submodules
+   grep -rn 'from openjd\.model\.v\(0\|2023_09\)' src/openjd/model/_v1/ rust-bindings/src/ test/openjd/model_v1/
+   grep -rn 'from \.\._range_expr\|from \.\._capabilities\|from \.\._create_job\|from \.\._parse' src/openjd/model/_v1/
+   ```
+   If any v0-import slips through into the v1 surface, flag it
+   as a high-priority recommendation. The fix is always to
+   re-implement the needed behaviour in v1, not to keep the v0
+   dependency.
+9. **Exploratory testing**: Actively try to find behavior gaps between the binding and the reference. Common probes:
     - Pickle a binding object and unpickle it; verify exception class names round-trip.
     - Hash and equality of value types across types that should compare equal (e.g. `1 == 1.0`).
     - Boundary integers (`i64::MIN`, `i64::MAX`, `u64::MAX`).
@@ -108,7 +158,7 @@ Follow these steps in order:
     - The full set of error messages from the reference: do bindings raise the same exception class with the same message format?
 
    Write failing tests that demonstrate any issues. Land them in `test/openjd/<component>/test_known_gaps.py` (or `~/openjd-sessions-for-python/test/openjd/sessions-v1/test_known_gaps.py` for `sessions`) marked `pytest.mark.xfail` with the reason. **Every test in `test_known_gaps.py` MUST be `xfail`** — when a gap is resolved, the test moves to its proper home alongside the rest of the regular tests for that surface, not stays in `test_known_gaps.py` as a passing regression. Reference each new xfail in the report's Recommendations section so the report-driven workflow can resolve it precisely.
-9. **Write the report** to `reports/<component>-bindings-quality-evaluation-report.md`.
+10. **Write the report** to `reports/<component>-bindings-quality-evaluation-report.md`.
 
 ### Report Structure
 
@@ -192,3 +242,7 @@ Run this validation step at the end of every evaluation:
 * Verify each numbered Recommendation references either a specific file path or a specific failing test, so future commits can resolve it precisely.
 * Verify the Parity table in §5 covers every public symbol listed in the Python interface spec — no gaps.
 * Re-run the build/test commands from §7 and confirm the reported numbers in §6 match what you see now.
+* Re-run the v0-isolation grep commands from §8 and confirm no v1
+  module or test imports from v0. If anything slips through,
+  the report **MUST** call it out as a high-priority
+  recommendation with a v1-internal fix path.
