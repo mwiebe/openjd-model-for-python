@@ -486,6 +486,7 @@ impl PyEmbeddedFile {
     }
 
     #[getter]
+    #[pyo3(name = "type")]
     fn type_(&self) -> String {
         self.inner.file_type.to_string()
     }

@@ -385,10 +385,10 @@ fn eol_str(e: EndOfLine) -> &'static str {
 #[pymethods]
 impl PyEmbeddedFile {
     #[new]
-    #[pyo3(signature = (*, name, type_, filename=None, data=None, runnable=None, end_of_line=None))]
+    #[pyo3(signature = (*, name, r#type, filename=None, data=None, runnable=None, end_of_line=None))]
     fn new(
         name: String,
-        type_: &str,
+        r#type: &str,
         filename: Option<PyFormatString>,
         data: Option<PyFormatString>,
         runnable: Option<bool>,
@@ -397,7 +397,7 @@ impl PyEmbeddedFile {
         Ok(PyEmbeddedFile {
             inner: EmbeddedFile {
                 name,
-                file_type: parse_file_type(type_)?,
+                file_type: parse_file_type(r#type)?,
                 filename: filename.map(|fs| fs.inner),
                 data: data.map(|fs| fs.inner),
                 runnable,
@@ -462,7 +462,7 @@ impl PyEmbeddedFile {
             .getattr("_reconstruct_kwargs")?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("name", slf.name())?;
-        kwargs.set_item("type_", slf.type_())?;
+        kwargs.set_item("type", slf.type_())?;
         if let Some(fs) = slf.filename() {
             kwargs.set_item("filename", fs)?;
         }

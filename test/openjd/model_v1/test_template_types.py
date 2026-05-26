@@ -462,7 +462,7 @@ class TestPickle:
     def test_embedded_file(self):
         ef = EmbeddedFile(
             name="f",
-            type_="TEXT",
+            type="TEXT",
             data=FormatString("hello"),
             runnable=True,
         )

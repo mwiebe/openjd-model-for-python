@@ -415,7 +415,7 @@ class EmbeddedFile:
     @property
     def name(self) -> builtins.str: ...
     @property
-    def type_(self) -> builtins.str: ...
+    def type(self) -> builtins.str: ...
     @property
     def filename(self) -> typing.Optional[builtins.str]: ...
     @property
@@ -2351,7 +2351,7 @@ class TemplateEmbeddedFile:
         cls,
         *,
         name: builtins.str,
-        type_: builtins.str,
+        type: builtins.str,
         filename: typing.Optional[FormatString] = None,
         data: typing.Optional[FormatString] = None,
         runnable: typing.Optional[builtins.bool] = None,

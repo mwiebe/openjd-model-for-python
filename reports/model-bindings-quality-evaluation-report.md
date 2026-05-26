@@ -1457,13 +1457,37 @@ fix should land, and (where applicable) suggests a
     Python servers (Deadline Cloud worker agent, etc.) cannot
     decode or create-job in parallel.
 
-16. **Resolve the `EmbeddedFile.type` vs `EmbeddedFile.type_`
+16. ~~**Resolve the `EmbeddedFile.type` vs `EmbeddedFile.type_`
     asymmetry.** Either expose both names on both classes (the
     forgiving option) or update the spec to call out the
     asymmetry explicitly (the documenting option). Today the
     spec accidentally calls out both names — once with `_`
     (line 352, job-time) and once without (line 556,
-    template-time) — without explaining why.
+    template-time) — without explaining why.~~ **Resolved.**
+    Both classes now expose only `.type`; `.type_` is gone.
+    The Rust function name remains `type_` because `type` is a
+    Rust reserved keyword, but `#[pyo3(name = "type")]` maps it
+    cleanly to Python's `.type`. Changes:
+    * `rust-bindings/src/model/job.rs`: added
+      `#[pyo3(name = "type")]` to the existing `type_` getter
+      on `PyEmbeddedFile`.
+    * `rust-bindings/src/model/template_types.rs`: the
+      template-time pyclass already had
+      `#[pyo3(name = "type")]` on its getter; updated its
+      `#[new]` constructor to accept the `type` kwarg
+      (Python-side) instead of `type_`, and updated its
+      `__reduce__` pickle reducer to set the `"type"` kwarg
+      key. The Rust constructor parameter uses `r#type` (raw
+      identifier).
+    * `specs/python-model-interface.md`: line 407 changed
+      `ef.type_  # "TEXT"` to `ef.type  # "TEXT"` so the
+      job-time example matches reality. The
+      template-time example was already correct (`ef.type`).
+    * `test/openjd/model_v1/test_template_types.py`: the
+      single test that constructed
+      `EmbeddedFile(type_="TEXT", …)` updated to
+      `type="TEXT"`.
+    Stubs regenerated. 5008 tests pass; lint clean.
 
 17. **Fix `preprocess_job_parameters` error message for
     relative paths.** When the caller passes a relative

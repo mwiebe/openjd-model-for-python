@@ -404,7 +404,7 @@ env.script.embeddedFiles    # Optional[list[EmbeddedFile]]
 ```python
 ef = step.script.embeddedFiles[0]
 ef.name                     # "run.sh"
-ef.type_                    # "TEXT"
+ef.type                     # "TEXT"
 ef.filename                 # "run.sh"
 ef.data                     # file content string
 ```
