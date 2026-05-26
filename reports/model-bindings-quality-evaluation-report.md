@@ -501,14 +501,33 @@ with `~~ ... ~~ **Resolved.**` as items are addressed.
    `param.type`. The current `param.param_type` getter alone breaks
    them silently. (`rust-bindings/src/model/job.rs::PyJobParameter`,
    `test/openjd/model_v1/test_known_gaps.py::test_job_parameter_has_type_alias`)~~
-   **Resolved.** Added a `type_alias` getter on `PyJobParameter` in
-   `rust-bindings/src/model/job.rs` registered as `#[pyo3(name = "type")]`.
-   Returns the same spec-form string as `param_type` (e.g. `"INT"`,
-   `"PATH"`); the two attributes are interchangeable. The xfail
-   `test_job_parameter_has_type_alias` graduated to
-   `test/openjd/model_v1/test_create_job.py::TestJobTimeFieldExposure`.
-   Spec entry updated in `specs/python-model-interface.md` under the
-   `JobParameter` section.
+   **Resolved.** Replaced the string-returning ``param_type`` getter
+   on ``PyJobParameter`` with a single ``type`` getter returning the
+   :class:`JobParameterType` pyo3 enum — the v0 nominal type and
+   the underlying Rust field type. Mirrors the cleaner of the two
+   options the recommendation listed; the string-alias option was
+   dropped because it would have left two redundant getters with
+   different return types and an awkward "use whichever you like"
+   contract.
+
+   Like ``TypeCode`` and ``PathFormat``, ``JobParameterType`` is a
+   pyo3 enum without a ``str`` mixin, so ``param.type == "INT"`` is
+   ``False`` — that string-equality divergence from the v0 reference
+   is the same one already documented for ``PathFormat`` /
+   ``TypeCode``, and the spec entry for ``JobParameter`` now carries
+   the same callout, recommending ``param.type is JobParameterType.INT``
+   or ``str(param.type) == "INT"`` for callers porting from v0.
+
+   The xfail ``test_job_parameter_has_type_alias`` graduated to
+   ``test/openjd/model_v1/test_create_job.py::TestJobTimeFieldExposure::test_job_parameter_type_returns_enum``
+   pinning ``isinstance(param.type, JobParameterType)``,
+   ``param.type is JobParameterType.INT`` identity,
+   ``str(param.type) == "INT"``, ``param.type.as_str() == "INT"``,
+   and ``not hasattr(param, "param_type")`` (the previous getter is
+   gone). Two existing assertions in
+   ``test_create_job.py::test_collects_defaults`` updated from
+   ``j.parameters[X].param_type == "INT"`` to
+   ``j.parameters[X].type is JobParameterType.INT``.
 
 2. ~~**Expose `Step.host_requirements` / `hostRequirements`** on the
    v1 job-time `PyStep`. The Rust `job::Step` struct already has the

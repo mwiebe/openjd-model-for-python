@@ -508,12 +508,23 @@ ef.end_of_line              # Optional[str] — "LF" / "CRLF" / "AUTO"
 ```python
 param = job.parameters["Count"]
 param.name                  # "Count"
-param.param_type            # "INT"
-param.type                  # "INT" — alias for param_type matching
-                            # the v0 reference's JobParameter.type
+param.type                  # JobParameterType.INT (enum, not str)
+str(param.type)             # "INT"
+param.type.as_str()         # "INT"
 param.value                 # ExprValue — use .item() to get native value
 param.value.item()          # 5
 ```
+
+`JobParameter.type` returns a :class:`JobParameterType` enum,
+mirroring the v0 reference's ``JobParameter.type`` field type and
+the underlying Rust ``job::JobParameter.param_type`` field. Like
+``TypeCode`` and ``PathFormat``, the enum is a pyo3 enum without a
+``str`` mixin, so equality against a string literal returns
+``False`` — ``param.type == "INT"`` is **not** the same as
+``param.type == JobParameterType.INT``. Compare against the enum
+(``param.type is JobParameterType.INT``), or call
+``str(param.type)`` / ``param.type.as_str()`` when you need the
+spec-form string.
 
 ### `StepParameterSpace`
 

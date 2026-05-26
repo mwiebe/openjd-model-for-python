@@ -11,6 +11,7 @@ use openjd_model::job;
 
 use crate::expr::expr_value::PyExprValue;
 use crate::expr::range_expr::PyRangeExpr;
+use crate::model::types::PyJobParameterType;
 
 // ── PyJob ──
 
@@ -567,18 +568,21 @@ impl PyJobParameter {
         &self.inner.name
     }
 
-    #[getter]
-    fn param_type(&self) -> &'static str {
-        self.inner.param_type.as_spec_str()
-    }
-
-    /// Alias for ``param_type`` matching the v0 reference's
-    /// ``JobParameter.type`` field. Returns the same spec-form
-    /// string (``"INT"``, ``"STRING"``, ``"PATH"``, …).
+    /// The parameter's type as a :class:`JobParameterType` enum.
+    /// Mirrors the v0 reference's ``JobParameter.type`` field type
+    /// and the underlying Rust ``job::JobParameter.param_type``
+    /// field.
+    ///
+    /// Note: ``JobParameterType`` is a pyo3 enum without a
+    /// ``str`` mixin, so equality against a string literal returns
+    /// ``False`` — ``param.type == "INT"`` is **not** the same as
+    /// ``param.type == JobParameterType.INT``. Compare against
+    /// the enum, use ``param.type is JobParameterType.INT``, or
+    /// call ``str(param.type)`` to get the spec-form string.
     #[getter]
     #[pyo3(name = "type")]
-    fn type_alias(&self) -> &'static str {
-        self.inner.param_type.as_spec_str()
+    fn type_(&self) -> PyJobParameterType {
+        self.inner.param_type.into()
     }
 
     #[getter]

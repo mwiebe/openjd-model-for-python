@@ -950,9 +950,9 @@ class TestParametersDict:
         t = decode_job_template(template=self._two_param_template())
         j = create_job(job_template=t, job_parameter_values={})
         assert set(j.parameters.keys()) == {"Frame", "Name"}
-        assert j.parameters["Frame"].param_type == "INT"
+        assert j.parameters["Frame"].type is JobParameterType.INT
         assert j.parameters["Frame"].value.item() == 5
-        assert j.parameters["Name"].param_type == "STRING"
+        assert j.parameters["Name"].type is JobParameterType.STRING
         assert j.parameters["Name"].value.item() == "render"
 
     def test_explicit_values_override_defaults(self) -> None:
@@ -1083,11 +1083,13 @@ class TestJobTimeFieldExposure:
     accessor on the v1 Rust-backed pyclasses.
     """
 
-    def test_job_parameter_has_type_alias(self) -> None:
-        """``JobParameter.type`` is exposed as an alias for ``param_type``,
-        matching the v0 reference. Existing v0 callers (deadline-cloud,
-        openjd-cli) read ``param.type``; before this fix, the v1 binding
-        only exposed ``param.param_type`` and broke them silently."""
+    def test_job_parameter_type_returns_enum(self) -> None:
+        """``JobParameter.type`` returns a :class:`JobParameterType`
+        enum, mirroring the v0 reference's ``JobParameter.type``
+        field type and the underlying Rust
+        ``job::JobParameter.param_type`` field. The previous
+        string-returning ``param_type`` getter is gone — there is
+        exactly one accessor for the parameter's type."""
         t = decode_job_template(
             template={
                 "specificationVersion": "jobtemplate-2023-09",
@@ -1103,10 +1105,18 @@ class TestJobTimeFieldExposure:
         )
         j = create_job(job_template=t, job_parameter_values={})
         param = j.parameters["Count"]
-        # Both getters return the same spec-form string.
-        assert param.type == "INT"
-        assert param.param_type == "INT"
-        assert param.type == param.param_type
+
+        assert isinstance(param.type, JobParameterType)
+        assert param.type is JobParameterType.INT
+
+        # ``str(param.type)`` returns the spec-form string for callers
+        # that need it; ``.as_str()`` is the explicit method.
+        assert str(param.type) == "INT"
+        assert param.type.as_str() == "INT"
+
+        # The previous string-returning getter is gone — there is one
+        # canonical accessor.
+        assert not hasattr(param, "param_type")
 
     def test_step_exposes_host_requirements(self) -> None:
         """``Step.host_requirements`` (and the camelCase alias

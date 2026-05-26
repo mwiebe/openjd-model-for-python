@@ -1374,13 +1374,19 @@ class JobParameter:
     @property
     def name(self) -> builtins.str: ...
     @property
-    def param_type(self) -> builtins.str: ...
-    @property
-    def type(self) -> builtins.str:
+    def type(self) -> JobParameterType:
         r"""
-        Alias for ``param_type`` matching the v0 reference's
-        ``JobParameter.type`` field. Returns the same spec-form
-        string (``"INT"``, ``"STRING"``, ``"PATH"``, …).
+        The parameter's type as a :class:`JobParameterType` enum.
+        Mirrors the v0 reference's ``JobParameter.type`` field type
+        and the underlying Rust ``job::JobParameter.param_type``
+        field.
+
+        Note: ``JobParameterType`` is a pyo3 enum without a
+        ``str`` mixin, so equality against a string literal returns
+        ``False`` — ``param.type == "INT"`` is **not** the same as
+        ``param.type == JobParameterType.INT``. Compare against
+        the enum, use ``param.type is JobParameterType.INT``, or
+        call ``str(param.type)`` to get the spec-form string.
         """
 
     @property
