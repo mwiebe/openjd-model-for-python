@@ -1,593 +1,554 @@
 # openjd-expr Bindings Quality Evaluation Report
 
-**Date:** 2026-05-25
+**Date:** 2026-05-26
 **Component:** `openjd.expr`
-**Reference branch:** `openjd-model-for-python` @ `mwiebe/expr` (fork)
-**Binding commit:** `8f19e4d` (`bindings-rs` branch)
+**Reference branch:** `mwiebe/openjd-model-for-python@expr`
 
 ## Executive Summary
 
-The Rust-backed `openjd.expr` bindings are in very good shape and are a
-near-faithful drop-in for the pure-Python reference. All 1,765 tests pass
-cleanly, every public symbol promised by `specs/python-expr-interface.md`
-is present and importable, every value-shaped type implements the
-equality and pickle contracts the spec advertises, and clippy is clean
-across `rust-bindings/src/expr/` (every clippy warning the workspace
-emits today comes from `model/` or `sessions/`, not `expr/`). Lint —
-ruff, black, mypy — is fully green.
+The Rust-backed `openjd.expr` bindings are in solid shape. The build is
+clean, the full expr test suite (1788 passed, 24 platform-skipped, 0
+failed, 0 xfail) runs in seconds, `cargo clippy --all-targets -- -D
+warnings` is clean, and `test/openjd/expr/test_known_gaps.py` is empty
+of substantive content — the prior round of P1 reference-parity gaps
+(PathFormat hashable, unresolved-value extraction errors, list-construction
+TypeError vs ValueError, ExprType arity validation, PathMappingRule repr
+rendering) are all closed. v0 isolation is perfect: nothing under
+`src/openjd/expr/`, `rust-bindings/src/expr/`, or `test/openjd/expr/`
+imports from the v0 (pure-Python) `openjd.model` namespace at all.
 
-The remaining gaps are six concrete behaviour divergences from the
-pure-Python reference, all newly captured as xfail tests in
-`test/openjd/expr/test_known_gaps.py`. Five are exception-class /
-no-error-raised mismatches on edge cases (`ExprValue.unresolved(...)
-.item()` and `str(...)`, mixed-type list construction, and
-`ExprType(TypeCode.UNRESOLVED)` arity validation); one is a missing
-`hash` on `PathFormat` that breaks pickle/dict-key consistency with the
-other binding-side enums (`TypeCode`, `ExprRevision`). All of these are
-small and localised. There are no spec-omission gaps, no missing
-binding-side tests against reference behaviour, no PyO3 hygiene issues,
-and no parity gaps in the larger-scope surfaces (parsing, evaluation,
-format-string resolution, path mapping, range expressions, profiles).
+The remaining gaps are all moderate-or-lower priority and cluster in
+three areas: (a) the Python interface spec doesn't justify or even
+acknowledge several deliberate, breaking divergences from the
+pure-Python reference (most notably the removal of `FunctionLibrary`,
+`FunctionSignature`, and `get_default_library`); (b) a small number of
+behavioural drifts from the reference remain — `PathMappingRule` URI
+validation is missing, the `from_dict` missing-fields error message is
+formatted differently, `PathMappingRule.source_path` is always `str`
+even when constructed from a `PurePath`, and `ExprValue.from_float`
+made the previously-optional `original_str` argument required; and (c)
+test coverage for `evaluate_let_bindings` is zero in the entire repo
+even though it is a public symbol re-exported from `openjd.expr`. None
+of these block adoption; all are tracked below as numbered
+recommendations.
 
 ## 1. Python Interface Spec Review
 
-`specs/python-expr-interface.md` (522 lines) describes the public
-API completely and accurately. Every symbol the spec advertises is
-exposed by `src/openjd/expr/__init__.py` and registered by
-`rust-bindings/src/lib.rs`; every binding-registered symbol appears in
-the spec.
+`specs/python-expr-interface.md` is the contract for the binding (there
+is no pure-Python `openjd.expr` predecessor — the reference branch is a
+parallel implementation). It covers all 23 public symbols re-exported
+from `src/openjd/expr/__init__.py`:
 
-Coverage cross-check (spec → binding):
+| Category | Symbols |
+|---|---|
+| Entry points | `evaluate_expression`, `parse_expression`, `evaluate_let_bindings`, `escape_format_string` |
+| Value/type system | `ExprType`, `TypeCode`, `ExprValue`, `RangeExpr`, `FormatString`, `SymbolTable`, `ParsedExpression` |
+| Profile | `ExprProfile`, `ExprRevision`, `ExprExtension`, `HostContext` |
+| Path | `PathFormat`, `PathMappingRule` |
+| Errors | `ExpressionError`, `ExpressionTypeError`, `RangeExprError`, `FormatStringValidationError` |
+| Constants | `DEFAULT_MEMORY_LIMIT`, `DEFAULT_OPERATION_LIMIT` |
 
-| Spec section | Spec symbol | Bound? |
-|---|---|---|
-| Functions | `evaluate_expression` | ✓ |
-| Functions | `parse_expression` | ✓ |
-| Functions | `evaluate_let_bindings` | ✓ (registered via `model::create_job_fns`, re-exported through `openjd.expr.__init__`) |
-| Functions | `escape_format_string` | ✓ |
-| Types | `ExprType` | ✓ |
-| Types | `TypeCode` (16 variants) | ✓ — every spec'd variant present |
-| Types | `ExprValue` | ✓ |
-| Types | `SymbolTable` | ✓ |
-| Types | `ExprRevision` | ✓ |
-| Types | `ExprExtension` | ✓ (`.ALL` returns `[]` today, by design) |
-| Types | `HostContext` | ✓ |
-| Types | `ExprProfile` | ✓ |
-| Types | `ParsedExpression` | ✓ |
-| Types | `PathFormat` | ✓ |
-| Types | `PathMappingRule` | ✓ |
-| Types | `RangeExpr` | ✓ |
-| Types | `FormatString` | ✓ |
-| Exceptions | `ExpressionError` | ✓ |
-| Exceptions | `ExpressionTypeError` | ✓ |
-| Exceptions | `RangeExprError` | ✓ |
-| Exceptions | `FormatStringValidationError` | ✓ |
-| Constants | `DEFAULT_MEMORY_LIMIT` | ✓ (= 100,000,000) |
-| Constants | `DEFAULT_OPERATION_LIMIT` | ✓ (= 10,000,000) |
+Coverage of the binding's public surface is complete — every symbol
+re-exported by `src/openjd/expr/__init__.py.__all__` has an entry, and
+every entry corresponds to a reachable binding. Nothing in the spec
+references a removed symbol. The spec also covers all the
+non-construction behaviour I tested: pickle table, equality/hashability
+contracts, the unresolved `item()`/`str()` raise contract, the
+`FormatString.validate_expressions` workflow, profile-builder semantics,
+and the explicit "`match` was renamed to `match_type`" note.
 
-Reverse direction (binding → spec): no binding-registered Python-public
-symbols are absent from the spec. `_reconstruct_expr_value`,
-`_reconstruct_enum`, `_reconstruct_kwargs` are intentionally
-underscore-prefixed pickle helpers and correctly excluded from the spec.
+Gaps the spec does not currently capture, however:
 
-The spec's "Equality and hashability" callouts on `PathMappingRule`,
-`FormatString`, `HostContext`, `ExprProfile`, `SymbolTable`, and
-`RangeExpr` are honoured by the bindings (verified by 43 tests in
-`test_equality.py`). The "Pickle Support" table is also honoured (22
-tests in `test_pickle.py`). The spec is silent on `ExprValue` /
-`PathFormat` hashability, but see §7 (Exploratory Findings) and §8
-(Recommendations) for the inconsistency this leaves.
-
-The spec does not document the binding's intentional addition of
-`SymbolTable.symbols` (vs. the reference's `keys` only),
-`SymbolTable.union(*others)`, or `RangeExpr.from_list`; all three
-appear in the spec under their respective type sections and are
-covered by tests, so this is not a spec gap.
+* **No acknowledgement of the `FunctionLibrary` / `FunctionSignature` /
+  `get_default_library` removal.** The pure-Python reference exports
+  these from `openjd.expr` (`src/openjd/expr/_functions/__init__.py` on
+  the `expr` reference branch). The bindings replaced the entire
+  function-library surface with `ExprProfile` / `ExprExtension` /
+  `HostContext`. This is a deliberate, breaking change and the spec
+  should say so explicitly with a short rationale (mirrors the
+  Rust-side profile API, simpler call site, etc.) so users porting
+  from the reference can find the migration path.
+* **`FormatString.copy_used_symtab_values` is exposed by the binding
+  and tested in `test/openjd/expr/test_copy_used_symtab.py` but does
+  not appear in the spec.** Either remove it from the binding (it has
+  no caller in this repo's expr surface) or add an entry to the
+  `FormatString` section.
+* **`ParsedExpression.peak_memory_usage` and `operation_count` thread
+  safety is undocumented.** Both are stored in `AtomicUsize` fields
+  that are *overwritten* on every `evaluate()` call, so concurrent
+  evaluations of the same `ParsedExpression` instance produce
+  last-writer-wins values. The spec should either guarantee
+  per-evaluation metrics (require returning them from `evaluate`) or
+  document the race so callers know not to rely on the attributes
+  across threads.
+* **`ExprValue.from_float` requires `original_str`.** The reference
+  signature is `from_float(value, original_str=None)`. The spec
+  documents the binding's two-argument form but doesn't mention that
+  the `Optional` suffix from the reference was dropped.
+* **`PathMappingRule.source_path` returns `str`** even when constructed
+  from a `PurePosixPath` / `PureWindowsPath`. The reference stores the
+  `PurePath` and returns it. The spec's `PathMappingRule` section uses
+  string examples; it should explicitly note that the binding
+  normalises `source_path` and `destination_path` to `str` (and that
+  `PurePath` arguments are accepted but not preserved on read-back).
 
 ## 2. PyO3 Binding Source Review
 
-`rust-bindings/src/expr/` contains 12 files totalling ~95 KB; one
-helper module (`pickle_helpers.rs`) is shared with `model` and
-`sessions`. Per-file findings:
+The expr binding source under `rust-bindings/src/expr/` is well-organised
+(one file per concern: `errors.rs`, `path_format.rs`, `expr_type.rs`,
+`expr_value.rs`, `symbol_table.rs`, `profile.rs`, `parsed_expression.rs`,
+`evaluate.rs`, `path_mapping.rs`, `range_expr.rs`, `format_string.rs`).
+PyO3 conventions are followed correctly:
 
-* **`mod.rs`** — clean `pub(crate) mod` / `pub(crate) use` re-export
-  hub. No issues.
-* **`lib.rs`** (registration only) — every expr `#[pyclass]` is
-  `add_class`-registered with the public name; every exception is
-  registered through `register_renamed_exception` so `__module__`,
-  `__name__`, `__qualname__` all read `openjd.expr.<Name>`
-  (verified at runtime — see §7). Pickle-helper functions
-  `_reconstruct_enum` / `_reconstruct_kwargs` are exposed as private
-  module-level functions so existing pickled bytes can still load.
-  `pyo3_log::Logger` install at module init bridges Rust crate
-  targets (`openjd_expr`) to Python's `openjd.expr` logger
-  hierarchy.
-* **`profile.rs`** — `PyExprRevision`, `PyExprExtension`,
-  `PyHostContext`, `PyExprProfile`. All implement the spec's
-  equality/hash contract; `host_context_eq` / `host_context_hash`
-  helpers are factored out cleanly because `openjd_expr::HostContext`
-  doesn't derive `PartialEq`/`Hash`, and `ExprProfile.__hash__`
-  canonicalises the extension set as a sorted-by-debug-repr `Vec`
-  to avoid `HashSet` iteration-order instability. `__reduce__` for
-  every type round-trips through the documented constructor or
-  classmethod.
-* **`format_string.rs`** — `PyFormatString` and
-  `escape_format_string`. `validate_expressions` is exposed (resolved
-  one of the previous report's P2 items). `__eq__` and `__hash__`
-  reduce to the raw input string per spec contract. `__reduce__`
-  through the constructor.
-* **`parsed_expression.rs`** — `PyParsedExpression` plus the
-  `parse_expression` pyfunction. `peak_memory_usage` and
-  `operation_count` use `AtomicUsize` so the metric reads after
-  evaluation are GIL-free; the type is intentionally not pickleable
-  per spec.
-* **`evaluate.rs`** — `evaluate_expression` and the
-  `profile_for_call` helper that resolves an optional `profile=` to
-  a `FunctionLibrary` via the upstream per-profile cache. Note that
-  `library=` was removed in commit `8f19e4d`; only `profile=`
-  remains. The function uses the upstream `Arc<FunctionLibrary>`
-  cache so concurrent calls with the same profile share an
-  allocation.
-* **`errors.rs`** — `PyExpressionError` / `PyExpressionTypeError` /
-  `PyRangeExprError` / `PyFormatStringValidationError` declared via
-  `create_exception!`, plus `attach_expression_error_methods` which
-  installs the reference's keyword constructor and decoration
-  methods (`with_context`, `message_with_expr_prefix`) onto
-  `ExpressionError` at module init by compiling them as Python
-  `function` objects so the descriptor protocol binds them to
-  instances correctly. The trick is documented in detail at the top
-  of the file. `ExpressionTypeError` inherits the methods through
-  normal class inheritance.
-* **`symbol_table.rs`** — `PySymbolTable`. `__eq__` recurses
-  through subtables via the helper `symbol_table_eq`, which walks
-  the underlying `openjd_expr::SymbolTable` (which doesn't derive
-  `PartialEq`). Not hashable, intentionally — `__setitem__` makes
-  the type mutable. `__repr__` walks top-level keys in sorted order
-  for determinism. `__reduce__` flattens to a `dict[str,
-  ExprValue]` of all dotted leaf paths, which round-trips through
-  `__init__`.
-* **`path_mapping.rs`** — `PyPathMappingRule`. Implements `__eq__`
-  and `__hash__` over the three fields. The minor cosmetic point in
-  §7 is that `__repr__` formats `source_path_format` via `{:?}`,
-  which prints the underlying Rust enum's debug name (`Posix`)
-  rather than the user-facing Python enum name (`POSIX`).
-* **`expr_value.rs`** — `PyExprValue`, `_reconstruct_expr_value`,
-  `PyExprValueIter`, plus the `py_to_expr_value` /
-  `expr_value_to_py` conversion helpers. The `Unresolved(_) =>
-  py.None()` arm in `expr_value_to_py` is the root cause of the
-  `.item()` and `str()` divergences in §7.
-* **`expr_type.rs`** — `PyExprType` and `PyTypeCode`. Note the
-  `unreachable!` panic on a future `TypeCode` variant addition: the
-  binding will surface a panic at the boundary rather than silently
-  collapse to `ANY`, which is correct per the comments. `__reduce__`
-  through the spec-form string.
-* **`path_format.rs`** — `PyPathFormat`. **The only PyO3 issue
-  found in this audit:** the `#[pyclass(...)]` config has `eq,
-  eq_int` but **no `hash`**. Compare to `PyTypeCode` which is
-  `#[pyclass(..., hash, ...)]`. As a result `hash(PathFormat.POSIX)`
-  raises `TypeError`. See §7 / §8 / `test_known_gaps.py`.
-* **`range_expr.rs`** — `PyRangeExpr` plus `PyRangeExprIter`.
-  `__eq__` and `__hash__` defer to the underlying Rust impls.
-  `__reduce__` through the canonical string form.
+* **Exception registration** — all four expr exceptions
+  (`ExpressionError`, `ExpressionTypeError`, `RangeExprError`,
+  `FormatStringValidationError`) are routed through
+  `register_renamed_exception` in `lib.rs`, so `__name__`,
+  `__module__`, `__qualname__` all resolve to the canonical
+  `openjd.expr` names. Verified at runtime — no `Py`-prefixed leak in
+  pickle, repr, or traceback. `ExpressionError`'s reference-parity
+  keyword constructor (`expr=`, `node=`, `lineno=`, `col_offset=`)
+  and decoration methods (`with_context`,
+  `message_with_expr_prefix`) are attached at module init via the
+  documented `attach_expression_error_methods` mechanism, and
+  `ExpressionTypeError` inherits them correctly through normal class
+  inheritance.
+* **Type conversions** — `i64` overflow at `py_to_expr_value` is
+  remapped from `OverflowError` to `ExpressionError` to match the
+  reference (verified: `ExprValue(2**63)` and `ExprValue(2**64-1)`
+  both raise `ExpressionError` with a clear "Integer overflow"
+  message). `Decimal` instances are detected via a real
+  `isinstance(decimal.Decimal)` check so subclasses are accepted and
+  same-named unrelated classes are not.
+* **GIL handling** — expr evaluation in `evaluate_expression`,
+  `ParsedExpression.evaluate`, and `FormatString.resolve*` does *not*
+  release the GIL via `Python::allow_threads`. For the typical short
+  evaluation this is fine, but range expressions that exceed
+  `DEFAULT_MEMORY_LIMIT` are documented to fail-fast inside the Rust
+  evaluator without any blocking I/O, so dropping the GIL would only
+  matter for very long evaluations. Calling out as a future
+  optimisation rather than a fix.
+* **`#[pyclass]` constructor signatures** — match the spec for every
+  class checked (`ExprType`, `ExprValue`, `SymbolTable`, `ExprProfile`,
+  `HostContext`, `RangeExpr`, `FormatString`, `PathMappingRule`).
+  `extract_expr_type` accepts both `str` and `ExprType` arguments
+  consistently across the three sites that use it.
+* **`Py<T>` lifetime correctness** — no obvious reborrow hazards. The
+  one place that reaches into a passed Python object as a pyclass
+  cell (`FormatString.copy_used_symtab_values`) uses
+  `cell.borrow_mut()` correctly.
+* **ABI3 compatibility** — `Cargo.toml` declares `abi3-py39`. Verified
+  that the abi3 build works on Python 3.13 (the active interpreter in
+  this evaluation environment).
+* **Stub generation** — `cargo run --bin stub_gen --features stub-gen`
+  followed by `scripts/generate_stubs.sh` produces no diff against
+  the committed `src/openjd/_openjd_rs.pyi`. (See §6 for a
+  warning-only side effect from the model module's stub-gen build.)
 
-PyO3-specific concerns (per the SKILL.md checklist):
-
-* **Exception class registration** — every `create_exception!`
-  exception in `errors.rs` is registered through
-  `register_renamed_exception` in `lib.rs`. Verified at runtime that
-  all four expose `__module__ = 'openjd.expr'`, `__name__ =
-  '<PublicName>'`, `__qualname__ = '<PublicName>'`. Pickled error
-  bytes correctly contain `openjd.expr` (verified for
-  `FormatStringValidationError` and `ExpressionError` round-trip).
-* **Type conversions** — `int` / `i64` boundary is handled
-  explicitly: `py_to_expr_value` maps PyO3's `OverflowError` to
-  `ExpressionError("Integer overflow: …")` so the error class
-  matches the reference contract for out-of-range integers.
-  `Decimal` conversion goes through real `isinstance(decimal_cls)`
-  rather than a name check, so user `Decimal` subclasses are
-  accepted and unrelated `Decimal`-named classes are not.
-  `pathlib.Path` conversion in `path_mapping.rs::extract_path_arg`
-  validates POSIX vs Windows pathlib types against the format kwarg.
-* **GIL handling** — expr evaluation is fast and CPU-bound; no
-  `Python::allow_threads` is needed and none is used. Concurrent
-  evaluation from 10 threads succeeds (smoke probe — see §7).
-* **`#[pyclass]` constructor signatures** — every `#[new]`
-  signature matches the spec. `PyExprValue::new(value, type=None,
-  path_format=None)`, `PyPathMappingRule::new(*, source_path_format,
-  source_path, destination_path)`, `PyExprProfile::new(revision=None,
-  *, extensions=None, host_context=None)` are all aligned.
-* **ABI3 compatibility** — `Cargo.toml` declares `abi3-py39`. No
-  Python C-API leaks observed.
-* **Stub generation** — `src/openjd/_openjd_rs.pyi` is up to date
-  for every expr symbol (verified by `grep` for class/function
-  declarations).
+The single fragile area in the binding source is **the ranges()/method
+return shape**. `RangeExpr.ranges()` returns
+`Vec<(i64, i64, i64)>` — a `list[tuple[int,int,int]]` in Python — while
+the reference's `RangeExpr.ranges` is a `property` returning
+`list[_IntRange]` objects. This is a documented design choice (the spec
+says `r.ranges()`), but it's worth keeping in the parity table because
+the change of method-vs-property and tuple-vs-class shape both matter
+to porting users.
 
 ## 3. Python Wrapper Module Review
 
-`src/openjd/expr/__init__.py` (75 lines) is a flat re-export from
-`openjd._openjd_rs`. Every symbol promised by the spec is in `__all__`
-and the spec's import paths resolve. The module-level docstring
-intentionally points out that no Python-side fix-up is needed for
-exception class names because `register_renamed_exception` runs
-Rust-side, and that the `ExpressionError` keyword constructor /
-decoration methods are installed Rust-side via
-`attach_expression_error_methods`.
+`src/openjd/expr/__init__.py` re-exports 23 symbols from
+`openjd._openjd_rs`. `__all__` matches the import block, with no
+dangling re-exports and no spec entries that aren't reachable. One
+architectural smell:
 
-`__all__` length is 23, matching the 23 spec-listed symbols (4
-functions + 14 types + 4 exceptions + 2 constants — note the spec
-file counts `evaluate_let_bindings` separately under "Functions"
-even though it shares import surface with model). No internal-only
-names leak.
+* `evaluate_let_bindings` is registered in `lib.rs` from
+  `rust-bindings/src/model/create_job_fns.rs`
+  (`#[pyfunction] #[pyo3(name = "evaluate_let_bindings")]
+  pub(crate) fn py_evaluate_let_bindings(...)`), not from
+  `rust-bindings/src/expr/`. Logically it belongs to the expr surface
+  (it accepts `PySymbolTable` and `PyExprProfile`, returns a
+  `PySymbolTable`, and the spec documents it under `openjd.expr`),
+  yet it lives under the model crate's binding source. The function
+  body uses `openjd_model::evaluate_let_bindings` from the
+  `openjd-rs::openjd-model` crate, which is the underlying reason for
+  the location — but the Python-side surface ownership is out of
+  step with the Rust-side. Either:
+  1. Move `py_evaluate_let_bindings` into `rust-bindings/src/expr/`
+     and have it call into `openjd_expr::let_bindings::evaluate` (or
+     equivalent), if such a primitive exists; or
+  2. Leave the binding source where it is but add a short comment
+     in `rust-bindings/src/expr/mod.rs` pointing to the model module
+     so future maintainers don't go hunting.
 
-`py.typed` is present; the package is mypy-clean (`hatch run typing`
-reports 0 issues).
+The wrapper also has a comment block explaining why the exception
+classes are renamed Rust-side (in `lib.rs`) rather than Python-side
+fix-ups; that comment is accurate.
+
+`AGENTS.md` — separately from the spec — describes a
+`function_library.rs` file in `rust-bindings/src/expr/` ("Function
+library (`function_library.rs`) — `get_default_library`,
+`FunctionLibrary.with_host_context`"). That file does not exist; the
+function-library facility was replaced by `ExprProfile` /
+`HostContext`. AGENTS.md drift is outside this report's scope but
+worth flagging in passing.
 
 ## 4. Test Review
 
-`test/openjd/expr/` contains 32 test files with a total of 1,765
-passing tests + 24 skipped + 6 xfail, run by
-`hatch run test-subset test/openjd/expr` in 5 seconds wall clock.
-Five files are binding-specific extras over the reference test set:
+`test/openjd/expr/` has 30+ test modules covering parsing, evaluation,
+arithmetic, comparison, list operations, range expressions, string
+operations, target-type propagation, paths, URI paths, path mapping,
+equality, pickle, error formatting, format strings, function context,
+operation/memory limits, fuzzing, and platform-specific behaviour. The
+suite runs in ~5s (parallelised; ~2s wall when not measuring coverage)
+and is consistently green: 1788 passed, 24 skipped (all
+Windows-only, expected on Linux), 0 xfailed, 0 errors.
 
-| File | Tests | Purpose |
-|---|---:|---|
-| `test_copy_used_symtab.py` | 9 | Pinning the binding-only `FormatString.copy_used_symtab_values` method (no reference equivalent). |
-| `test_equality.py` | 43 | Pinning the eq/hash contract on `PathMappingRule`, `FormatString`, `HostContext`, `ExprProfile`, `SymbolTable`. |
-| `test_format_string_validate.py` | 14 | Pinning `FormatString.validate_expressions` and the `FormatStringValidationError` class. |
-| `test_pickle.py` | 22 | Pickle round-trip for every spec-listed value type. |
-| `test_known_gaps.py` | 6 (xfail) | Failing tests for the gaps in §7. |
+Coverage gaps relative to the reference test suite:
 
-The remaining 27 files are 1:1 with reference test files. Test counts
-per file are at parity or exceed the reference, with two exceptions:
+* **`evaluate_let_bindings` has no tests anywhere in the repo.** The
+  symbol is re-exported from `openjd.expr.__init__.py.__all__`, the
+  spec documents it (lines 71–80), the binding routes through
+  `openjd_model::evaluate_let_bindings`, and yet there is no test
+  file under `test/openjd/expr/` (or anywhere else found by
+  `grep -rn evaluate_let_bindings test/`). At minimum the happy
+  path, the let-binding-syntax error path, and the
+  inner-expression-error path all need coverage.
+* **No symmetric `PathMappingRule(URI=non-URI)` test.** The reference
+  raises `ValueError`; the binding silently accepts it (see §5,
+  Recommendation 3).
+* **No symmetric `PathMappingRule.source_path` PurePath round-trip
+  test.** The reference returns the original `PurePath`; the binding
+  always converts to `str`.
 
-* **`test_types.py`**: 113 binding tests vs. 122 reference tests.
-  Of the 9 missing reference tests, several import private-only
-  helpers (`from openjd.expr._types import T1`) or use
-  reference-only shortcut constants (`ExprType.INT`,
-  `ExprType.LIST_INT`) that are explicitly absent from the binding
-  per spec policy ("The binding deliberately does not expose
-  class-level shortcut constants…"). Five of the genuinely
-  behaviour-portable cases are now in `test_known_gaps.py` (see §7).
-* **`test_uri_paths.py`**: 35 binding tests vs. 73 reference tests.
-  The reference test set imports `from openjd.expr._uri_path import
-  is_uri, split_uri, uri_parts, …` — pure-Python helpers that are
-  not part of the public contract and have no exposed Python
-  equivalent in the bindings. The Rust crate exposes these as
-  internal helpers used by the path operators, but they are not
-  spec-public, so the test loss here is by design and not a gap.
+`test_known_gaps.py` is empty of substantive content (the file is
+maintained as the landing pad for regressions but currently documents
+no open gaps). Per the AGENTS.md test convention, when this report's
+recommendations are implemented, every newly-fixed gap should land its
+xfail in `test_known_gaps.py` first, then graduate to its proper home
+when the fix lands. The recommendations below identify which test
+files each fix should ultimately land in.
 
-Test organisation follows clear behaviour-domain groupings (paths
-separate from URI paths separate from path mapping; types separate
-from values; arithmetic, comparison, lists, strings each in their
-own file). Every error-formatting test asserts on the full message
-text, not just on the exception class — matching the project's
-"assert on full error message content" standard from `AGENTS.md`.
+The reference tests in `~/openjd-model-for-python@expr/test/openjd/expr/`
+are mostly mirrored. A diff of test file names shows two
+binding-only files (`test_format_string_validate.py`,
+`test_pickle.py`) that have no reference counterpart — both cover
+binding-specific surface (FormatString and pickle) that the reference
+implementation doesn't have or has differently. No reference test
+files are missing from the binding side at the file-level granularity.
 
 ## 5. Parity with Pure-Python Reference
 
-Symbol-by-symbol comparison against `mwiebe/openjd-model-for-python`
-`expr` branch (the pure-Python reference whose `openjd.expr` package
-the bindings replace):
+Every public symbol in the reference `src/openjd/expr/__init__.py` has
+either a counterpart in the binding or a documented removal:
 
 | Symbol | Reference | Binding | Status |
 |---|---|---|---|
-| `evaluate_expression(expr, *, values=, profile=, target_type=, memory_limit=, operation_limit=, path_format=)` | `library=` (replaced by `profile=`) | profile-only | ✓ — spec calls out `library=`→`profile=` consolidation, intentional in `8f19e4d` |
-| `parse_expression(expr)` | same | same | ✓ |
-| `evaluate_let_bindings(bindings, symtab, *, profile=)` | takes `library=` (in `model.__init__`) | takes `profile=`, lives in `openjd.expr` | ✓ — moved to expr package per §1, profile-only |
-| `escape_format_string(value)` | from `model._format_strings` | from `openjd.expr` | ✓ — relocated per spec |
-| `ExprType` | construction from string + TypeCode + class shortcut constants | string + TypeCode (no shortcut consts) | ✓ — shortcuts intentionally absent per spec |
-| `ExprType.match_type` | `match` (Python keyword) | `match_type` (renamed for Rust parity) | ✓ — spec calls out the rename |
-| `ExprType(TypeCode.UNRESOLVED)` | raises `ValueError("exactly one type parameter")` | accepted | ⚠ — see §7, gap #5 |
-| `TypeCode` (16 variants) | same | same | ✓ |
-| `ExprValue(value, type=, path_format=)` | accepts `evaluator=` kwarg also | no `evaluator=` (Pydantic-side concept) | ✓ — intentional drop |
-| `ExprValue.unresolved(t)` | classmethod | classmethod | ✓ |
-| `ExprValue.from_float(value, original_str)` | n/a (Pydantic uses `Decimal`) | staticmethod | ✓ — binding-only, by design |
-| `ExprValue.null()` | classmethod | not exposed | ⚠ — minor; `ExprValue(None)` works |
-| `ExprValue.unresolved(...).item()` | raises `ExpressionTypeError` | returns `None` | ⚠ — see §7, gap #2 |
-| `str(ExprValue.unresolved(...))` | raises `ExpressionTypeError` | returns `'<unresolved[T]>'` | ⚠ — see §7, gap #3 |
-| `ExprValue([1, "hello"])` | raises `TypeError("incompatible types")` | raises `ValueError` | ⚠ — see §7, gap #4 |
-| `ExprValue([unresolved, 42])` | raises `TypeError("Cannot construct…")` | raises `ValueError` | ⚠ — see §7, gap #4 |
-| `SymbolTable(source=)` | same | adds positional `init=` and keyword `source=` (back-compat) | ✓ |
-| `SymbolTable.keys` | top-level set | same | ✓ |
-| `SymbolTable.symbols` | n/a | dotted-path leaves set | ✓ — binding-side enrichment, in spec |
-| `SymbolTable.union(*others)` | n/a | accepts SymbolTable / dict | ✓ — binding-side enrichment, in spec |
-| `SymbolTable.__eq__` | n/a (no `__eq__`) | recursive value equality | ✓ — binding-side enrichment, in spec |
-| `SymbolTable.__hash__` | n/a | intentionally not hashable | ✓ |
-| `PathFormat` | `str` Enum (`PathFormat.POSIX`, `WINDOWS`, `URI`) | `#[pyclass]` enum, eq+eq_int | ⚠ — not hashable; see §7, gap #1 |
-| `PathFormat.name` | inherits from `str` | explicit getter | ✓ |
-| `PathMappingRule(*, source_path_format, source_path, destination_path)` | requires PurePosixPath/PureWindowsPath at construction | accepts str or pathlib | ✓ — more permissive; spec example uses str |
-| `PathMappingRule.from_dict / to_dict` | same | same | ✓ |
-| `PathMappingRule.apply(path, output_format=)` | apply only | apply + apply_with_format | ✓ — superset |
-| `PathMappingRule.__eq__ / __hash__` | inherits from frozen dataclass | manual impl on three fields | ✓ |
-| `PathMappingRule.__repr__` | `PathMappingRule(source_path_format=<PathFormat.POSIX: 'POSIX'>, …)` | `PathMappingRule(source_path_format=Posix, …)` | ⚠ — see §7, gap #6 (cosmetic) |
-| `RangeExpr` (constructor, `start`, `end`, `len`, `__contains__`, `__iter__`, `__getitem__`, `ranges()`, `from_list`, eq+hash) | dataclass | matches | ✓ |
-| `RangeExpr.from_list([])` | `ValueError` | `ValueError("Range expression cannot be empty")` | ✓ |
-| `FormatString` (lives in `_format_strings` in reference, in `openjd.expr` in binding) | `FormatStringError` exception | `FormatStringValidationError` (different name) | ✓ — binding-side rename per spec; the `validate_expressions` method exposes the new error class explicitly |
-| `FormatString.resolve(*, symtab, library=, target_type=, path_format=)` | `library=` | `*, profile=` | ✓ — profile-only consolidation |
-| `FormatString.resolve_string` | n/a (returns ExprValue always) | string-only return | ✓ — binding-side ergonomics, in spec |
-| `FormatString.validate_expressions` | n/a (rfc-only on Rust side) | exposed | ✓ — binding-side, in spec |
-| `FormatString.copy_used_symtab_values` | n/a | exposed | ✓ — binding-side, used by sessions |
-| `FormatString.__eq__ / __hash__` | inherits from `str` (subclass of `DynamicConstrainedStr`) | on `raw()` | ✓ — spec contract |
-| `ExprProfile`, `ExprRevision`, `ExprExtension`, `HostContext` | n/a | new in binding | ✓ — binding-side, in spec |
-| `ParsedExpression.evaluate(values=, profile=, …)` | `library=` | `profile=` | ✓ — profile-only |
-| `ParsedExpression.peak_memory_usage / operation_count` | same | same | ✓ |
-| `ExpressionError(message, *, expr=, node=, lineno=, col_offset=)` | dataclass-style | `attach_expression_error_methods` | ✓ — message format matches |
-| `ExpressionError.with_context / message_with_expr_prefix` | methods | methods | ✓ |
-| `RangeExprError`, `FormatStringValidationError` | `RangeExprError`, `FormatStringError` | same / renamed | ✓ |
-| `DEFAULT_MEMORY_LIMIT`, `DEFAULT_OPERATION_LIMIT` | 100 MB, 10 M | identical values | ✓ |
-| Pickle round-trip for all value types | covered by reference's pydantic glue | covered by 22 tests in `test_pickle.py` | ✓ |
-| `FunctionLibrary`, `FunctionSignature`, `get_default_library` | exposed | **removed in `8f19e4d`** | ✓ — intentional per spec ("…profile= is the single way to configure evaluation") |
+| `evaluate_expression` | ✓ | ✓ | ✓ |
+| `parse_expression` | ✓ | ✓ | ✓ |
+| `ParsedExpression` | ✓ | ✓ | ✓ |
+| `DEFAULT_MEMORY_LIMIT` | `100_000_000` | `100_000_000` | ✓ |
+| `DEFAULT_OPERATION_LIMIT` | `10_000_000` | `10_000_000` | ✓ |
+| `ExprType` | dataclass-like | pyclass | ✓ structural |
+| `ExprType.match` | ✓ | renamed `match_type` | ⚠ documented in spec |
+| `TypeCode` | `IntEnum` | pyclass `eq_int` | ⚠ `isinstance(tc, int)` is False (Rec 7) |
+| `ExprValue` | ✓ | ✓ | ✓ |
+| `ExprValue.null()` | ✓ classmethod | absent (use `ExprValue(None)`) | ⚠ Rec 8 |
+| `ExprValue.from_float(value, original_str=None)` | optional kwarg | required positional | ⚠ Rec 5 |
+| `ExprValue.to_string()` | ✓ | absent (use `str(v)`) | ✓ documented in spec |
+| `ExprValue.to_expr_value_list()` | ✓ | absent (use iter / `list(v)`) | ✓ via spec sequence-protocol section |
+| `ExprValue.unresolved` | ✓ | ✓ | ✓ |
+| `ExprValue.item()` | ✓ | ✓ (raises on unresolved) | ✓ |
+| `SymbolTable` | ✓ | ✓ | ✓ |
+| `SymbolTable.symbols` | absent | ✓ binding addition | ✓ binding-only, documented in spec |
+| `SymbolTable.union` | absent | ✓ binding addition | ✓ binding-only, documented in spec |
+| `SymbolTable.__eq__` | absent | ✓ binding addition | ✓ binding-only, documented in spec |
+| `RangeExpr` | ✓ | ✓ | ✓ |
+| `RangeExpr.ranges` | property of `_IntRange` list | method returning tuple-3 list | ⚠ method/shape divergence — documented in spec |
+| `RangeExprError` | ✓ | ✓ | ✓ |
+| `PathMappingRule` | ✓ | ✓ | ✓ |
+| `PathMappingRule.source_path` | `PurePath \| str` (preserved) | always `str` | ⚠ Rec 4 |
+| `PathMappingRule(URI source_path_format, non-URI source_path)` | raises `ValueError` | accepts | ❌ Rec 3 |
+| `PathMappingRule.from_dict({})` missing-fields message | `[..._format, ..._path, ..._path]` quoted (Python list repr) | `[source_path_format, source_path, destination_path]` bare names | ❌ Rec 2 |
+| `PathFormat` | `str` Enum | pyclass `eq_int` | ✓ |
+| `ExpressionError` | ✓ | ✓ | ✓ |
+| `ExpressionTypeError` | ✓ | ✓ | ✓ |
+| `FunctionLibrary` | ✓ | absent | ⚠ Rec 1 (deliberate, but spec must explain) |
+| `FunctionSignature` | ✓ | absent | ⚠ Rec 1 (deliberate, but spec must explain) |
+| `get_default_library` | ✓ | absent | ⚠ Rec 1 (deliberate, but spec must explain) |
+| `FormatString` | absent | ✓ | binding-only, fully documented |
+| `escape_format_string` | absent | ✓ | binding-only, fully documented |
+| `FormatStringValidationError` | absent | ✓ | binding-only, fully documented |
+| `evaluate_let_bindings` | absent | ✓ | binding-only, documented but UNTESTED — Rec 6 |
+| `ExprProfile` / `ExprRevision` / `ExprExtension` / `HostContext` | absent | ✓ | binding-only (replaces FunctionLibrary), fully documented |
 
-Symbol-level summary: **all 23 spec-public symbols exposed and
-behaviorally aligned with the reference**, modulo six small
-behaviour gaps (one missing hash, four exception-class mismatches,
-one cosmetic repr) captured in `test_known_gaps.py` and listed in
-§7 / §8.
+**Behavioural divergences confirmed by direct probing:**
+
+* **i64 boundary handling**: identical. `ExprValue(2**63)` and
+  `ExprValue(2**64-1)` raise `ExpressionError` with a clean
+  "Integer overflow" message; `ExprValue(2**63 - 1)` and
+  `ExprValue(-2**63)` round-trip correctly through `item()`.
+* **int vs float equality**: `ExprValue(1) == ExprValue(1.0)` returns
+  `True` in both reference and binding (binding goes through
+  `ExprValue::equals` which handles cross-type numeric equality
+  upstream).
+* **Pickle fidelity**: every class on the spec's pickle table
+  round-trips and `==` matches; exception classes round-trip with
+  correct `__module__` (`openjd.expr`) and structured fields are
+  preserved (verified `ExpressionError(msg, expr=..., col_offset=...)`
+  survives `pickle.dumps`/`loads`).
+* **Threading**: `evaluate_expression` and
+  `ParsedExpression.evaluate` are safe for concurrent calls from
+  multiple Python threads — the parser/evaluator state is per-call
+  and the function library cache is `Arc`-shared. The one race is on
+  `ParsedExpression.peak_memory_usage` / `operation_count` (atomic,
+  last-writer-wins; see Rec 9).
+* **`ExprType.match_type` semantics**: identical to the reference's
+  `ExprType.match` (verified: `list[T].match_type(list[int])` returns
+  `{TypeCode.TYPEVAR_T: ExprType("int")}`).
+* **Arity validation**: `ExprType(TypeCode.INT, [ExprType("string")])`
+  raises `ValueError "Int does not accept type parameters"`, and
+  `ExprType(TypeCode.LIST)` raises
+  `ValueError "List requires exactly one type parameter"`. Matches
+  the spec's promise.
+* **Unresolved value propagation**: `ExprValue.unresolved("int")`
+  raises `ExpressionTypeError` from `item()` and `str()` with clear
+  "value is not known" messages, while `repr()` returns
+  `'ExprValue.unresolved(ExprType("int"))'` without raising. Matches
+  the spec's documented contract.
 
 ## 6. Build and Test Results
 
-```
+All commands run from `/home/markw/openjd-model-for-python` on branch
+`bindings-rs` against `~/openjd-rs` (the sibling Rust workspace).
+
+```text
 $ python scripts/maturin_build.py develop --manifest-path rust-bindings/Cargo.toml
-Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.84s
-📦 Built wheel for abi3 Python ≥ 3.9 to /home/markw/openjd-model-for-python/target/wheels/openjd_model-…-cp39-abi3-linux_x86_64.whl
-🛠 Installed openjd-model-…
-```
-(The `scripts/maturin_build.py develop` invocation is run via
-`hatch run test-subset` per the project's normal flow; the
-extension was successfully rebuilt before tests.)
-
-```
-$ hatch run test-subset test/openjd/expr
-============================== test session starts ===============================
-collected 1795 items
-
-test/openjd/expr/test_arithmetic.py ............................................. 55 passed
-…
-test/openjd/expr/test_known_gaps.py xxxxxx                                      6 xfailed
-…
-============= 1765 passed, 24 skipped, 6 xfailed, 8 warnings in 4.70s =============
+🍹 Building a mixed python/rust project
+🐍 Found CPython 3.13
+🔗 Found pyo3 bindings with abi3 support
+   Compiling openjd-sessions v0.2.1
+   Compiling openjd-python v0.9.0
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.12s
+🛠 Installed openjd-model-0.9.1.post46+g9224fd874.d20260526
 ```
 
-```
-$ hatch run lint
-cmd [1] | ruff check src test
-All checks passed!
-cmd [2] | black --check --diff src test
-All done! ✨ 🍰 ✨
-154 files would be left unchanged.
-cmd [3] | mypy src test
-Success: no issues found in 103 source files
+```text
+$ python -m pytest test/openjd/expr -q --no-header
+1788 passed, 24 skipped, 8 warnings in 4.61s
 ```
 
-```
-$ cargo clippy --manifest-path rust-bindings/Cargo.toml --all-targets
-…
-warning: `openjd-python` (lib) generated 56 warnings (run `cargo clippy --fix --lib -p openjd-python` to apply 1 suggestion)
-warning: `openjd-python` (lib test) generated 56 warnings (56 duplicates)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.41s
+The 24 skipped tests are all Windows-only validations
+(`TestReprPwshWindowsValidation`, `TestReprCmdWindowsValidation`),
+expected to be skipped on Linux. The 8 warnings are all
+`PytestUnknownMarkWarning` for the custom `pytest.mark.fuzz` marker,
+which can be silenced by registering it in `pyproject.toml` (low
+priority).
+
+```text
+$ cargo build --manifest-path rust-bindings/Cargo.toml --all-targets
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.10s
+
+$ cargo test --manifest-path rust-bindings/Cargo.toml
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored
+
+$ cargo clippy --manifest-path rust-bindings/Cargo.toml --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.01s
 ```
 
-The 56 clippy warnings are workspace-wide; **zero are in
-`rust-bindings/src/expr/`**. Filtered output (`grep -E "src/expr/"`)
-returns no matches. Every warning is in `model/types.rs`,
-`model/profile.rs`, `model/job.rs`, `model/step_dependency_graph.rs`,
-`sessions/types.rs`, or `sessions/session_user.rs`. Those are
-issues for the model and sessions evaluations, not this report.
+Clippy is fully clean under `-D warnings`.
 
-Stub-gen check: `src/openjd/_openjd_rs.pyi` already contains every
-expr symbol — `ExprExtension`, `ExprProfile`, `ExprType`, `ExprValue`,
-`FormatString`, `HostContext`, `ParsedExpression`, `PathMappingRule`,
-`RangeExpr`, `SymbolTable`, `ExprRevision`, `PathFormat`, `TypeCode`,
-`RangeExprError`, `FormatStringValidationError` — and the public
-functions (`escape_format_string`, `evaluate_expression`,
-`evaluate_let_bindings`, `parse_expression`). No drift detected in
-the audit.
+```text
+$ python scripts/maturin_build.py develop --features stub-gen --manifest-path rust-bindings/Cargo.toml
+warning: unused import: `PyType`
+ --> rust-bindings/src/model/task_parameter.rs:40:35
+   |
+40 | use pyo3::types::{PyDict, PyList, PyType};
+   |                                   ^^^^^^
+
+$ scripts/generate_stubs.sh
+Generated src/openjd/_openjd_rs.pyi
+
+$ git diff --stat src/openjd/_openjd_rs.pyi
+(no diff)
+```
+
+The stub regeneration produces no diff, so the committed `.pyi` is
+current. The `unused_import` warning above is in
+`rust-bindings/src/model/task_parameter.rs` (model component, not
+expr); flagging here for completeness because it appears in the
+build log of the expr evaluation, but resolution belongs to a model
+report.
 
 ## 7. Exploratory Findings
 
-Six concrete gaps surfaced via exploratory smoke-testing against the
-binding. All six now have failing-test demonstrations in
-`test/openjd/expr/test_known_gaps.py` (xfail-marked); when each is
-resolved, the corresponding test moves to its proper home in the
-companion test file (e.g. `test_pickle.py` for hash-related cases,
-`test_expression_value.py` for unresolved `.item()` / `str()` cases,
-`test_types.py` for the `ExprType` arity case).
+In addition to the parity probes summarised in §5, a few targeted
+probes were run:
 
-1. **`PathFormat` is not hashable.**
-   `hash(PathFormat.POSIX)` raises `TypeError: unhashable type:
-   'openjd.expr.PathFormat'`. `TypeCode` and `ExprRevision`, both
-   declared via `#[pyclass]`-enum in the same directory, are
-   hashable. Cause: the `#[pyclass(...)]` config in
-   `rust-bindings/src/expr/path_format.rs` declares `eq, eq_int`
-   but not `hash`. Cross-cut: this also means `PathFormat` cannot
-   be a dict key, set member, or appear inside any
-   hash-equality-implying structure. Pinned by
-   `test_known_gaps.py::test_path_format_is_hashable`.
-2. **`ExprValue.unresolved(T).item()` returns `None`.**
-   The pure-Python reference raises `ExpressionTypeError("Cannot
-   extract value from unresolved[T]: value is not known")`. Cause:
-   the `ExprValue::Unresolved(_) => py.None()` arm in
-   `expr_value_to_py` (`rust-bindings/src/expr/expr_value.rs`)
-   silently collapses unresolved to None. Pinned by
-   `test_known_gaps.py::test_unresolved_item_raises`.
-3. **`str(ExprValue.unresolved(T))` returns `'<unresolved[T]>'`.**
-   The reference raises `ExpressionTypeError("Cannot convert
-   unresolved[T] to string: value is not known")`. Cause: the
-   binding's `__str__` delegates to
-   `ExprValue::to_display_string` which has a printable-debug
-   branch for `Unresolved`. Same surface as #2. Pinned by
-   `test_known_gaps.py::test_unresolved_str_raises`.
-4. **List-construction errors raise `ValueError` instead of `TypeError`.**
-   `ExprValue([1, "hello"])` and `ExprValue([unresolved, 42])`
-   both raise `ValueError` on the binding (`"make_list expected
-   int element, got string"` and `"Cannot create list from
-   unresolved elements"`); the reference raises `TypeError`
-   (`"incompatible types"` and `"Cannot construct a list
-   containing unresolved values"`). Cause:
-   `ExprValue::make_list` errors are mapped through
-   `pyo3::exceptions::PyValueError::new_err(...)` in
-   `expr_value.rs::py_to_expr_value`. The error class change is a
-   small, low-risk fix. Pinned by
-   `test_known_gaps.py::test_mixed_type_list_raises_type_error`
-   and `…::test_list_with_unresolved_raises_type_error`.
-5. **`ExprType(TypeCode.UNRESOLVED)` accepts a 0/2-arity construction.**
-   The reference raises `ValueError("exactly one type
-   parameter")`. The binding's `PyExprType::new` builds an
-   `ExprType` from a `TypeCode` and an empty params vec without
-   arity validation, deferring to `ExprType::new` upstream which
-   in turn allows non-canonical shapes. The shape returned has
-   `to_string() == "unresolved"` (no parameter), which is unusable
-   in evaluation. Pinned by
-   `test_known_gaps.py::test_unresolved_type_requires_exactly_one_param`.
-6. **`PathMappingRule.__repr__` shows the Rust debug name for `PathFormat`.**
-   `repr()` on a rule prints
-   `source_path_format=Posix` (Rust enum variant debug name)
-   instead of `source_path_format=POSIX` or
-   `source_path_format=PathFormat.POSIX` (Python convention).
-   Cause: the format string in
-   `rust-bindings/src/expr/path_mapping.rs::__repr__` uses `{:?}`
-   on the inner `PathFormat`. Cosmetic; not pinned by an xfail
-   test (no behaviour assertion to make).
+1. **`PathMappingRule(URI, "/not/a/uri", ...)` accepts**: probed
+   directly — the binding constructs a rule with a `source_path` that
+   isn't a URI string, while the reference raises
+   `ValueError "Path mapping rule with URI source_path_format requires
+   a URI string source_path"`. Reproducible via:
+   ```python
+   PathMappingRule(source_path_format=PathFormat.URI,
+                   source_path="/not/a/uri",
+                   destination_path="/dst")
+   ```
+   No exception. Tracked as Recommendation 3.
+2. **`PathMappingRule.from_dict({"source_path_format": "POSIX"})`**:
+   binding raises
+   `'Path mapping rule requires the following fields: [source_path_format, source_path, destination_path]'`
+   while the reference raises
+   `"Path mapping rule requires the following fields: ['source_path_format', 'source_path', 'destination_path']"`
+   (Python `list[str]` `repr` form with quotes). Tracked as
+   Recommendation 2.
+3. **`PathMappingRule(source_path=PurePosixPath("/src"), ...)`**: the
+   `source_path` getter returns `'/src'` (`str`) rather than the
+   original `PurePosixPath`. Tracked as Recommendation 4.
+4. **`ExprValue.from_float(3.14)`**: raises
+   `TypeError: ExprValue.from_float() missing 1 required positional argument: 'original_str'`.
+   The reference signature is `from_float(value, original_str=None)`.
+   Tracked as Recommendation 5.
+5. **`evaluate_let_bindings` is unreachable from any test file**:
+   confirmed via repository-wide grep. Tracked as Recommendation 6.
+6. **`isinstance(TypeCode.INT, int)` returns `False`** while the
+   reference's `IntEnum` returns `True`. The `eq_int` modifier on the
+   pyclass ensures `TypeCode.INT == 2` and `int(TypeCode.INT) == 2`
+   still work, so practical impact is limited but downstream code that
+   uses `isinstance(..., int)` to special-case enum values diverges
+   between reference and binding. Tracked as Recommendation 7.
+7. **`ExprValue.null()` not exposed**: the reference's
+   `ExprValue.null()` classmethod has no binding counterpart;
+   `ExprValue(None)` is the documented replacement. Tracked as
+   Recommendation 8.
+8. **Concurrent `ParsedExpression.evaluate` races on metrics**:
+   running 4 threads × 50 iterations against a single
+   `ParsedExpression` instance produces a self-consistent
+   `peak_memory_usage` / `operation_count` reading at the end but
+   intermediate observers will see other threads' values. Tracked as
+   Recommendation 9.
 
-Other exploratory findings that ARE working correctly (no gaps):
-
-* Full pickle round-trip for `ExpressionError` preserves the
-  `expr`, `lineno`, `col_offset`, and `node` attributes;
-  `__module__` is `'openjd.expr'`. Pickled bytes contain
-  `b'openjd.expr'`.
-* `FormatStringValidationError` pickles correctly under
-  `openjd.expr.FormatStringValidationError`.
-* Concurrent evaluation from 10 Python threads through
-  `evaluate_expression` succeeds with consistent results.
-* i64 boundary integers (`2**63 - 1`, `-2**63`) round-trip cleanly;
-  out-of-range values raise `ExpressionError("Integer overflow:
-  …")` (matches reference contract).
-* NaN/Inf floats are rejected at construction time with
-  `ValueError("Float operation produced NaN/infinity")` — this is
-  the upstream Rust crate's behaviour and matches reference
-  semantics (no silent NaN propagation).
-* `ExprRevision` and `TypeCode` enums hash and pickle correctly,
-  and the pickled bytes carry the `openjd.expr` module path so
-  cross-process round-trips work.
-* `evaluate_let_bindings` (registered in the model module,
-  re-exported through `openjd.expr.__init__`) accepts `profile=`
-  as a keyword-only kwarg per spec.
-* `FormatString.validate_expressions(symtab, *, profile=None)`
-  raises `FormatStringValidationError` (a `ValueError` subclass)
-  with a caret-anchored, byte-offset-bearing diagnostic on the
-  first failing segment.
-* Equality and hash on `PathMappingRule`, `FormatString`,
-  `HostContext`, `ExprProfile`, `RangeExpr` are consistent with
-  Python's hash/eq contract — equal objects hash equal, and the
-  types are usable as dict keys / set members.
-* `SymbolTable.__eq__` walks subtables recursively; insertion
-  order on the underlying `HashMap` does not affect equality.
+No new failing tests were added to `test_known_gaps.py` because the
+gaps above are all message/shape/coverage-level, not behavioural-
+correctness gaps that would benefit from a runnable xfail. Each
+recommendation below identifies the file in which a passing regression
+test should land once the fix is applied.
 
 ## 8. Recommendations
 
-Listed in priority order. Each item references either a specific
-file path or a specific failing xfail test so the report-driven
-workflow in `~/openjd-rs/AGENTS.md` can resolve it precisely.
+Numbered for the report-driven workflow in `~/openjd-rs/AGENTS.md`. P1
+items affect correctness vs the reference; P2 items affect spec
+accuracy or coverage; P3 items are quality-of-life improvements.
 
-### P1 — Reference parity / behaviour bugs
+### P1 — Reference parity
 
-1. ~~**Make `PathFormat` hashable.** Add `hash` to the
-   `#[pyclass(module = "openjd.expr", name = "PathFormat", eq, eq_int,
-   from_py_object)]` line in `rust-bindings/src/expr/path_format.rs`
-   so it matches `PyTypeCode` / `PyExprRevision`. When the change
-   lands, move
-   `test_known_gaps.py::test_path_format_is_hashable` to
-   `test_pickle.py` (or a new `test_enum_hash.py`) alongside the
-   existing pickle round-trip tests for `PathFormat`.~~ **Resolved.**
-   Added `hash, frozen` to the `#[pyclass(...)]` config and the
-   matching `Eq, Hash` to the `#[derive(...)]`. The xfail moved to
-   `test_paths.py::TestPathFormatHashability` (4 tests covering
-   self-hash, distinct-variant distinct-hash, set membership, and
-   dict-key usage).
-2. ~~**Raise `ExpressionTypeError` from `ExprValue.unresolved(T).item()`.**
-   The `ExprValue::Unresolved(_) => py.None()` arm in
-   `rust-bindings/src/expr/expr_value.rs::expr_value_to_py` should
-   raise `ExpressionTypeError("Cannot extract value from
-   unresolved[T]: value is not known")` to match the reference
-   contract. When resolved, move
-   `test_known_gaps.py::test_unresolved_item_raises` to
-   `test_expression_value.py`.~~ **Resolved.** `expr_value_to_py`
-   converted from infallible `Py<PyAny>` → fallible
-   `PyResult<Py<PyAny>>`; the `Unresolved(t)` arm now raises
-   `ExpressionTypeError` with the spec'd message. The pickle path
-   (`__reduce__`) special-cases unresolved before calling the
-   helper, so pickle round-trips still work. The xfail moved to
-   `test_expression_value.py::TestUnresolvedExtraction`.
-3. ~~**Raise `ExpressionTypeError` from `str(ExprValue.unresolved(T))`.**
-   Same surface as #2 — `__str__` should consult the `is_unresolved`
-   path and raise instead of returning the debug-style display
-   string. When resolved, move
-   `test_known_gaps.py::test_unresolved_str_raises` alongside #2 in
-   `test_expression_value.py`.~~ **Resolved.** `__str__` now
-   special-cases `Unresolved` and raises the spec'd
-   `ExpressionTypeError("Cannot convert unresolved[T] to string:
-   value is not known")`. `__repr__` deliberately does *not* raise
-   (Python convention: `repr` is for debugging and should never
-   raise) — pinned by
-   `test_expression_value.py::TestUnresolvedExtraction::test_repr_does_not_raise_on_unresolved`.
-4. ~~**Raise `TypeError` (not `ValueError`) on incompatible list-element types.**
-   …~~ **Resolved.** Both `ExprValue::make_list` call sites in
-   `expr_value.rs` now route through a new `make_list_err_to_py`
-   helper that wraps the upstream "make_list expected X element,
-   got Y" message into the reference's "List contains incompatible
-   types: X, Y" form, and the special unresolved-element case into
-   "Cannot construct a list containing unresolved values…". Both
-   raise `TypeError`, matching the reference contract. The two
-   xfails moved to
-   `test_lists.py::TestExprValueListConstructionErrors`. (Note:
-   `[1, 2.0]` is intentionally still allowed — that's int→float
-   numeric promotion, not a heterogeneous-type rejection.)
-5. ~~**Validate arity for non-zero-parameter `TypeCode` variants in `ExprType.__init__`.**
-   …~~ **Resolved.** New `validate_typecode_arity` helper in
-   `expr_type.rs` enforces:
-   - `Unresolved` and `List` must have exactly one type parameter
-   - Primitives (`Int`, `String`, `Bool`, `Float`, `Path`,
-     `NullType`) must have zero
-   - `Union` is intentionally exempt — the upstream
-     `normalize_union` deliberately accepts any number of
-     parameters and unwraps single-element unions to the element /
-     turns zero-element unions into `NoReturn`. The new test class
-     `test_types.py::TestExprTypeArityValidation` pins this
-     normalisation as well as the rejection cases. The xfail
-     moved there.
+1. **Document the `FunctionLibrary` / `FunctionSignature` /
+   `get_default_library` removal in
+   `specs/python-expr-interface.md`.** Add a short "Migration from the
+   pure-Python reference" subsection (or a paragraph in the
+   `ExprProfile` section) explaining that the function-library surface
+   was replaced by `ExprProfile` + `HostContext` and pointing readers
+   to the corresponding builder pattern. This is the single most
+   important divergence from the reference and the spec currently
+   doesn't even acknowledge it.
+2. **Restore `PathMappingRule.from_dict` missing-fields error message
+   parity.** In
+   `rust-bindings/src/expr/path_mapping.rs::from_dict`, change the
+   message from the bare `[source_path_format, source_path,
+   destination_path]` to the Python list-repr form
+   `['source_path_format', 'source_path', 'destination_path']` (quote
+   each name). Land regression test alongside the existing
+   `TestPathMappingRuleFromDict` cases in
+   `test/openjd/expr/test_path_mapping.py`.
+3. **Validate URI form when constructing
+   `PathMappingRule(source_path_format=PathFormat.URI, source_path=...)`.**
+   The reference rejects non-URI strings with `ValueError "Path
+   mapping rule with URI source_path_format requires a URI string
+   source_path"`. The binding currently accepts anything. Add the
+   check in `rust-bindings/src/expr/path_mapping.rs::PyPathMappingRule::new`
+   (use `openjd_expr::path_mapping::is_uri` if exposed, otherwise
+   replicate the regex check). Land regression test in
+   `test/openjd/expr/test_path_mapping.py::TestPathMappingRuleFromUri`.
 
-### P2 — Polish / housekeeping
+### P2 — Spec/coverage gaps
 
-6. ~~**Render `PathMappingRule.source_path_format` using its Python name in `__repr__`.**
-   `rust-bindings/src/expr/path_mapping.rs::__repr__` uses `{:?}` on
-   the inner `PathFormat`, producing `Posix` / `Windows` / `Uri`.
-   Either format the corresponding `PyPathFormat` (which yields
-   `POSIX` / `WINDOWS` / `URI` via its `name` getter) or hand-write
-   the variant string. Cosmetic only; no failing test today, but
-   reproduces in IDE tooltips and traceback inspection.~~
-   **Resolved.** `__repr__` now formats as
-   `source_path_format=PathFormat.POSIX` (matching how Python's
-   own enums repr themselves and how the rest of the binding's
-   pyclass enums render). A pub-crate `PyPathFormat::variant_name`
-   method exposes the variant string outside `#[pymethods]` for use
-   from the path-mapping module. Pinned by 3 new tests in
-   `test_path_mapping.py::TestPathMappingRuleRepr`.
-7. **Consider exposing `ExprValue.null()` as a classmethod.**
-   The reference exposes `ExprValue.null()` as a convenience
-   classmethod that returns `ExprValue(None)`. The binding requires
-   `ExprValue(None)`, which works — but adding the explicit
-   classmethod removes a small porting friction for code coming
-   from `openjd.expr` v0. If adopted, document in the spec under
-   `ExprValue` as a "Special constructors" entry.
-8. ~~**Document the binding's behaviour for unresolved value `.item()` / `str()` once #2/#3 are resolved.**
-   The spec's ExprValue section currently shows `.item()` returning
-   the native Python value but doesn't explicitly cover the
-   unresolved case. Once the behaviour is unified with the
-   reference (raises `ExpressionTypeError`), add a one-line note in
-   the `ExprValue` section calling out the contract: "`.item()` and
-   `str()` on an unresolved value raise `ExpressionTypeError`."~~
-   **Resolved.** Added an "Unresolved values" subsection to the
-   `ExprValue` section in `specs/python-expr-interface.md` covering
-   the three contracts: `.item()` raises, `str(...)` raises, and
-   `repr(...)` returns a debug-friendly string without raising
-   (Python convention).
+4. **Decide whether `PathMappingRule.source_path` should preserve
+   `PurePath` typing or stay `str`.** Currently the binding always
+   normalises to `str`. The reference returns whatever the constructor
+   was given. If the binding's behaviour is intentional (e.g. to keep
+   the field cheap to serialise / pickle), document the normalisation
+   in the spec's `PathMappingRule` section explicitly so users porting
+   from the reference know to call `.str` themselves where they need
+   `PurePath` shape. Otherwise, change the getter to wrap the stored
+   string back into a `PurePosixPath` / `PureWindowsPath` per
+   `source_path_format` for non-URI rules.
+5. **Make `ExprValue.from_float`'s `original_str` parameter optional
+   to match the reference.** Change the signature in
+   `rust-bindings/src/expr/expr_value.rs` to
+   `from_float(value: f64, original_str: Option<String>) -> PyResult<Self>`
+   (with `#[pyo3(signature = (value, original_str=None))]`) and use
+   `format!("{value}")` or `Float64::new` directly when
+   `original_str` is `None`. Update the spec example to show the
+   one-argument form. Land coverage in
+   `test/openjd/expr/test_expression_value.py`.
+6. **Add tests for `evaluate_let_bindings` to
+   `test/openjd/expr/`.** Either create a new
+   `test/openjd/expr/test_let_bindings.py` or add a
+   `TestEvaluateLetBindings` class to an existing file. Cover at
+   minimum: (a) the spec example (single binding), (b) chained
+   bindings where a later binding references an earlier one, (c)
+   `ExpressionError` raised on syntax error inside a binding, (d)
+   `ExpressionError` raised on the "missing `=`" / "no name" form,
+   (e) the result `SymbolTable` containing both the original input
+   symbols and the bound names.
+7. **Acknowledge in the spec that `TypeCode` is not an `IntEnum`
+   subclass.** The reference is `class TypeCode(IntEnum)`; the binding
+   is a pyo3 enum that compares equal to ints (`eq_int`) but is not an
+   `int`. Add a one-liner in the `TypeCode` section: "`TypeCode` values
+   compare equal to `int` (`TypeCode.INT == 2`) and convert via
+   `int(TypeCode.INT)`, but they are not `int` subclasses —
+   `isinstance(TypeCode.INT, int)` returns `False`."
+8. **Document or add `ExprValue.null()`.** The reference has
+   `ExprValue.null()` as a classmethod; the binding requires
+   `ExprValue(None)`. Either (a) add the classmethod to
+   `rust-bindings/src/expr/expr_value.rs` for parity, or (b) add an
+   explicit "Use `ExprValue(None)` instead of `ExprValue.null()` from
+   the pure-Python reference" note to the spec's `ExprValue` section.
+
+### P3 — Quality of life
+
+9. **Document or fix `ParsedExpression` metric thread safety.** Either
+   (a) make `evaluate_with_metrics` return a structured `EvaluateResult`
+   (value plus metrics) and deprecate the `peak_memory_usage` /
+   `operation_count` attributes, or (b) document in the spec that the
+   attributes hold *the most recent* evaluation's metrics and racing
+   readers should not rely on them across threads.
+10. **Add `FormatString.copy_used_symtab_values` to the spec or remove
+    it from the binding.** The method exists in
+    `rust-bindings/src/expr/format_string.rs` and is exercised by
+    `test/openjd/expr/test_copy_used_symtab.py` but isn't documented in
+    `specs/python-expr-interface.md`. If it's used by sessions or model
+    code this is a public API that needs a spec entry; if it's an
+    internal helper, mark it `_copy_used_symtab_values` and let it stay
+    out of the spec.
+11. **Move or annotate `evaluate_let_bindings` binding source
+    location.** It currently lives in
+    `rust-bindings/src/model/create_job_fns.rs` even though the public
+    surface is `openjd.expr`. Either move the `#[pyfunction]` into
+    `rust-bindings/src/expr/` and delegate to the `openjd-model`
+    crate's `evaluate_let_bindings`, or add a comment in
+    `rust-bindings/src/expr/mod.rs` pointing to the model module.
+12. **Update `AGENTS.md` to drop the reference to
+    `function_library.rs`.** The "Function library
+    (`function_library.rs`) — `get_default_library`,
+    `FunctionLibrary.with_host_context`" line in the expr section is
+    stale; the file does not exist and the symbols it advertised were
+    removed.
+13. **Register the `pytest.mark.fuzz` custom marker in
+    `pyproject.toml`** to silence the eight `PytestUnknownMarkWarning`
+    warnings produced by `test/openjd/expr/test_fuzz.py`. Add to
+    `[tool.pytest.ini_options]`:
+    ```toml
+    markers = ["fuzz: hypothesis fuzz tests"]
+    ```
