@@ -74,6 +74,18 @@ impl PyPathMappingRule {
     ) -> PyResult<Self> {
         let src = extract_path_arg(source_path, source_path_format, "source_path")?;
         let dst = extract_path_str(destination_path, "destination_path")?;
+        // For URI source format, validate the URI form up-front —
+        // matches the v0 reference's ``__init__`` check, which
+        // raises ``ValueError`` if ``source_path`` doesn't parse
+        // as a URI (i.e., doesn't start with ``scheme://``).
+        // Without this validation the binding silently accepts
+        // any string and the misuse only surfaces later, when
+        // path-mapping is applied at session-time.
+        if source_path_format == PyPathFormat::URI && !openjd_expr::path_mapping::is_uri(&src) {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Path mapping rule with URI source_path_format requires a URI string source_path",
+            ));
+        }
         Ok(PyPathMappingRule {
             inner: PathMappingRule {
                 source_path_format: source_path_format.into(),
@@ -159,11 +171,33 @@ impl PyPathMappingRule {
 
     #[staticmethod]
     fn from_dict(d: &Bound<'_, PyDict>) -> PyResult<Self> {
+        // The supported field set, in the canonical order. Used both
+        // for the "requires the following fields" diagnostic (Python
+        // list repr with single-quoted names) and for the
+        // unsupported-keys check below. Matches the v0 reference's
+        // ``[field.name for field in fields(PathMappingRule)]``.
+        const SUPPORTED: [&str; 3] = ["source_path_format", "source_path", "destination_path"];
+        // Format the field-names list the same way Python's ``repr``
+        // does for a ``list[str]``: ``['a', 'b', 'c']``. The v0
+        // reference relies on f-string interpolation
+        // (``f"...{field_names}"``) to produce that form, and tests
+        // pin the exact substring; matching it verbatim is required
+        // for parity.
+        let field_names_repr = format!(
+            "[{}]",
+            SUPPORTED
+                .iter()
+                .map(|s| format!("'{s}'"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
         let get = |key: &str| -> PyResult<String> {
             d.get_item(key)?
-                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(
-                    "Path mapping rule requires the following fields: [source_path_format, source_path, destination_path]",
-                ))?
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Path mapping rule requires the following fields: {field_names_repr}"
+                    ))
+                })?
                 .extract::<String>()
         };
         if d.is_empty() {
@@ -172,7 +206,6 @@ impl PyPathMappingRule {
         // Reject keys outside the supported set up-front, matching the
         // pure-Python reference. Build a sorted set so the error
         // message is deterministic across Python's dict ordering.
-        const SUPPORTED: [&str; 3] = ["source_path_format", "source_path", "destination_path"];
         let mut unsupported: Vec<String> = Vec::new();
         for key in d.keys() {
             let key_str: String = key.extract()?;
@@ -203,10 +236,23 @@ impl PyPathMappingRule {
             "URI" => PyPathFormat::URI,
             other => return Err(pyo3::exceptions::PyValueError::new_err(format!("Unknown path format: {other}"))),
         };
+        let source_path = get("source_path")?;
+        // Apply the same URI validation the constructor enforces.
+        // Without this, ``from_dict`` could accept a non-URI
+        // ``source_path`` for a URI-format rule and silently
+        // construct a rule that never matches anything at session
+        // time. Pinned for parity with the v0 reference's
+        // ``__init__`` check (which the v0 ``from_dict`` also
+        // routes through).
+        if fmt == PyPathFormat::URI && !openjd_expr::path_mapping::is_uri(&source_path) {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Path mapping rule with URI source_path_format requires a URI string source_path",
+            ));
+        }
         Ok(PyPathMappingRule {
             inner: PathMappingRule {
                 source_path_format: fmt.into(),
-                source_path: get("source_path")?,
+                source_path,
                 destination_path: get("destination_path")?,
             },
         })

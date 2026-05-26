@@ -264,12 +264,23 @@ class TestPathMappingRuleSerialization:
         assert rule.source_path_format == PathFormat.POSIX
 
     def test_from_dict_empty(self) -> None:
-        with pytest.raises(ValueError, match="Empty"):
+        # Per AGENTS.md "Test Quality Standard": assert exception
+        # class + the full message body, not just a substring.
+        with pytest.raises(ValueError) as excinfo:
             PathMappingRule.from_dict({})
+        assert str(excinfo.value) == "Empty path mapping rule"
 
     def test_from_dict_missing_field(self) -> None:
-        with pytest.raises(ValueError, match="requires"):
+        # Pin the full v0-reference-parity error message — the
+        # field-names list uses Python's ``list[str]`` repr form
+        # (single-quoted names, comma-space separators) so callers
+        # porting from v0 see the exact same diagnostic.
+        with pytest.raises(ValueError) as excinfo:
             PathMappingRule.from_dict({"source_path_format": "POSIX", "source_path": "/mnt"})
+        assert str(excinfo.value) == (
+            "Path mapping rule requires the following fields: "
+            "['source_path_format', 'source_path', 'destination_path']"
+        )
 
     def test_to_dict_posix(self, tmp_path) -> None:
         rule = PathMappingRule(
@@ -355,28 +366,115 @@ class TestFormatMismatch:
     """Tests that constructor rejects wrong path types for the format."""
 
     def test_posix_rejects_windows_path(self) -> None:
-        with pytest.raises(TypeError, match="PurePosixPath"):
+        with pytest.raises(TypeError) as excinfo:
             PathMappingRule(
                 source_path_format=PathFormat.POSIX,
                 source_path=PureWindowsPath("C:\\path"),
                 destination_path="/dest",
             )
+        assert str(excinfo.value) == (
+            "source_path must be str or PurePosixPath for POSIX format, " "got PureWindowsPath"
+        )
 
     def test_windows_rejects_posix_path(self) -> None:
-        with pytest.raises(TypeError, match="PureWindowsPath"):
+        with pytest.raises(TypeError) as excinfo:
             PathMappingRule(
                 source_path_format=PathFormat.WINDOWS,
                 source_path=PurePosixPath("/posix/path"),
                 destination_path="/dest",
             )
+        assert str(excinfo.value) == (
+            "source_path must be str or PureWindowsPath for WINDOWS format, " "got PurePosixPath"
+        )
 
     def test_uri_rejects_purepath(self) -> None:
-        with pytest.raises(TypeError, match="str"):
+        with pytest.raises(TypeError) as excinfo:
             PathMappingRule(
                 source_path_format=PathFormat.URI,
                 source_path=PurePosixPath("/mnt/shared"),
                 destination_path="/dest",
             )
+        assert str(excinfo.value) == ("source_path must be str for URI format, got PurePosixPath")
+
+
+class TestUriValidation:
+    """``PathMappingRule(source_path_format=URI, ...)`` validates that
+    ``source_path`` parses as a URI (``scheme://...``). Without this
+    check, a typo like ``source_path="/not/a/uri"`` would silently
+    construct a rule that never matches anything — the failure would
+    only surface much later when path mapping is applied at session
+    time. Pinned for parity with the v0 reference's ``__init__``
+    check."""
+
+    def test_uri_rejects_non_uri_string(self) -> None:
+        # Per AGENTS.md "Test Quality Standard": assert exception
+        # class + the full message body.
+        with pytest.raises(ValueError) as excinfo:
+            PathMappingRule(
+                source_path_format=PathFormat.URI,
+                source_path="/not/a/uri",
+                destination_path="/dest",
+            )
+        assert str(excinfo.value) == (
+            "Path mapping rule with URI source_path_format requires a URI " "string source_path"
+        )
+
+    def test_uri_rejects_empty_string(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            PathMappingRule(
+                source_path_format=PathFormat.URI,
+                source_path="",
+                destination_path="/dest",
+            )
+        assert str(excinfo.value) == (
+            "Path mapping rule with URI source_path_format requires a URI " "string source_path"
+        )
+
+    def test_uri_rejects_relative_string(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            PathMappingRule(
+                source_path_format=PathFormat.URI,
+                source_path="bucket/path",
+                destination_path="/dest",
+            )
+        assert str(excinfo.value) == (
+            "Path mapping rule with URI source_path_format requires a URI " "string source_path"
+        )
+
+    @pytest.mark.parametrize(
+        "uri",
+        [
+            "s3://bucket/path",
+            "https://example.com/path",
+            "file:///mnt/shared",
+            "custom-scheme://anything",
+        ],
+    )
+    def test_uri_accepts_valid_schemes(self, uri: str) -> None:
+        # No exception. Constructing succeeds and round-trips through
+        # the getter unchanged.
+        rule = PathMappingRule(
+            source_path_format=PathFormat.URI,
+            source_path=uri,
+            destination_path="/dest",
+        )
+        assert rule.source_path == uri
+        assert rule.source_path_format == PathFormat.URI
+
+    def test_uri_validation_via_from_dict(self) -> None:
+        """``from_dict`` routes through the same constructor, so the
+        URI validation also fires there."""
+        with pytest.raises(ValueError) as excinfo:
+            PathMappingRule.from_dict(
+                {
+                    "source_path_format": "URI",
+                    "source_path": "/not/a/uri",
+                    "destination_path": "/dest",
+                }
+            )
+        assert str(excinfo.value) == (
+            "Path mapping rule with URI source_path_format requires a URI " "string source_path"
+        )
 
 
 class TestFromDictValidation:
@@ -385,7 +483,7 @@ class TestFromDictValidation:
     def test_from_dict_extra_field_rejected(self) -> None:
         """Extra fields raise ``ValueError`` matching the pure-Python
         reference's ``Unsupported fields ...`` contract."""
-        with pytest.raises(ValueError, match="Unsupported fields"):
+        with pytest.raises(ValueError) as excinfo:
             PathMappingRule.from_dict(
                 {
                     "source_path_format": "POSIX",
@@ -394,11 +492,17 @@ class TestFromDictValidation:
                     "extra": "field",
                 }
             )
+        # Python ``set`` repr form: ``{'extra'}`` — single name in
+        # braces with single quotes around it.
+        assert str(excinfo.value) == (
+            "Unsupported fields for constructing path mapping rule: {'extra'}"
+        )
 
     def test_from_dict_multiple_extra_fields_in_message(self) -> None:
         """All offending field names appear in the error message,
-        sorted for determinism."""
-        with pytest.raises(ValueError) as exc_info:
+        sorted for determinism (Python dict iteration order is
+        otherwise insertion-defined)."""
+        with pytest.raises(ValueError) as excinfo:
             PathMappingRule.from_dict(
                 {
                     "source_path_format": "POSIX",
@@ -408,10 +512,10 @@ class TestFromDictValidation:
                     "alpha": 2,
                 }
             )
-        assert "'alpha'" in str(exc_info.value)
-        assert "'zeta'" in str(exc_info.value)
-        # Sorted: alpha before zeta.
-        assert str(exc_info.value).index("'alpha'") < str(exc_info.value).index("'zeta'")
+        # Sorted alphabetically — zeta after alpha.
+        assert str(excinfo.value) == (
+            "Unsupported fields for constructing path mapping rule: " "{'alpha', 'zeta'}"
+        )
 
 
 class TestPathMappingViaProfile:
@@ -488,7 +592,7 @@ class TestPathMappingRuleRepr:
     def test_repr_uses_python_enum_name_uri(self) -> None:
         r = PathMappingRule(
             source_path_format=PathFormat.URI,
-            source_path="/a",
+            source_path="s3://bucket/a",
             destination_path="/b",
         )
         text = repr(r)

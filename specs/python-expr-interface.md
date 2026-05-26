@@ -360,6 +360,55 @@ implement `__eq__` and `__hash__`.
   construction path. The extension set is canonicalised (sorted
   by debug repr) when hashing so set-equal extensions hash equal.
 
+### Migration from the pure-Python reference
+
+The Rust-backed ``openjd.expr`` deliberately drops three function-library
+APIs that the pure-Python reference (``mwiebe/openjd-model-for-python``
+``expr`` branch) exposed:
+
+| Removed | Replaced by |
+|---|---|
+| ``FunctionLibrary`` | ``ExprProfile`` |
+| ``FunctionSignature`` | (no replacement — implementation detail) |
+| ``get_default_library()`` | ``ExprProfile.current()`` |
+
+In the reference, callers built a ``FunctionLibrary`` (a mapping from
+function names to ``FunctionSignature`` objects) to scope which
+functions an expression could call, and passed that library plus a
+``HostContext`` to every entry point — for example:
+
+```python
+# v0 reference (pure-Python): NOT how the v1 binding works.
+from openjd.expr import (
+    FunctionLibrary, get_default_library, HostContext, evaluate_expression,
+)
+library = get_default_library().with_host_context(HostContext.unresolved())
+evaluate_expression("apply_path_mapping(...)", library=library)
+```
+
+The Rust-backed binding folds all three concerns — revision, extension
+set, and host context — into ``ExprProfile``. The library is selected
+internally from the revision + extension axes; ``FunctionSignature``
+objects are no longer materialised on the Python side; and the
+``library=`` kwarg is replaced by ``profile=``:
+
+```python
+# v1 binding: the only supported shape.
+from openjd.expr import ExprProfile, HostContext, evaluate_expression
+
+profile = ExprProfile().with_host_context(HostContext.unresolved())
+evaluate_expression("apply_path_mapping(...)", profile=profile)
+```
+
+This is the single most visible divergence from the reference. It
+trades the introspection surface (``library.signatures``,
+``library.function_names``, etc.) for a smaller, builder-shaped API
+whose state is fully determined by the
+``(revision, extensions, host_context)`` triple. Callers that
+previously relied on ``FunctionLibrary`` introspection should treat
+the function set as opaque and work in terms of profile axes
+instead.
+
 ### `ParsedExpression`
 
 A parsed expression that can be inspected for symbol references and
