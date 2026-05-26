@@ -34,7 +34,8 @@ respective submodules. Update imports at call sites, e.g.::
 """
 
 from enum import Enum
-from typing import Any, Optional
+import re
+from typing import Any, Optional, Sequence, Union
 
 
 # ── Entry-point functions and a few cross-cutting types ──
@@ -61,6 +62,10 @@ from openjd._openjd_rs import (
     # Used by RevisionExtensions / _to_rust_revision below
     ModelProfile,
     SpecificationRevision as _RsSpecificationRevision,
+    # Used by capability validation (re-exported at the bottom of
+    # this module for legacy callers, but pulled in early for use
+    # in ``validate_*_capability_name``).
+    FormatString,
 )
 
 # Errors re-exported at top level for convenience. The full set lives
@@ -199,60 +204,114 @@ OpenJDModel = Any  # base class no longer needed
 
 
 # ── Capability validation (Python side) ──
+#
+# Strict kw-only signatures matching the v0 reference's
+# ``openjd.model._capabilities.validate_*_capability_name``. Returns
+# ``None`` on success and raises ``ValueError`` on a malformed name.
+# ``standard_capabilities`` is required (not optional) because the
+# vendor-prefix check needs to know which names are "well-known"
+# enough to bypass the prefix requirement.
+#
+# Behaviour notes (matching v0):
+#
+# * ``capability_name`` accepts either ``str`` or ``FormatString``.
+#   A ``FormatString`` that contains expressions (``{{...}}``)
+#   short-circuits — the substituted value is validated at
+#   resolution time instead. A literal ``FormatString`` falls
+#   through to the same regex / scope checks as a plain string.
+# * Names are lower-cased before regex matching. The matching
+#   regex is identical to v0:
+#       ^(?:[a-z_][a-z0-9_]+:)?(?:amount|attr)(?:\.[a-z_][a-z0-9_]*)+$
+# * Names without a vendor prefix that match a name in
+#   ``standard_capabilities`` are accepted unconditionally.
+# * Names without a vendor prefix that use a reserved scope
+#   (``worker``, ``job``, ``step``, ``task``) and that are NOT in
+#   ``standard_capabilities`` are rejected — those scopes are
+#   reserved for OpenJD-defined capabilities.
+
+_CAPABILITY_NAME_REGEX = re.compile(
+    r"^(?:[a-z_][a-z0-9_]+:)?(?:amount|attr)(?:\.[a-z_][a-z0-9_]*)+$"
+)
+_RESERVED_SCOPES = ("worker", "job", "step", "task")
+
+
+def _split_vendor(capability_name: str) -> tuple[str, str]:
+    """Split ``vendor:name`` → ``(vendor, name)``. Returns
+    ``("", capability_name)`` if there's no colon."""
+    if ":" in capability_name:
+        head, tail = capability_name.split(":", 1)
+        return (head, tail)
+    return ("", capability_name)
+
+
+def _validate_capability_name(
+    capability_name: "Union[str, FormatString]",
+    standard_capabilities: Sequence[str],
+    required_name_prefix: str,
+) -> None:
+    # Skip validation when the format string carries an unresolved
+    # expression — the substituted value is validated at resolution
+    # time instead.
+    if isinstance(capability_name, FormatString):
+        if not capability_name.is_literal():
+            return
+        capability_name = capability_name.raw()
+    capability_name = capability_name.lower()
+    if _CAPABILITY_NAME_REGEX.fullmatch(capability_name) is None:
+        raise ValueError(f"Value is not a valid Capability name: {capability_name}")
+
+    vendor, capability = _split_vendor(capability_name)
+    if not vendor and capability in standard_capabilities:
+        return
+
+    if not capability.startswith(required_name_prefix):
+        raise ValueError(
+            f"Capability name after the vendor prefix must start with "
+            f"'{required_name_prefix}': {capability_name}"
+        )
+
+    # Reserved scope check (worker / job / step / task) — only a
+    # listed standard capability may use one of these scopes.
+    scope = capability_name.split(".")[1]
+    if scope in _RESERVED_SCOPES:
+        raise ValueError(
+            f"Only Open Job Description defined capabilities may start with "
+            f"'{required_name_prefix}{scope}': {capability_name}"
+        )
 
 
 def validate_amount_capability_name(
-    name: str = "", *, capability_name: str = "", standard_capabilities=None
-) -> str:
-    import re
+    *,
+    capability_name: "Union[str, FormatString]",
+    standard_capabilities: Sequence[str],
+) -> None:
+    """Validate an ``amount.*`` capability name.
 
-    n = capability_name or name
-    if not re.match(
-        r"(?i)\A([A-Za-z_][A-Za-z0-9_]*:)?amount\.[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\Z",
-        n,
-    ):
-        raise ValueError(f"'{n}' is not a valid amount capability name")
-    _validate_capability_scoping(n, "amount", standard_capabilities)
-    return n
+    Args:
+        capability_name: A ``str`` or ``FormatString``. A
+            ``FormatString`` containing unresolved expressions is
+            accepted as-is (validation happens at resolution time).
+        standard_capabilities: The set of OpenJD-defined amount
+            capability names. Names without a vendor prefix are
+            accepted unconditionally if they appear in this set;
+            otherwise the reserved-scope check applies.
+
+    Raises:
+        ValueError: if ``capability_name`` is malformed, is missing
+            the required ``amount.`` prefix, or uses a reserved
+            scope without being a standard capability.
+    """
+    _validate_capability_name(capability_name, standard_capabilities, "amount.")
 
 
 def validate_attribute_capability_name(
-    name: str = "", *, capability_name: str = "", standard_capabilities=None
-) -> str:
-    import re
-
-    n = capability_name or name
-    if not re.match(
-        r"(?i)\A([A-Za-z_][A-Za-z0-9_]*:)?attr\.[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\Z",
-        n,
-    ):
-        raise ValueError(f"'{n}' is not a valid attribute capability name")
-    _validate_capability_scoping(n, "attr", standard_capabilities)
-    return n
-
-
-_RESERVED_SCOPES = {"worker", "job", "step", "task"}
-
-
-def _validate_capability_scoping(name: str, prefix: str, standard_capabilities=None) -> None:
-    import re
-
-    vendor_match = re.match(r"(?i)\A([A-Za-z_][A-Za-z0-9_]*):(.+)\Z", name)
-    bare_name = vendor_match.group(2) if vendor_match else name
-
-    parts = bare_name.split(".")
-    if len(parts) >= 3:
-        scope = parts[1].lower()
-        if scope in _RESERVED_SCOPES:
-            if vendor_match:
-                raise ValueError(
-                    f"'{name}' is not valid: vendor-prefixed names cannot use reserved scope '{scope}'"
-                )
-            if standard_capabilities is not None:
-                if name.lower() not in [c.lower() for c in standard_capabilities]:
-                    raise ValueError(
-                        f"'{name}' is not a recognized standard capability in scope '{scope}'"
-                    )
+    *,
+    capability_name: "Union[str, FormatString]",
+    standard_capabilities: Sequence[str],
+) -> None:
+    """Validate an ``attr.*`` capability name. See
+    :func:`validate_amount_capability_name` for full semantics."""
+    _validate_capability_name(capability_name, standard_capabilities, "attr.")
 
 
 # ── Standard capabilities ──
@@ -463,7 +522,6 @@ def decode_environment_template_str(
 
 from openjd._openjd_rs import (  # noqa: E402
     SymbolTable,
-    FormatString,
     RangeExpr,
     ExpressionError,
     FormatStringValidationError as FormatStringError,

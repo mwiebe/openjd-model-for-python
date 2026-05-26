@@ -1325,13 +1325,37 @@ fix should land, and (where applicable) suggests a
     `test_validation_context_equality_negative` (covering both
     differing-profile and differing-caller-limits cases).
 
-11. **Tighten `validate_*_capability_name` signatures to the
+11. ~~**Tighten `validate_*_capability_name` signatures to the
     reference's strict form.** Today the wrapper's signature is
     `(name: str = "", *, capability_name: str = "",
     standard_capabilities=None)` — accepts positional `name`
     and makes `standard_capabilities` optional. Reference is
     strict kw-only `(*, capability_name, standard_capabilities)`.
-    Either align or document the divergence in the spec.
+    Either align or document the divergence in the spec.~~
+    **Resolved.** Rewrote both functions in
+    `src/openjd/model/_v1/__init__.py` to match the v0
+    reference's signature *and* behaviour exactly, while staying
+    self-contained (no delegation to v0):
+    * Strict kw-only: `(*, capability_name, standard_capabilities)`.
+    * Returns `None` (was `str`).
+    * `standard_capabilities` is required (was optional).
+    * `capability_name` accepts either `str` or
+      `openjd.expr.FormatString`. A `FormatString` containing
+      unresolved expressions short-circuits validation —
+      substituted values are validated at resolution time.
+    * Names are lower-cased before regex matching; the regex is
+      identical to the v0 reference's
+      `^(?:[a-z_][a-z0-9_]+:)?(?:amount|attr)(?:\.[a-z_][a-z0-9_]*)+$`.
+    * Vendor-prefix and reserved-scope (`worker`/`job`/`step`/
+      `task`) checks match v0 verbatim.
+    The previously-named ad-hoc `_validate_capability_scoping`
+    helper is replaced by the v0-shaped
+    `_validate_capability_name` + `_split_vendor` pair. The
+    340-test parametrised `test_capabilities.py` suite continues
+    to pass without modification (it always called the
+    functions kw-only). Worker-agent and `openjd-sessions`
+    call sites verified still compatible: both already use
+    `capability_name=...` and `standard_capabilities=...`.
 
 12. **Fix `decode_template` signature.** Today it accepts the
     `decode_job_template` kwargs (`template=`,
