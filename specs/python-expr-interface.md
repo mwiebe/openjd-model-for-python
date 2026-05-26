@@ -179,6 +179,9 @@ ExprValue("1-5", type="range_expr")       # RangeExpr
 # Special constructors
 ExprValue.from_float(3.14)                # Float (canonical Display form: "3.14")
 ExprValue.from_float(3.14, "3.140")       # Float preserving original string
+ExprValue.from_float(Decimal("1.00"))     # Float; auto-captures the Decimal's
+                                          # string form, so str() shows "1.00"
+                                          # (matches ExprValue(Decimal(...)))
 ExprValue.unresolved("int")               # Unresolved placeholder for type checking
 
 # Properties

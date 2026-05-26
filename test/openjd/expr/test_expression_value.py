@@ -74,6 +74,57 @@ class TestFromFloat:
         assert v.item() == 2.5
         assert str(v) == "2.5"
 
+    def test_from_float_decimal_input_preserves_string(self) -> None:
+        # Passing a ``Decimal`` to ``from_float`` (not just to the
+        # main constructor) automatically captures its string form,
+        # so ``str()`` shows the original lexical form including
+        # trailing zeros. This keeps ``ExprValue.from_float(d)``
+        # consistent with ``ExprValue(d)`` for ``Decimal`` inputs;
+        # callers don't have to remember which constructor preserves
+        # the lexical form.
+        v = ExprValue.from_float(Decimal("1.00"))
+        assert v.item() == 1.0
+        assert str(v) == "1.00"
+
+        v = ExprValue.from_float(Decimal("3.140"))
+        assert v.item() == 3.14
+        assert str(v) == "3.140"
+
+    def test_from_float_decimal_consistent_with_main_constructor(self) -> None:
+        # The two entry points produce identical output for the same
+        # ``Decimal`` input. Pinned so a future refactor to either
+        # path doesn't silently re-introduce the asymmetry.
+        for src in ("1.00", "3.140", "0.001", "100.0", "0", "1"):
+            d = Decimal(src)
+            assert str(ExprValue(d)) == str(
+                ExprValue.from_float(d)
+            ), f"Mismatch for Decimal({src!r})"
+
+    def test_from_float_decimal_input_explicit_original_str_wins(self) -> None:
+        # When the caller passes ``original_str`` explicitly with a
+        # ``Decimal`` value, the explicit string overrides the
+        # auto-captured Decimal form. The explicit-override path is
+        # an escape hatch for callers that want a custom display
+        # form unrelated to the ``Decimal``'s own lexical form.
+        v = ExprValue.from_float(Decimal("1.00"), "custom")
+        assert v.item() == 1.0
+        assert str(v) == "custom"
+
+    def test_from_float_int_input(self) -> None:
+        # ``from_float`` accepts ``int`` (PyO3 coerces via
+        # ``__float__``). The resulting value is a Float, not an
+        # Int — callers who want an Int should use the main
+        # ``ExprValue(...)`` constructor.
+        v = ExprValue.from_float(42)
+        assert v.item() == 42.0
+        assert str(v) == "42.0"
+
+    def test_from_float_decimal_rejects_nan(self) -> None:
+        # NaN rejection still fires on the Decimal-input path.
+        with pytest.raises(ValueError) as excinfo:
+            ExprValue.from_float(Decimal("NaN"))
+        assert str(excinfo.value) == "Float operation produced NaN"
+
 
 class TestFromList:
     def test_list_string(self) -> None:

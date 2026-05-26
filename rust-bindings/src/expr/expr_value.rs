@@ -215,24 +215,57 @@ impl PyExprValue {
         Ok(PyExprValue { inner: ExprValue::Unresolved(expr_type) })
     }
 
-    /// Construct a Float-typed ``ExprValue`` from a ``f64``.
+    /// Construct a Float-typed ``ExprValue`` from a numeric value.
+    ///
+    /// ``value`` accepts ``int``, ``float``, or ``decimal.Decimal``.
+    /// When the input is a ``Decimal`` and ``original_str`` is not
+    /// supplied, the ``Decimal``'s string form is captured
+    /// automatically — so ``ExprValue.from_float(Decimal("1.00"))``
+    /// preserves the trailing zeros in ``str()`` just like the
+    /// equivalent ``ExprValue(Decimal("1.00"))`` call does. This
+    /// keeps the two constructor entry points consistent.
     ///
     /// The optional ``original_str`` argument carries the
     /// user-supplied source string for diagnostics — when present,
     /// it's surfaced verbatim in error messages and ``__str__``,
     /// preserving information that would otherwise be lost in the
     /// f64 round-trip (e.g. trailing zeros: ``"3.140"`` vs
-    /// ``3.14``). When omitted (or ``None``), the canonical Rust
-    /// ``f64`` ``Display`` form is used.
+    /// ``3.14``). When omitted (or ``None``) for a non-``Decimal``
+    /// input, the canonical Rust ``f64`` ``Display`` form is used.
     ///
     /// Mirrors the pure-Python reference:
     /// ``ExprValue.from_float(value, original_str=None)``.
     #[staticmethod]
     #[pyo3(signature = (value, original_str=None))]
-    fn from_float(value: f64, original_str: Option<String>) -> PyResult<Self> {
-        let float = match original_str {
-            Some(s) => openjd_expr::value::Float64::with_str(value, s),
-            None => openjd_expr::value::Float64::new(value),
+    fn from_float(
+        value: &Bound<'_, pyo3::PyAny>,
+        original_str: Option<String>,
+    ) -> PyResult<Self> {
+        // If the caller passed a ``Decimal`` and didn't override
+        // ``original_str``, capture the Decimal's lexical form
+        // automatically. This mirrors the main ``ExprValue(...)``
+        // constructor's Decimal handling so that the two
+        // constructor surfaces produce the same ``str()`` form for
+        // a given Decimal input.
+        let py = value.py();
+        let resolved_original_str: Option<String> = match original_str {
+            Some(s) => Some(s),
+            None => {
+                let decimal_cls = py.import("decimal")?.getattr("Decimal")?;
+                if value.is_instance(&decimal_cls)? {
+                    Some(value.call_method0("__str__")?.extract()?)
+                } else {
+                    None
+                }
+            }
+        };
+        // Coerce to ``f64`` via the standard PyO3 path. This works
+        // for ``int``, ``float``, and ``Decimal`` (the latter via
+        // ``Decimal.__float__()``).
+        let f: f64 = value.extract()?;
+        let float = match resolved_original_str {
+            Some(s) => openjd_expr::value::Float64::with_str(f, s),
+            None => openjd_expr::value::Float64::new(f),
         }
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(PyExprValue { inner: ExprValue::Float(float) })

@@ -695,18 +695,26 @@ class ExprValue:
     def unresolved(ty: typing.Any) -> ExprValue: ...
     @staticmethod
     def from_float(
-        value: builtins.float, original_str: typing.Optional[builtins.str] = None
+        value: typing.Any, original_str: typing.Optional[builtins.str] = None
     ) -> ExprValue:
         r"""
-        Construct a Float-typed ``ExprValue`` from a ``f64``.
+        Construct a Float-typed ``ExprValue`` from a numeric value.
+
+        ``value`` accepts ``int``, ``float``, or ``decimal.Decimal``.
+        When the input is a ``Decimal`` and ``original_str`` is not
+        supplied, the ``Decimal``'s string form is captured
+        automatically — so ``ExprValue.from_float(Decimal("1.00"))``
+        preserves the trailing zeros in ``str()`` just like the
+        equivalent ``ExprValue(Decimal("1.00"))`` call does. This
+        keeps the two constructor entry points consistent.
 
         The optional ``original_str`` argument carries the
         user-supplied source string for diagnostics — when present,
         it's surfaced verbatim in error messages and ``__str__``,
         preserving information that would otherwise be lost in the
         f64 round-trip (e.g. trailing zeros: ``"3.140"`` vs
-        ``3.14``). When omitted (or ``None``), the canonical Rust
-        ``f64`` ``Display`` form is used.
+        ``3.14``). When omitted (or ``None``) for a non-``Decimal``
+        input, the canonical Rust ``f64`` ``Display`` form is used.
 
         Mirrors the pure-Python reference:
         ``ExprValue.from_float(value, original_str=None)``.
