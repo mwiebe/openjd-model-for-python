@@ -14,8 +14,9 @@ use openjd_sessions::session::SessionState;
 // ── SessionState ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions._v1", name = "SessionState", eq, eq_int, frozen, hash)]
+#[pyclass(module = "openjd.sessions._v1", name = "SessionState", eq, eq_int, frozen, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(crate) enum PySessionState {
     READY,
     RUNNING,
@@ -56,6 +57,7 @@ impl PySessionState {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -70,8 +72,9 @@ impl PySessionState {
 // ── ActionState ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions._v1", name = "ActionState", eq, eq_int, frozen, hash)]
+#[pyclass(module = "openjd.sessions._v1", name = "ActionState", eq, eq_int, frozen, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(crate) enum PyActionState {
     RUNNING,
     SUCCESS,
@@ -107,6 +110,7 @@ impl PyActionState {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -145,8 +149,9 @@ impl From<PyActionState> for ActionState {
 // ── ScriptRunnerState ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions._v1", name = "ScriptRunnerState", eq, eq_int, frozen, hash)]
+#[pyclass(module = "openjd.sessions._v1", name = "ScriptRunnerState", eq, eq_int, frozen, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(crate) enum PyScriptRunnerState {
     READY,
     RUNNING,
@@ -193,6 +198,7 @@ impl PyScriptRunnerState {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -207,7 +213,7 @@ impl PyScriptRunnerState {
 // ── ActionStatus ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions._v1", name = "ActionStatus", frozen)]
+#[pyclass(module = "openjd.sessions._v1", name = "ActionStatus", frozen, from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyActionStatus {
     inner: ActionStatus,
@@ -299,6 +305,11 @@ impl PyActionStatus {
         started_at=None,
         ended_at=None,
     ))]
+    // Mirrors the Python kw-only signature; one parameter per
+    // ActionStatus field plus the implicit `_cls` and `py` PyO3
+    // arguments. Splitting into a builder would obscure the 1:1
+    // shape with the Python surface.
+    #[allow(clippy::too_many_arguments)]
     fn _from_state<'py>(
         _cls: &Bound<'py, PyType>,
         py: Python<'py>,
@@ -422,7 +433,7 @@ impl From<ActionStatus> for PyActionStatus {
 /// completes; user code can also construct one directly, e.g. for
 /// tests. All three fields are exposed as read-only attributes.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions._v1", name = "ActionResult", frozen)]
+#[pyclass(module = "openjd.sessions._v1", name = "ActionResult", frozen, from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyActionResult {
     #[pyo3(get)]
@@ -477,12 +488,4 @@ impl PyActionResult {
     }
 }
 
-impl PyActionResult {
-    pub(crate) fn from_rust(r: &openjd_sessions::action::ActionResult) -> Self {
-        Self {
-            state: r.state.into(),
-            exit_code: r.exit_code,
-            stdout: r.stdout.clone(),
-        }
-    }
-}
+

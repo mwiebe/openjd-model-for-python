@@ -13,7 +13,7 @@ use openjd_model::JobParameterType;
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.model._v1.types", name = "DocumentType", eq, eq_int, frozen, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(crate) enum PyDocumentType {
     YAML = 0,
     JSON = 1,
@@ -45,6 +45,7 @@ impl PyDocumentType {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -104,6 +105,7 @@ impl PyTemplateSpecificationVersion {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -128,7 +130,7 @@ impl From<TemplateSpecificationVersion> for PyTemplateSpecificationVersion {
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.model._v1.types", name = "JobParameterType", eq, eq_int, frozen, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq)]
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(crate) enum PyJobParameterType {
     STRING = 0,
     INT = 1,
@@ -185,6 +187,7 @@ impl PyJobParameterType {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -240,6 +243,7 @@ impl From<JobParameterType> for PyJobParameterType {
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.model._v1.types", name = "TaskParameterType", eq, eq_int, frozen, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(crate) enum PyTaskParameterType {
     INT,
     FLOAT,
@@ -277,6 +281,7 @@ impl PyTaskParameterType {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -291,7 +296,7 @@ impl PyTaskParameterType {
 // ── TaskParameterValue ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1.types", name = "TaskParameterValue", frozen)]
+#[pyclass(module = "openjd.model._v1.types", name = "TaskParameterValue", frozen, from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyTaskParameterValue {
     #[pyo3(get)]
@@ -358,7 +363,7 @@ impl PyTaskParameterValue {
 // ── JobParameterValue ──
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1.types", name = "JobParameterValue", frozen)]
+#[pyclass(module = "openjd.model._v1.types", name = "JobParameterValue", frozen, from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyJobParameterValue {
     #[pyo3(get)]

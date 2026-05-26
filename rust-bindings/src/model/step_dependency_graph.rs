@@ -91,7 +91,7 @@ impl PyStepDependencyGraph {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1.job", name = "StepDependencyNode")]
+#[pyclass(module = "openjd.model._v1.job", name = "StepDependencyNode", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyStepDependencyNode {
     #[pyo3(get)]
@@ -103,7 +103,7 @@ pub(crate) struct PyStepDependencyNode {
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.model._v1.job", name = "StepDependencyEdge")]
+#[pyclass(module = "openjd.model._v1.job", name = "StepDependencyEdge", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyStepDependencyEdge {
     origin_step: openjd_model::job::Step,

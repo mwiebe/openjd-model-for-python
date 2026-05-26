@@ -16,7 +16,7 @@ use openjd_sessions::session_user::SessionUser;
 
 /// A PyO3 wrapper that holds an Arc<dyn SessionUser> for passing to Session.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
-#[pyclass(module = "openjd.sessions._v1", name = "PosixSessionUser")]
+#[pyclass(module = "openjd.sessions._v1", name = "PosixSessionUser", from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyPosixSessionUser {
     pub(crate) inner: Arc<dyn SessionUser>,
@@ -95,11 +95,11 @@ impl PyPosixSessionUser {
 // WindowsSessionUser
 // ─────────────────────────────────────────────────────────────────
 
-/// Exception raised for incorrect username or password.
-///
-/// Mirrors the legacy Python `openjd.sessions.BadCredentialsException`. Lives
-/// in the `_openjd_rs` extension module; the v1 sessions package re-exports
-/// it under its canonical home.
+// Exception raised for incorrect username or password.
+//
+// Mirrors the legacy Python `openjd.sessions.BadCredentialsException`. Lives
+// in the `_openjd_rs` extension module; the v1 sessions package re-exports
+// it under its canonical home.
 pyo3::create_exception!(
     _openjd_rs,
     PyBadCredentialsException,

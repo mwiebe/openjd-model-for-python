@@ -63,6 +63,7 @@ impl PySpecificationRevision {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -104,7 +105,9 @@ impl From<SpecificationRevision> for PySpecificationRevision {
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.model._v1.types", name = "ModelExtension", eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[allow(non_camel_case_types)] // Python-side UPPER_SNAKE_CASE naming convention
+// Python-side UPPER_SNAKE_CASE naming convention; ``EXPR`` is a
+// 4-letter acronym.
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub(crate) enum PyModelExtension {
     TASK_CHUNKING = 0,
     REDACTED_ENV_VARS = 1,
@@ -145,6 +148,7 @@ impl PyModelExtension {
     }
 
     /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
     fn __reduce__<'py>(
         &self,
         py: Python<'py>,
@@ -337,19 +341,6 @@ impl PyModelProfile {
     }
 }
 
-// Helper for in-tree Rust callers that have a PyModelProfile and need
-// its supported_extensions as Vec<String> for the existing decode
-// entry points.
-impl PyModelProfile {
-    pub(crate) fn supported_extension_strings(&self) -> Vec<String> {
-        self.inner
-            .extensions()
-            .iter()
-            .map(|e| e.as_str().to_string())
-            .collect()
-    }
-}
-
 // ── CallerLimits ───────────────────────────────────────────────────
 
 /// Caller-supplied limits beyond what the OpenJD spec defines.
@@ -361,7 +352,7 @@ impl PyModelProfile {
 /// Mirrors `openjd_model::CallerLimits`.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(module = "openjd.model._v1.types", name = "CallerLimits", frozen, from_py_object)]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct PyCallerLimits {
     pub(crate) inner: CallerLimits,
 }
@@ -458,12 +449,6 @@ impl PyCallerLimits {
             && self.inner.max_step_script_size == other.inner.max_step_script_size
             && self.inner.max_environment_size == other.inner.max_environment_size
             && self.inner.max_template_size == other.inner.max_template_size
-    }
-}
-
-impl Default for PyCallerLimits {
-    fn default() -> Self {
-        Self { inner: CallerLimits::default() }
     }
 }
 

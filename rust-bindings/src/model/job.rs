@@ -557,7 +557,7 @@ fn task_param_def_from_dict(
 ) -> PyResult<serde_json::Value> {
     use pyo3::types::{PyDict, PyList};
 
-    let dict: &Bound<'_, PyDict> = item.downcast::<PyDict>().map_err(|_| {
+    let dict: &Bound<'_, PyDict> = item.cast::<PyDict>().map_err(|_| {
         pyo3::exceptions::PyTypeError::new_err(
             "Each task parameter definition must be a dict with 'type' and 'range' keys",
         )
@@ -602,7 +602,7 @@ fn task_param_def_from_dict(
         .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Missing 'range' key"))?;
     let is_int_variant = matches!(variant, "int" | "chunkInt");
     let range_value: serde_json::Value =
-        if let Ok(list) = range_obj.downcast::<PyList>() {
+        if let Ok(list) = range_obj.cast::<PyList>() {
             // List of values — coerce each to the variant's element type.
             let mut items: Vec<serde_json::Value> = Vec::with_capacity(list.len());
             for v in list.iter() {
