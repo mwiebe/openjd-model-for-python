@@ -443,7 +443,7 @@ accuracy or coverage; P3 items are quality-of-life improvements.
 
 ### P1 — Reference parity
 
-1. **Document the `FunctionLibrary` / `FunctionSignature` /
+1. ~~**Document the `FunctionLibrary` / `FunctionSignature` /
    `get_default_library` removal in
    `specs/python-expr-interface.md`.** Add a short "Migration from the
    pure-Python reference" subsection (or a paragraph in the
@@ -451,8 +451,19 @@ accuracy or coverage; P3 items are quality-of-life improvements.
    was replaced by `ExprProfile` + `HostContext` and pointing readers
    to the corresponding builder pattern. This is the single most
    important divergence from the reference and the spec currently
-   doesn't even acknowledge it.
-2. **Restore `PathMappingRule.from_dict` missing-fields error message
+   doesn't even acknowledge it.~~ **Resolved.** Added a "Migration
+   from the pure-Python reference" subsection in
+   `specs/python-expr-interface.md` right before the
+   `ParsedExpression` section, with a `Removed → Replaced by` table
+   (`FunctionLibrary` → `ExprProfile`, `FunctionSignature` → no
+   replacement, `get_default_library()` → `ExprProfile.current()`),
+   side-by-side v0/v1 code snippets showing the `library=` →
+   `profile=` rewiring, and a paragraph explaining the trade-off
+   (introspection surface for a smaller builder-shaped API whose
+   state is fully determined by the
+   `(revision, extensions, host_context)` triple). Landed in
+   commit `11aa2de`.
+2. ~~**Restore `PathMappingRule.from_dict` missing-fields error message
    parity.** In
    `rust-bindings/src/expr/path_mapping.rs::from_dict`, change the
    message from the bare `[source_path_format, source_path,
@@ -460,8 +471,21 @@ accuracy or coverage; P3 items are quality-of-life improvements.
    `['source_path_format', 'source_path', 'destination_path']` (quote
    each name). Land regression test alongside the existing
    `TestPathMappingRuleFromDict` cases in
-   `test/openjd/expr/test_path_mapping.py`.
-3. **Validate URI form when constructing
+   `test/openjd/expr/test_path_mapping.py`.~~ **Resolved.**
+   `from_dict` now emits the Python list-repr form
+   `['source_path_format', 'source_path', 'destination_path']`
+   (single-quoted names, comma-space separators) byte-for-byte
+   matching the v0 reference's f-string interpolation of
+   `[field.name for field in fields(PathMappingRule)]`. The
+   supported-field list is computed once and threaded through both
+   the missing-fields branch and the unsupported-keys check. The
+   existing `test_from_dict_missing_field` test now asserts the
+   full message body per AGENTS.md "Test Quality Standard"; the
+   six other loose-match tests in the file
+   (`test_from_dict_empty`, format-mismatch tests, extra-field
+   tests) were also tightened in the same commit. Landed in
+   `11aa2de`.
+3. ~~**Validate URI form when constructing
    `PathMappingRule(source_path_format=PathFormat.URI, source_path=...)`.**
    The reference rejects non-URI strings with `ValueError "Path
    mapping rule with URI source_path_format requires a URI string
@@ -469,11 +493,25 @@ accuracy or coverage; P3 items are quality-of-life improvements.
    check in `rust-bindings/src/expr/path_mapping.rs::PyPathMappingRule::new`
    (use `openjd_expr::path_mapping::is_uri` if exposed, otherwise
    replicate the regex check). Land regression test in
-   `test/openjd/expr/test_path_mapping.py::TestPathMappingRuleFromUri`.
+   `test/openjd/expr/test_path_mapping.py::TestPathMappingRuleFromUri`.~~
+   **Resolved.** Both `PyPathMappingRule::new` and `from_dict`
+   (which has its own constructor path) now call
+   `openjd_expr::path_mapping::is_uri` when
+   `source_path_format == URI` and raise `ValueError` with the
+   exact v0 message
+   `"Path mapping rule with URI source_path_format requires a URI
+   string source_path"` on mismatch. New `TestUriValidation`
+   class with 8 tests pinning the full message: 3 negative cases
+   (non-URI, empty, relative), parametrised 4-scheme positive
+   case (`s3://`, `https://`, `file:///`, custom), and a
+   `from_dict` variant. The pre-existing
+   `test_repr_uses_python_enum_name_uri` was updated to use a
+   real URI (`s3://bucket/a` instead of `/a`) since the new
+   validation correctly rejects the old form. Landed in `11aa2de`.
 
 ### P2 — Spec/coverage gaps
 
-4. **Decide whether `PathMappingRule.source_path` should preserve
+4. ~~**Decide whether `PathMappingRule.source_path` should preserve
    `PurePath` typing or stay `str`.** Currently the binding always
    normalises to `str`. The reference returns whatever the constructor
    was given. If the binding's behaviour is intentional (e.g. to keep
@@ -482,8 +520,15 @@ accuracy or coverage; P3 items are quality-of-life improvements.
    from the reference know to call `.str` themselves where they need
    `PurePath` shape. Otherwise, change the getter to wrap the stored
    string back into a `PurePosixPath` / `PureWindowsPath` per
-   `source_path_format` for non-URI rules.
-5. **Make `ExprValue.from_float`'s `original_str` parameter optional
+   `source_path_format` for non-URI rules.~~ **Resolved (documented
+   intentional behaviour).** The string normalisation is
+   intentional — keeps the rule cheap to serialise / pickle /
+   round-trip through `to_dict` / `from_dict` without per-format
+   discriminator logic on the consumer side. Added a paragraph +
+   re-wrap example to the `PathMappingRule` section in
+   `specs/python-expr-interface.md` so callers porting from the
+   reference see the type asymmetry up front. Landed in `029fcfa`.
+5. ~~**Make `ExprValue.from_float`'s `original_str` parameter optional
    to match the reference.** Change the signature in
    `rust-bindings/src/expr/expr_value.rs` to
    `from_float(value: f64, original_str: Option<String>) -> PyResult<Self>`
@@ -491,8 +536,30 @@ accuracy or coverage; P3 items are quality-of-life improvements.
    `format!("{value}")` or `Float64::new` directly when
    `original_str` is `None`. Update the spec example to show the
    one-argument form. Land coverage in
-   `test/openjd/expr/test_expression_value.py`.
-6. **Add tests for `evaluate_let_bindings` to
+   `test/openjd/expr/test_expression_value.py`.~~ **Resolved + extended.**
+   `from_float` signature changed to
+   `from_float(value, original_str=None)` matching the v0
+   reference; dispatches to `Float64::with_str` when present and
+   `Float64::new` when omitted. Spec example updated to show both
+   shapes. The follow-up commit `b784942` extended the function
+   to also accept `Decimal` inputs and auto-capture the
+   `Decimal`'s string form when `original_str` is omitted, so
+   `ExprValue.from_float(Decimal("1.00"))` now produces the same
+   `str()` output as `ExprValue(Decimal("1.00"))`. The two
+   constructors are consistent across all input types. New tests
+   in `TestFromFloat`: `test_from_float_one_arg`,
+   `test_from_float_explicit_none`,
+   `test_from_float_one_arg_loses_trailing_zero`,
+   `test_from_float_rejects_nan`,
+   `test_from_float_rejects_nan_with_original_str`,
+   `test_from_float_decimal_input_preserves_string`,
+   `test_from_float_decimal_consistent_with_main_constructor`
+   (parametric over six Decimal forms),
+   `test_from_float_decimal_input_explicit_original_str_wins`,
+   `test_from_float_int_input`, and
+   `test_from_float_decimal_rejects_nan`. Landed across `029fcfa`
+   (signature change) and `b784942` (Decimal extension).
+6. ~~**Add tests for `evaluate_let_bindings` to
    `test/openjd/expr/`.** Either create a new
    `test/openjd/expr/test_let_bindings.py` or add a
    `TestEvaluateLetBindings` class to an existing file. Cover at
@@ -501,7 +568,20 @@ accuracy or coverage; P3 items are quality-of-life improvements.
    `ExpressionError` raised on syntax error inside a binding, (d)
    `ExpressionError` raised on the "missing `=`" / "no name" form,
    (e) the result `SymbolTable` containing both the original input
-   symbols and the bound names.
+   symbols and the bound names.~~ **Resolved.** New file
+   `test/openjd/expr/test_let_bindings.py` with
+   `TestEvaluateLetBindings` (10 tests) covering all five required
+   scenarios plus extras: single-binding spec example,
+   chained-bindings where a later refs an earlier, input-symbol
+   preservation, empty-list, missing-equals (regular +
+   blank-string), RHS syntax-error (with parser
+   caret-and-source rendering verification), undefined-symbol
+   top-level, chained-undefined (correct binding named in
+   diagnostic), and `profile=` kwarg. All assertions follow
+   AGENTS.md "Test Quality Standard": exception class + the
+   message body (full equality where the content is single-line,
+   prefix + substring where the parser appends multi-line caret
+   rendering, with rationale comments). Landed in `029fcfa`.
 7. **Acknowledge in the spec that `TypeCode` is not an `IntEnum`
    subclass.** The reference is `class TypeCode(IntEnum)`; the binding
    is a pyo3 enum that compares equal to ints (`eq_int`) but is not an
