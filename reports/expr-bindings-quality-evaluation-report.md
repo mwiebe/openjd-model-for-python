@@ -582,19 +582,35 @@ accuracy or coverage; P3 items are quality-of-life improvements.
    message body (full equality where the content is single-line,
    prefix + substring where the parser appends multi-line caret
    rendering, with rationale comments). Landed in `029fcfa`.
-7. **Acknowledge in the spec that `TypeCode` is not an `IntEnum`
+7. ~~**Acknowledge in the spec that `TypeCode` is not an `IntEnum`
    subclass.** The reference is `class TypeCode(IntEnum)`; the binding
    is a pyo3 enum that compares equal to ints (`eq_int`) but is not an
    `int`. Add a one-liner in the `TypeCode` section: "`TypeCode` values
    compare equal to `int` (`TypeCode.INT == 2`) and convert via
    `int(TypeCode.INT)`, but they are not `int` subclasses —
-   `isinstance(TypeCode.INT, int)` returns `False`."
-8. **Document or add `ExprValue.null()`.** The reference has
+   `isinstance(TypeCode.INT, int)` returns `False`."~~ **Resolved.**
+   Added a "Not an `IntEnum` subclass" note callout to the `TypeCode`
+   section of `specs/python-expr-interface.md` covering equality
+   (`TypeCode.INT == 2`), int conversion (`int(TypeCode.INT)`), the
+   `isinstance(..., int)` divergence (returns `False`), and the
+   recommended `isinstance(..., TypeCode)` / value-comparison
+   alternatives for callers porting from the v0 reference.
+8. ~~**Document or add `ExprValue.null()`.** The reference has
    `ExprValue.null()` as a classmethod; the binding requires
    `ExprValue(None)`. Either (a) add the classmethod to
    `rust-bindings/src/expr/expr_value.rs` for parity, or (b) add an
    explicit "Use `ExprValue(None)` instead of `ExprValue.null()` from
-   the pure-Python reference" note to the spec's `ExprValue` section.
+   the pure-Python reference" note to the spec's `ExprValue` section.~~
+   **Resolved (option b — documented).** Added a "Null values"
+   subsection to the `ExprValue` section right before the existing
+   "Unresolved values" subsection. The new section shows
+   `ExprValue(None)` as the canonical null constructor, runnable
+   examples for `type`/`type_code`/`is_null`/`item`/`str`/`bool`,
+   and an explicit migration note: "Callers porting from the
+   pure-Python reference should rewrite `ExprValue.null()` to
+   `ExprValue(None)`. The two produce the same shape; the
+   classmethod was a stylistic alias the binding deliberately
+   omitted to keep the constructor surface narrow."
 
 ### P3 — Quality of life
 

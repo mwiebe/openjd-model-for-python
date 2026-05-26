@@ -154,6 +154,16 @@ TypeCode.UNRESOLVED   # placeholder for unknown values during type checking
 `RANGE_EXPR`, `ANY`, `UNION`, `NORETURN`, `UNRESOLVED`, `TYPEVAR_T`,
 `TYPEVAR_T1`, `TYPEVAR_T2`, `TYPEVAR_T3`
 
+> **Not an `IntEnum` subclass.** The pure-Python reference declares
+> `class TypeCode(IntEnum)`; the Rust-backed binding is a pyo3 enum
+> that compares equal to its integer discriminant
+> (`TypeCode.INT == 2`) and converts cleanly via `int(TypeCode.INT)`,
+> but it is **not** an `int` subclass. `isinstance(TypeCode.INT, int)`
+> returns `False`. Code that ducks-types a `TypeCode` as an integer
+> via `isinstance(..., int)` checks should switch to
+> `isinstance(..., TypeCode)` or to value comparison
+> (`code == TypeCode.INT`).
+
 ### `ExprValue`
 
 A typed value during expression evaluation. Wraps Rust `ExprValue`.
@@ -201,6 +211,27 @@ v[0].item()                               # 10
 v[-1].item()                              # 30
 [e.item() for e in v]                     # [10, 20, 30]
 ```
+
+**Null values.** `ExprValue(None)` is the canonical way to construct
+a null-typed value. The binding does **not** expose a separate
+`ExprValue.null()` classmethod — the v0 reference's `.null()`
+helper is replaced by passing `None` to the main constructor:
+
+```python
+v = ExprValue(None)
+v.type                                    # ExprType("nulltype")
+v.type.type_code                          # TypeCode.NULLTYPE
+v.is_null                                 # True
+v.item()                                  # None
+str(v)                                    # "null"
+bool(v)                                   # False
+```
+
+Callers porting from the pure-Python reference should rewrite
+`ExprValue.null()` to `ExprValue(None)`. The two produce the same
+shape (NullType, ``is_null=True``, ``item()`` returns ``None``); the
+classmethod was a stylistic alias the binding deliberately omitted to
+keep the constructor surface narrow.
 
 **Unresolved values.** `ExprValue.unresolved(T)` constructs a typed
 placeholder used during static type checking when a symbol's
