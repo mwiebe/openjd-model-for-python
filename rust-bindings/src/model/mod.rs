@@ -4,6 +4,7 @@
 pub(crate) mod capabilities;
 mod create_job_fns;
 pub(crate) mod decode;
+pub(crate) mod env_params;
 pub(crate) mod errors;
 pub(crate) mod job;
 pub(crate) mod job_param_defs;
@@ -29,6 +30,10 @@ pub(crate) use create_job_fns::{
 pub(crate) use decode::{
     decode_environment_template, decode_environment_template_str, decode_job_template,
     decode_job_template_str,
+};
+pub(crate) use env_params::{
+    py_check_environment_templates, py_create_job_with_environment_templates, PyCreatedJob,
+    PyDocument, PyEnvironmentParameterValues, PyEnvironmentRef, PyStepDisabledEnvironments,
 };
 pub(crate) use errors::{PyDecodeValidationError, PyModelValidationError, PyUnsupportedSchema};
 pub(crate) use job::{

@@ -10,6 +10,7 @@ use pyo3::types::PyDict;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
+use openjd_model::job::EnvironmentParameterValues;
 use openjd_model::types::{JobParameterType, JobParameterValue, JobParameterValues};
 use openjd_model::types::{TaskParameterSet, TaskParameterType, TaskParameterValue};
 use openjd_sessions::action_status::ActionStatus;
@@ -116,6 +117,8 @@ struct StateSnapshot {
     files_directory: String,
     action_status: Option<ActionStatus>,
     environments_entered: Vec<String>,
+    /// ENV_PARAMS values of each entered Environment that has them.
+    environment_parameters: HashMap<String, EnvironmentParameterValues>,
 }
 
 /// Lock a mutex, recovering the guard even if a previous holder panicked.
@@ -158,6 +161,20 @@ fn failed_action_status(message: &str) -> ActionStatus {
     }
 }
 
+/// What identifies the session's latest action status: it changes whenever
+/// an action starts or ends.
+fn action_fingerprint(
+    session: &Session,
+) -> Option<(
+    openjd_sessions::action::ActionState,
+    Option<std::time::SystemTime>,
+    Option<std::time::SystemTime>,
+)> {
+    session
+        .action_status()
+        .map(|s| (s.state, s.started_at, s.ended_at))
+}
+
 /// Body of a spawned action thread.
 ///
 /// Builds a lightweight current-thread Tokio runtime, runs the action
@@ -182,7 +199,7 @@ fn run_action<F>(
     snapshot: Arc<Mutex<StateSnapshot>>,
     action: F,
 ) where
-    F: FnOnce(&tokio::runtime::Runtime, &mut Session),
+    F: FnOnce(&tokio::runtime::Runtime, &mut Session) -> Option<String>,
 {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -207,9 +224,8 @@ fn run_action<F>(
 
     // Catch panics so a panic inside async session code still restores
     // the session below rather than leaking out of this detached thread.
-    let action_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        action(&rt, &mut session);
-    }));
+    let action_result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| action(&rt, &mut session)));
 
     // Restore the session BEFORE refreshing the snapshot, holding the guard
     // across both so there's no window where a caller finds the slot empty.
@@ -224,9 +240,19 @@ fn run_action<F>(
     };
 
     match action_result {
-        Ok(()) => {
+        Ok(early_error) => {
             if let Some(s) = guard.as_ref() {
                 PySession::update_snapshot(s, &snapshot);
+            }
+            // The action was refused before it started, so the session's
+            // status is absent or the previous action's. Report a terminal
+            // FAILED status instead, so the Python poller neither waits
+            // forever nor reports the previous action's result.
+            // `update_snapshot` above already copied the session's real
+            // state (still Ready, or Ended), which is never Running here.
+            if let Some(message) = early_error {
+                let mut snap = lock_recover(&snapshot);
+                snap.action_status = Some(failed_action_status(&message));
             }
         }
         Err(payload) => {
@@ -279,6 +305,15 @@ impl PySession {
         snap.state = session.state();
         snap.action_status = session.action_status();
         snap.environments_entered = session.environments_entered().to_vec();
+        snap.environment_parameters = session
+            .environments_entered()
+            .iter()
+            .filter_map(|id| {
+                session
+                    .environment_parameters(id)
+                    .map(|p| (id.clone(), p.clone()))
+            })
+            .collect();
     }
 }
 
@@ -343,6 +378,7 @@ impl PySession {
             files_directory: String::new(),
             action_status: None,
             environments_entered: vec![],
+            environment_parameters: HashMap::new(),
         }));
         let snapshot_for_cb = snapshot.clone();
         let callback = Box::new(move |_session_id: &str, status: &ActionStatus| {
@@ -420,6 +456,18 @@ impl PySession {
         lock_recover(&self.snapshot).environments_entered.clone()
     }
 
+    /// ENV_PARAMS: the values the entered Environment ``identifier`` was
+    /// entered with, or ``None`` (not entered, or entered without values).
+    fn environment_parameters(
+        &self,
+        identifier: &str,
+    ) -> Option<crate::model::env_params::PyEnvironmentParameterValues> {
+        lock_recover(&self.snapshot)
+            .environment_parameters
+            .get(identifier)
+            .map(|p| crate::model::env_params::PyEnvironmentParameterValues { inner: p.clone() })
+    }
+
     /// Extend the session's path mapping rules with additional rules.
     ///
     /// Rules are stored sorted by source-path length (longest first) so that
@@ -452,15 +500,36 @@ impl PySession {
 
     /// Enter an environment. Non-blocking — spawns the onEnter action on a
     /// background thread and returns the environment identifier immediately.
-    #[pyo3(signature = (*, environment, identifier=None, resolved_symtab=None, os_env_vars=None))]
+    ///
+    /// ENV_PARAMS: ``parameters`` is the Step's
+    /// ``environment_parameters`` entry for this Environment. Its values
+    /// are bound as ``Env.Param.<name>`` (PATH path-mapped) and
+    /// ``Env.RawParam.<name>`` for this Environment's ``variables``, script,
+    /// actions and embedded files, and kept until it is exited. Raises
+    /// ``SessionError`` before anything runs when ``parameters`` names a
+    /// different Environment; a values table that cannot be bound fails
+    /// the action.
+    #[pyo3(signature = (*, environment, identifier=None, resolved_symtab=None, os_env_vars=None, parameters=None))]
     fn enter_environment(
         &self,
         environment: &PyEnvironment,
         identifier: Option<String>,
         resolved_symtab: Option<&crate::expr::PySerializedSymbolTable>,
         os_env_vars: Option<HashMap<String, String>>,
+        parameters: Option<&crate::model::env_params::PyEnvironmentParameterValues>,
     ) -> PyResult<String> {
         let env = environment.inner.clone();
+        let parameters = parameters.map(|p| p.inner.clone());
+        if let Some(p) = &parameters {
+            if p.environment != env.name {
+                return Err(session_err_to_py(
+                    openjd_sessions::error::SessionError::InvalidEnvironmentParameters {
+                        environment: env.name.clone(),
+                        reason: format!("the values are for Environment '{}'.", p.environment),
+                    },
+                ));
+            }
+        }
         let env_id = match &identifier {
             Some(id) => id.clone(),
             None => {
@@ -503,12 +572,22 @@ impl PySession {
         std::thread::spawn(move || {
             run_action(session, session_arc, snapshot, move |rt, session| {
                 let env_ref = os_env_vars.as_ref();
-                let _ = rt.block_on(session.enter_environment(
+                let before = action_fingerprint(session);
+                let result = rt.block_on(session.enter_environment_with_parameters(
                     &env,
                     resolved.as_ref(),
+                    parameters.as_ref(),
                     Some(&env_id),
                     env_ref,
                 ));
+                match result {
+                    // Refused before any action ran (InvalidState,
+                    // MultipleWrapEnvironments, InvalidEnvironmentParameters,
+                    // DuplicateEnvironment, ...): the session's status is
+                    // still the previous action's.
+                    Err(e) if action_fingerprint(session) == before => Some(e.to_string()),
+                    _ => None,
+                }
             });
         });
 
@@ -551,6 +630,7 @@ impl PySession {
                     keep_session_running,
                     env_ref,
                 ));
+                None
             });
         });
 
@@ -605,6 +685,7 @@ impl PySession {
                     resolved.as_ref(),
                     env_ref,
                 ));
+                None
             });
         });
 
@@ -651,6 +732,7 @@ impl PySession {
                     use_session_env_vars,
                     banner_ref,
                 ));
+                None
             });
         });
 

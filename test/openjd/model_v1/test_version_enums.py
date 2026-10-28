@@ -99,9 +99,7 @@ class TestModelExtension:
         # Exception: ``ENV_PARAMS`` (RFC 0010, draft) exists only on the Rust
         # path. The pure-Python model does not implement it and must not
         # name it, so it is the one documented Rust-only member.
-        assert _rust_extension_members() - _RUST_ONLY_EXTENSIONS == {
-            e.value for e in ExtensionName
-        }
+        assert _rust_extension_members() - _RUST_ONLY_EXTENSIONS == {e.value for e in ExtensionName}
         assert _RUST_ONLY_EXTENSIONS <= _rust_extension_members()
         assert not _RUST_ONLY_EXTENSIONS & {e.value for e in ExtensionName}
 

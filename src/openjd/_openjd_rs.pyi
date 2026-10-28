@@ -20,10 +20,14 @@ __all__ = [
     "ChunkIntTaskParameter",
     "ChunkIntTaskParameterDefinition",
     "ChunksDefinition",
+    "CreatedJob",
+    "Document",
     "DocumentType",
     "EmbeddedFile",
     "Environment",
     "EnvironmentActions",
+    "EnvironmentParameterValues",
+    "EnvironmentRef",
     "EnvironmentScript",
     "EnvironmentTemplate",
     "EvalResult",
@@ -89,6 +93,7 @@ __all__ = [
     "StepDependencyEdge",
     "StepDependencyGraph",
     "StepDependencyNode",
+    "StepDisabledEnvironments",
     "StepParameterSpace",
     "StepParameterSpaceDefinition",
     "StepParameterSpaceIterator",
@@ -117,8 +122,11 @@ __all__ = [
     "TypeCode",
     "ValidationContext",
     "WindowsSessionUser",
+    "build_symbol_table",
+    "check_environment_templates",
     "create_environment",
     "create_job",
+    "create_job_with_environment_templates",
     "decode_environment_template",
     "decode_environment_template_str",
     "decode_job_template",
@@ -127,6 +135,7 @@ __all__ = [
     "escape_format_string",
     "evaluate_expression",
     "evaluate_let_bindings",
+    "job_parameter_type_expr_spec",
     "merge_job_parameter_definitions",
     "parse_expression",
     "preprocess_job_parameters",
@@ -364,14 +373,14 @@ class CallerLimits:
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
-        Pickle support — round-trips through `__init__` with all six
+        Pickle support — round-trips through `__init__` with all ten
         optional fields as keyword arguments.
         """
 
     def __eq__(self, other: CallerLimits) -> builtins.bool:
         r"""
         Structural equality — required by the pickle round-trip
-        contract. Compares all six fields; the underlying
+        contract. Compares all ten fields; the underlying
         `CallerLimits` upstream doesn't derive `PartialEq`, so we
         implement equality field-by-field at the binding boundary.
         """
@@ -448,6 +457,81 @@ class ChunksDefinition:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
+class CreatedJob:
+    r"""
+    The result of ``create_job_with_environment_templates``.
+    """
+
+    @property
+    def job(self) -> Job:
+        r"""
+        The combined Job: attached Environments first, in attachment
+        order, then the Job Template's ``jobEnvironments``.
+        """
+
+    @property
+    def environment_documents(self) -> builtins.list[Document]:
+        r"""
+        The document of each ``job.job_environments`` entry, index for
+        index.
+        """
+
+    @property
+    def warnings(self) -> builtins.list[builtins.str]:
+        r"""
+        Submission warnings, each ``"<path>: <message>"``.
+        """
+
+    @property
+    def disabled_environments(self) -> builtins.list[StepDisabledEnvironments]:
+        r"""
+        Per Step of ``job``, index for index.
+        """
+
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Document:
+    r"""
+    The document of a Job Environment: the Job Template, or the
+    Environment Template attached at ``index`` (with an optional ``label``
+    that names it in messages).
+    """
+
+    @property
+    def is_job_template(self) -> builtins.bool: ...
+    @property
+    def index(self) -> typing.Optional[builtins.int]:
+        r"""
+        The attachment index, or ``None`` for the Job Template.
+        """
+
+    @property
+    def label(self) -> typing.Optional[builtins.str]:
+        r"""
+        The attachment label, or ``None``.
+        """
+
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    @staticmethod
+    def job_template() -> Document:
+        r"""
+        The Job Template.
+        """
+
+    @staticmethod
+    def environment_template(
+        index: builtins.int, label: typing.Optional[builtins.str] = None
+    ) -> Document:
+        r"""
+        The Environment Template attached at ``index``.
+        """
+
+    def __str__(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class EmbeddedFile:
     @property
     def name(self) -> builtins.str: ...
@@ -485,7 +569,7 @@ class EmbeddedFile:
         *,
         name: builtins.str,
         type: builtins.str,
-        filename: typing.Optional[FormatString] = None,
+        filename: typing.Optional[builtins.str] = None,
         data: typing.Optional[FormatString] = None,
         runnable: typing.Optional[builtins.bool] = None,
         endOfLine: typing.Optional[builtins.str] = None,
@@ -514,6 +598,14 @@ class Environment:
     def script(self) -> typing.Optional[EnvironmentScript]: ...
     @property
     def variables(self) -> typing.Optional[builtins.dict[builtins.str, builtins.str]]: ...
+    @property
+    def resolved_symtab(self) -> typing.Optional[SerializedSymbolTable]:
+        r"""
+        The Environment's own resolved symbol table from job creation
+        (``Job.Name``, ``Job.EnvNames``, ...), or ``None``. Pass it as
+        ``resolved_symtab`` to ``Session.enter_environment``.
+        """
+
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -526,6 +618,73 @@ class EnvironmentActions:
     def on_exit(self) -> typing.Optional[Action]: ...
     @property
     def onExit(self) -> typing.Optional[Action]: ...
+
+@typing.final
+class EnvironmentParameterValues:
+    r"""
+    The effective ENV_PARAMS values one Step supplies to one Environment.
+
+    ``values`` holds one entry per parameter, keyed by the bare parameter
+    name and typed with the parameter's own expression type (``path``,
+    ``list[path]``, ``int``, ...). PATH values are not path-mapped; a
+    RANGE_EXPR value is in canonical form. Pass it to
+    ``Session.enter_environment(parameters=...)``.
+    """
+
+    @property
+    def document(self) -> Document: ...
+    @property
+    def environment(self) -> builtins.str: ...
+    @property
+    def values(self) -> SerializedSymbolTable: ...
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __new__(
+        cls,
+        *,
+        environment: builtins.str,
+        values: SerializedSymbolTable,
+        document: typing.Optional[Document] = None,
+    ) -> EnvironmentParameterValues:
+        r"""
+        ``document`` defaults to the Job Template.
+        """
+
+    def values_equal(self, other: EnvironmentParameterValues) -> builtins.bool:
+        r"""
+        Template Schemas §3.2.2 equality of the values (FLOAT by value,
+        RANGE_EXPR by the integers it denotes). Document and Environment
+        name are not compared.
+        """
+
+    def to_json_str(self) -> builtins.str:
+        r"""
+        The JSON transport form, ``{"document": {...}, "environment": ...,
+        "values": [...]}``.
+        """
+
+    @classmethod
+    def from_json_str(cls, json: builtins.str) -> EnvironmentParameterValues:
+        r"""
+        Inverse of ``to_json_str``. Raises ``ValueError`` on malformed text.
+        """
+
+    def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]: ...
+
+@typing.final
+class EnvironmentRef:
+    r"""
+    A Job Environment named by its document and name.
+    """
+
+    @property
+    def document(self) -> Document: ...
+    @property
+    def environment(self) -> builtins.str: ...
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    def __new__(cls, *, document: Document, environment: builtins.str) -> EnvironmentRef: ...
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class EnvironmentScript:
@@ -1838,12 +1997,6 @@ class ParsedExpression:
     @property
     def expr(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
-    def typecheck(
-        self,
-        *,
-        values: typing.Optional[typing.Any] = None,
-        profile: typing.Optional[ExprProfile] = None,
-    ) -> None: ...
     def evaluate(
         self,
         *,
@@ -1859,6 +2012,25 @@ class ParsedExpression:
 
         Use :meth:`evaluate_with_metrics` instead when you also need the
         resource-usage counters (peak memory, operation count).
+        """
+
+    def typecheck(
+        self,
+        *,
+        values: typing.Optional[typing.Any] = None,
+        profile: typing.Optional[ExprProfile] = None,
+    ) -> None:
+        r"""
+        Type-check the expression against a symbol table of (typically
+        unresolved) typed placeholders, without extracting a concrete value.
+
+        Succeeds when the expression is well-typed for the given symbol types —
+        including when the result is an unresolved value that merely depends on
+        a runtime symbol — and raises only on a genuine type/evaluation error.
+        Unlike :meth:`evaluate`, it discards the result, so it never raises the
+        "cannot extract value from unresolved" boundary error; callers no longer
+        need to sniff the error message to tell a real type error from a
+        runtime-dependent one.
         """
 
     def evaluate_with_metrics(
@@ -2174,6 +2346,14 @@ class Session:
         meaning (document sizes, step and task counts) are ignored.
         """
 
+    def environment_parameters(
+        self, identifier: builtins.str
+    ) -> typing.Optional[EnvironmentParameterValues]:
+        r"""
+        ENV_PARAMS: the values the entered Environment ``identifier`` was
+        entered with, or ``None`` (not entered, or entered without values).
+        """
+
     def extend_path_mapping_rules(self, additional: typing.Sequence[PathMappingRule]) -> None:
         r"""
         Extend the session's path mapping rules with additional rules.
@@ -2197,10 +2377,20 @@ class Session:
         identifier: typing.Optional[builtins.str] = None,
         resolved_symtab: typing.Optional[SerializedSymbolTable] = None,
         os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None,
+        parameters: typing.Optional[EnvironmentParameterValues] = None,
     ) -> builtins.str:
         r"""
         Enter an environment. Non-blocking — spawns the onEnter action on a
         background thread and returns the environment identifier immediately.
+
+        ENV_PARAMS: ``parameters`` is the Step's
+        ``environment_parameters`` entry for this Environment. Its values
+        are bound as ``Env.Param.<name>`` (PATH path-mapped) and
+        ``Env.RawParam.<name>`` for this Environment's ``variables``, script,
+        actions and embedded files, and kept until it is exited. Raises
+        ``SessionError`` before anything runs when ``parameters`` names a
+        different Environment; a values table that cannot be bound fails
+        the action.
         """
 
     def exit_environment(
@@ -2220,12 +2410,17 @@ class Session:
         self,
         *,
         step_script: StepScript,
+        step_name: typing.Optional[builtins.str] = None,
         task_parameter_values: typing.Optional[dict] = None,
         resolved_symtab: typing.Optional[SerializedSymbolTable] = None,
         os_env_vars: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None,
     ) -> None:
         r"""
         Run a task. Non-blocking — spawns the onRun action on a background thread.
+
+        `step_name` is surfaced as `WrappedStep.Name` to a wrapping
+        environment's `onWrapTaskRun` hook (RFC 0008). It defaults to an empty
+        string when the caller does not supply one.
         """
 
     def run_subprocess(
@@ -2314,6 +2509,48 @@ class Step:
         camelCase alias for ``host_requirements``.
         """
 
+    @property
+    def environments(self) -> typing.Optional[builtins.list[EnvironmentRef]]:
+        r"""
+        ENV_PARAMS: the Job Environments this Step's Sessions enter, in
+        ``Job.job_environments`` order. ``None`` means every one.
+        """
+
+    @property
+    def environment_parameters(self) -> typing.Optional[builtins.list[EnvironmentParameterValues]]:
+        r"""
+        ENV_PARAMS: the effective parameter values, one entry per
+        Environment the Step's Sessions enter that declares parameters.
+        ``None`` when there are none.
+        """
+
+    def environment_parameters_for(
+        self, environment: builtins.str, document: typing.Optional[Document] = None
+    ) -> typing.Optional[EnvironmentParameterValues]:
+        r"""
+        ENV_PARAMS: the ``environment_parameters`` entry for the Job
+        Environment ``environment`` of ``document`` (default: the Job
+        Template), or ``None``.
+        """
+
+    def enters_environment(
+        self, environment: builtins.str, document: typing.Optional[Document] = None
+    ) -> builtins.bool:
+        r"""
+        ENV_PARAMS: whether this Step's Sessions enter the Job Environment
+        ``environment`` of ``document`` (default: the Job Template).
+        """
+
+    def same_environments(self, other: Step) -> builtins.bool:
+        r"""
+        ENV_PARAMS: the first condition of the §3.2.2 Session-sharing rule.
+        """
+
+    def environment_values_equal(self, other: Step) -> builtins.bool:
+        r"""
+        ENV_PARAMS: §3.2.2 equality of the two Steps' effective values.
+        """
+
     def __repr__(self) -> builtins.str: ...
     def __eq__(self, other: Step) -> builtins.bool: ...
     def __hash__(self) -> builtins.int: ...
@@ -2384,6 +2621,27 @@ class StepDependencyNode:
     def in_edges(self) -> builtins.list[StepDependencyEdge]: ...
     @property
     def out_edges(self) -> builtins.list[StepDependencyEdge]: ...
+
+@typing.final
+class StepDisabledEnvironments:
+    r"""
+    The Environments an ``enableIf`` on the Environment disabled for one
+    Step, for display.
+    """
+
+    @property
+    def environments(self) -> builtins.list[EnvironmentRef]:
+        r"""
+        Combined Job Environments, attached first, by (document, name).
+        """
+
+    @property
+    def step_environments(self) -> builtins.list[builtins.str]:
+        r"""
+        The Step's own ``stepEnvironments``, by name.
+        """
+
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class StepParameterSpace:
@@ -2459,8 +2717,9 @@ class StepParameterSpaceIterator:
         `CHUNK[INT]` parameter and turns adaptive chunking off, so a chunked space
         can be walked at a caller-chosen granularity. Pass `1` to iterate individual
         tasks. Ignored when the space has no chunked parameter, matching the
-        pure-Python reference -- though a non-positive value is still rejected in
-        that case.
+        pure-Python reference — though a non-positive value is still rejected in
+        that case, since validating an argument is cheaper to reason about than
+        silently discarding a bad one.
 
         Without this, a statically chunked space could only be walked at the
         template's own chunk size: `chunks_default_task_count` is settable for
@@ -2844,7 +3103,7 @@ class TemplateEmbeddedFile:
     @property
     def type(self) -> builtins.str: ...
     @property
-    def filename(self) -> typing.Optional[FormatString]: ...
+    def filename(self) -> typing.Optional[builtins.str]: ...
     @property
     def data(self) -> typing.Optional[FormatString]: ...
     @property
@@ -2858,7 +3117,7 @@ class TemplateEmbeddedFile:
         *,
         name: builtins.str,
         type: builtins.str,
-        filename: typing.Optional[FormatString] = None,
+        filename: typing.Optional[builtins.str] = None,
         data: typing.Optional[FormatString] = None,
         runnable: typing.Optional[builtins.bool] = None,
         end_of_line: typing.Optional[builtins.str] = None,
@@ -2897,13 +3156,31 @@ class TemplateEnvironmentActions:
     def on_exit(self) -> typing.Optional[TemplateAction]: ...
     @property
     def onExit(self) -> typing.Optional[TemplateAction]: ...
+    @property
+    def on_wrap_env_enter(self) -> typing.Optional[TemplateAction]: ...
+    @property
+    def onWrapEnvEnter(self) -> typing.Optional[TemplateAction]: ...
+    @property
+    def on_wrap_task_run(self) -> typing.Optional[TemplateAction]: ...
+    @property
+    def onWrapTaskRun(self) -> typing.Optional[TemplateAction]: ...
+    @property
+    def on_wrap_env_exit(self) -> typing.Optional[TemplateAction]: ...
+    @property
+    def onWrapEnvExit(self) -> typing.Optional[TemplateAction]: ...
     def __new__(
         cls,
         *,
         on_enter: typing.Optional[TemplateAction] = None,
         on_exit: typing.Optional[TemplateAction] = None,
+        on_wrap_env_enter: typing.Optional[TemplateAction] = None,
+        on_wrap_task_run: typing.Optional[TemplateAction] = None,
+        on_wrap_env_exit: typing.Optional[TemplateAction] = None,
         onEnter: typing.Optional[TemplateAction] = None,
         onExit: typing.Optional[TemplateAction] = None,
+        onWrapEnvEnter: typing.Optional[TemplateAction] = None,
+        onWrapTaskRun: typing.Optional[TemplateAction] = None,
+        onWrapEnvExit: typing.Optional[TemplateAction] = None,
     ) -> TemplateEnvironmentActions:
         r"""
         Construct an ``EnvironmentActions``. Accepts either snake-case
@@ -2987,10 +3264,33 @@ class TemplateStepActions:
 @typing.final
 class TemplateStepDependency:
     @property
-    def depends_on(self) -> builtins.str: ...
+    def depends_on(self) -> typing.Optional[builtins.str]:
+        r"""
+        The Step this entry depends on, whichever key (``dependsOn`` or the
+        ``ENV_PARAMS`` synonym ``step``) named it. ``None`` for an
+        ``environment:`` entry (``ENV_PARAMS``).
+        """
+
     @property
-    def dependsOn(self) -> builtins.str: ...
-    def __new__(cls, *, depends_on: builtins.str) -> TemplateStepDependency: ...
+    def dependsOn(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def environment(self) -> typing.Optional[builtins.str]:
+        r"""
+        ``ENV_PARAMS``: the Environment an ``environment:`` entry requests,
+        or ``None`` for a Step entry.
+        """
+
+    @property
+    def required(self) -> builtins.bool:
+        r"""
+        ``ENV_PARAMS``: ``required`` with its default (``True``) applied.
+        """
+
+    def __new__(cls, *, depends_on: builtins.str) -> TemplateStepDependency:
+        r"""
+        A ``dependsOn: <name>`` entry.
+        """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -3040,11 +3340,41 @@ class ValidationContext:
     def profile(self) -> ModelProfile: ...
     @property
     def caller_limits(self) -> CallerLimits: ...
+    @property
+    def submission_path_format(self) -> PathFormat:
+        r"""
+        ENV_PARAMS: the path format Environment parameter PATH values must
+        be absolute in. Default: the host format.
+        """
+
+    @property
+    def allow_uri_path_values(self) -> builtins.bool:
+        r"""
+        ENV_PARAMS: whether a URI is accepted as an Environment parameter
+        PATH value. Default ``False``.
+        """
+
     def __new__(
-        cls, profile: ModelProfile, *, caller_limits: typing.Optional[CallerLimits] = None
+        cls,
+        profile: ModelProfile,
+        *,
+        caller_limits: typing.Optional[CallerLimits] = None,
+        submission_path_format: typing.Optional[PathFormat] = None,
+        allow_uri_path_values: builtins.bool = False,
     ) -> ValidationContext:
         r"""
-        Build a context from a profile, with optional caller limits.
+        Build a context from a profile, with optional caller limits and
+        the ENV_PARAMS submission path policy.
+        """
+
+    def with_submission_path_format(self, path_format: PathFormat) -> ValidationContext:
+        r"""
+        A copy with ``submission_path_format`` set.
+        """
+
+    def with_allow_uri_path_values(self, allow: builtins.bool) -> ValidationContext:
+        r"""
+        A copy with ``allow_uri_path_values`` set.
         """
 
     def __repr__(self) -> builtins.str: ...
@@ -3268,6 +3598,11 @@ class ModelExtension(enum.Enum):
     FEATURE_BUNDLE_1 = ...
     EXPR = ...
     WRAP_ACTIONS = ...
+    ENV_PARAMS = ...
+    r"""
+    RFC 0010 (draft) Environment parameters. Rust path only: the
+    pure-Python ``openjd.model.v2023_09.ExtensionName`` has no member.
+    """
 
     @property
     def name(self) -> builtins.str:
@@ -3541,6 +3876,36 @@ def _reconstruct_serialized_symtab(json: builtins.str) -> SerializedSymbolTable:
     can be reconstructed across interpreter sessions.
     """
 
+def build_symbol_table(
+    values: dict,
+    types: typing.Optional[dict] = None,
+    *,
+    path_format: typing.Optional[PathFormat] = None,
+) -> SymbolTable:
+    r"""
+    Build a typed :class:`SymbolTable` from a flat dotted-key value map and an
+    optional per-key EXPR type-spec map, coercing string values to their
+    declared type and nesting dotted keys (``"Param.Frame"``) into subtables.
+
+    ``values`` maps dotted symbol names to their (typically string) values, as
+    the v0 model stores them. ``types`` maps the same dotted names to EXPR
+    type spec strings (``"int"``, ``"list[int]"``, ``"path"``, …); names absent
+    from ``types`` are inferred from the value. ``path_format`` controls how
+    PATH-typed values are interpreted (defaults to the host OS).
+    """
+
+def check_environment_templates(
+    *,
+    job_template: JobTemplate,
+    environment_templates: typing.Any,
+    validation_context: typing.Optional[ValidationContext] = None,
+) -> builtins.list[builtins.str]:
+    r"""
+    The submission-stage checks of ``create_job_with_environment_templates``
+    that need no Job Parameter values. Returns the warnings, each
+    ``"<path>: <message>"``; raises ``ModelValidationError`` on an error.
+    """
+
 def create_environment(env_template: EnvironmentTemplate) -> Environment:
     r"""
     Convert a template `EnvironmentTemplate` into a job-side `Environment` with
@@ -3560,6 +3925,25 @@ def create_job(
     environment_templates: typing.Optional[typing.Sequence[EnvironmentTemplate]] = None,
     validation_context: typing.Optional[ValidationContext] = None,
 ) -> Job: ...
+def create_job_with_environment_templates(
+    *,
+    job_template: JobTemplate,
+    job_parameter_values: dict,
+    environment_templates: typing.Optional[typing.Any] = None,
+    validation_context: typing.Optional[ValidationContext] = None,
+) -> CreatedJob:
+    r"""
+    Create a Job with the Environment Templates attached to the submission
+    (ENV_PARAMS, Template Schemas §3.2.1–§3.2.2, §7.4).
+
+    ``environment_templates`` items are ``EnvironmentTemplate`` or
+    ``(EnvironmentTemplate, label)``; attachment order is the order Sessions
+    enter them, before the Job Template's ``jobEnvironments``. Job
+    Parameter values go through ``preprocess_job_parameters`` against the
+    merged definitions first, as for ``create_job``. Each Step of the
+    result carries ``environments`` and ``environment_parameters``.
+    """
+
 def decode_environment_template(
     template: dict,
     *,
@@ -3721,15 +4105,6 @@ def deserialize_step(step_dict: dict) -> Step:
     """
 
 def escape_format_string(value: builtins.str) -> builtins.str: ...
-def job_parameter_type_expr_spec(
-    type_name: builtins.str,
-) -> typing.Optional[builtins.str]: ...
-def build_symbol_table(
-    values: builtins.dict,
-    types: typing.Optional[builtins.dict] = None,
-    *,
-    path_format: typing.Optional[PathFormat] = None,
-) -> SymbolTable: ...
 def evaluate_expression(
     expr: builtins.str,
     *,
@@ -3758,6 +4133,17 @@ def evaluate_let_bindings(
     for the budgets to bound every evaluation uniformly. The other
     ``CallerLimits`` fields have no meaning for a let binding and are
     ignored. Omitting it uses the spec-recommended defaults.
+    """
+
+def job_parameter_type_expr_spec(type_name: builtins.str) -> typing.Optional[builtins.str]:
+    r"""
+    Map an OpenJD job-parameter type spec name (e.g. ``"INT"``, ``"LIST[INT]"``,
+    ``"RANGE_EXPR"``; case-insensitive) to its EXPR type spec string
+    (``"int"``, ``"list[int]"``, ``"range_expr"``), or ``None`` when the name is
+    not a recognized job-parameter type. Single-sources both the
+    (case-insensitive) type-name parsing and the OpenJD-type -> EXPR-type
+    mapping in the Rust ``openjd-model`` crate so the Python model does not
+    hand-maintain a parallel table.
     """
 
 def merge_job_parameter_definitions(

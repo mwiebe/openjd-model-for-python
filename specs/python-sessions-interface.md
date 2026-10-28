@@ -124,7 +124,12 @@ class Session:
         environment: Environment,
         identifier: Optional[str] = None,
         os_env_vars: Optional[dict[str, str]] = None,
+        resolved_symtab: Optional[SerializedSymbolTable] = None,
+        parameters: Optional[EnvironmentParameterValues] = None,  # ENV_PARAMS
     ) -> str: ...
+
+    # ENV_PARAMS: values the entered Environment was entered with, or None
+    def environment_parameters(self, identifier: str) -> Optional[EnvironmentParameterValues]: ...
 
     def exit_environment(
         self,
@@ -164,6 +169,22 @@ class Session:
 
     def cleanup(self) -> None: ...
 ```
+
+`parameters` (ENV_PARAMS, Rust path only) is the Step's
+`environment_parameters` entry for the Environment
+(`Step.environment_parameters_for(name, document)`). Each value is bound as
+`Env.Param.<name>` (PATH and LIST[PATH] elements path-mapped with the
+session's rules) and `Env.RawParam.<name>` (unmapped) for that Environment's
+`variables`, script `let`, actions, and embedded files, and nothing else; the
+session keeps them for the Environment's `onExit`. Enter only the Job
+Environments `Step.enters_environment` names, each with its own
+`Environment.resolved_symtab`. A `parameters` naming another Environment
+raises `SessionError` before anything runs. Any other refusal before the
+action starts (a values table that cannot be bound, a duplicate identifier,
+a second wrap Environment, a session not `READY`) ends the action `FAILED`
+with the error as `fail_message`, rather than leaving the previous action's
+status in place. `EnvironmentParameterValues` is re-exported from
+`openjd.sessions._v1`.
 
 `caller_limits` takes the same
 [`CallerLimits`](./python-model-interface.md#modelprofile--modelextension--specificationrevision--callerlimits--validationcontext)
