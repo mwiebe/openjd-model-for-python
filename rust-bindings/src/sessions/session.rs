@@ -241,18 +241,14 @@ fn run_action<F>(
 
     match action_result {
         Ok(early_error) => {
+            // An action refused before it started leaves the session's
+            // status absent or the previous action's. Report a terminal
+            // FAILED status instead, in the same snapshot write that moves
+            // the state out of Running, so a poller never sees the
+            // terminal state with the stale status.
             if let Some(s) = guard.as_ref() {
-                PySession::update_snapshot(s, &snapshot);
-            }
-            // The action was refused before it started, so the session's
-            // status is absent or the previous action's. Report a terminal
-            // FAILED status instead, so the Python poller neither waits
-            // forever nor reports the previous action's result.
-            // `update_snapshot` above already copied the session's real
-            // state (still Ready, or Ended), which is never Running here.
-            if let Some(message) = early_error {
-                let mut snap = lock_recover(&snapshot);
-                snap.action_status = Some(failed_action_status(&message));
+                let early = early_error.map(|m| failed_action_status(&m));
+                PySession::update_snapshot_with(s, &snapshot, early);
             }
         }
         Err(payload) => {
@@ -301,9 +297,19 @@ pub(crate) struct PySession {
 
 impl PySession {
     fn update_snapshot(session: &Session, snapshot: &Arc<Mutex<StateSnapshot>>) {
+        Self::update_snapshot_with(session, snapshot, None);
+    }
+
+    /// `update_snapshot`, with `status_override` (when given) replacing the
+    /// session's action status under the same lock.
+    fn update_snapshot_with(
+        session: &Session,
+        snapshot: &Arc<Mutex<StateSnapshot>>,
+        status_override: Option<ActionStatus>,
+    ) {
         let mut snap = lock_recover(snapshot);
         snap.state = session.state();
-        snap.action_status = session.action_status();
+        snap.action_status = status_override.or_else(|| session.action_status());
         snap.environments_entered = session.environments_entered().to_vec();
         snap.environment_parameters = session
             .environments_entered()

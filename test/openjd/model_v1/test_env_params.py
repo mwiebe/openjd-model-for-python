@@ -286,6 +286,15 @@ class TestCreateJob:
         )
 
 
+_CONDA_REQUIRED_MISSING = (
+    "1 validation error for Submission\n"
+    "JobTemplate -> steps[0] -> dependencies[0] -> environment:\n"
+    "\tnames Environment 'Conda', which is not a jobEnvironments entry of the Job Template, "
+    "and no Environment Template is attached. The entry is required; set 'required: false' "
+    "if the Step can run without the Environment (Template Schemas §3.2.1 item 2)."
+)
+
+
 def _external_template() -> Any:
     return _job_template(
         {
@@ -354,6 +363,20 @@ class TestCreateJobWithEnvironmentTemplates:
         assert created.environment_documents == [Document.environment_template(0)]
         assert "(EnvironmentTemplate[0])" in created.warnings[0]
 
+    def test_label_is_part_of_the_document(self) -> None:
+        et = decode_environment_template(template=_CONDA_ENV_TEMPLATE, supported_extensions=_EXTS)
+        created = create_job_with_environment_templates(
+            job_template=_external_template(),
+            job_parameter_values={},
+            environment_templates=[(et, "queue")],
+        )
+        a = created.job.steps[0]
+        assert a.environment_parameters_for("Conda", created.environment_documents[0]) is not None
+        assert a.environment_parameters_for("Conda", Document.environment_template(0)) is None
+        # A enters every Job Environment (environments is None), so
+        # enters_environment cannot tell the documents apart here.
+        assert a.environments is None
+
     def test_disabled_environments_lists_enable_if_false(self) -> None:
         created = create_job_with_environment_templates(
             job_template=_job_template(), job_parameter_values={}
@@ -367,13 +390,7 @@ class TestCreateJobWithEnvironmentTemplates:
     def test_required_entry_with_nothing_attached(self) -> None:
         with pytest.raises(ModelValidationError) as exc:
             create_job(job_template=_external_template(), job_parameter_values={})
-        message = str(exc.value)
-        assert message.startswith(
-            "1 validation error for Submission\n"
-            "JobTemplate -> steps[0] -> dependencies[0] -> environment:\n"
-            "\tnames Environment 'Conda', which is not a jobEnvironments entry of the Job "
-            "Template, and no Environment Template"
-        ), message
+        assert str(exc.value) == _CONDA_REQUIRED_MISSING
 
     def test_rejects_other_items(self) -> None:
         with pytest.raises(TypeError) as exc:
@@ -400,7 +417,7 @@ class TestCreateJobWithEnvironmentTemplates:
         ]
         with pytest.raises(ModelValidationError) as exc:
             check_environment_templates(job_template=_external_template(), environment_templates=[])
-        assert "names Environment 'Conda'" in str(exc.value)
+        assert str(exc.value) == _CONDA_REQUIRED_MISSING
 
 
 class TestValueTypes:
@@ -414,6 +431,10 @@ class TestValueTypes:
         assert str(Document.environment_template(1)) == "EnvironmentTemplate[1]"
         assert repr(env_doc) == 'Document.environment_template(2, "queue")'
         assert len({jt_doc, Document.job_template(), env_doc}) == 2
+        # The label is part of equality, as in openjd-rs.
+        assert Document.environment_template(2) != env_doc
+        for doc in (jt_doc, env_doc, Document.environment_template(1)):
+            assert pickle.loads(pickle.dumps(doc)) == doc
 
     def test_environment_ref(self) -> None:
         ref = EnvironmentRef(document=Document.job_template(), environment="Tool")
@@ -423,6 +444,7 @@ class TestValueTypes:
             EnvironmentRef(document=Document.job_template(), environment="Tool")
         )
         assert repr(ref) == 'EnvironmentRef(document=Document.job_template(), environment="Tool")'
+        assert pickle.loads(pickle.dumps(ref)) == ref
 
     def test_environment_parameter_values_round_trip(self) -> None:
         red = create_job(job_template=_job_template(), job_parameter_values={}).steps[0]
@@ -462,7 +484,10 @@ class TestValueTypes:
     def test_from_json_str_rejects_malformed(self) -> None:
         with pytest.raises(ValueError) as exc:
             EnvironmentParameterValues.from_json_str("{}")
-        assert str(exc.value).startswith("Failed to parse EnvironmentParameterValues JSON: ")
+        assert str(exc.value) == (
+            "Failed to parse EnvironmentParameterValues JSON: missing field `document` at line 1 "
+            "column 2"
+        )
 
 
 class TestValidationContext:
@@ -606,7 +631,7 @@ class TestConformanceCopies:
     def test_external_required_missing(self) -> None:
         with pytest.raises(ModelValidationError) as exc:
             self._create(self._load("3.2.1--external-required-missing.invalid.test.yaml"))
-        assert "names Environment 'Conda'" in str(exc.value)
+        assert str(exc.value) == _CONDA_REQUIRED_MISSING
 
 
 @pytest.mark.skipif(_SUITE is None, reason="openjd-specifications ENV_PARAMS suite not found")
