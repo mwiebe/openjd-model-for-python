@@ -185,6 +185,9 @@ pub(crate) enum PyModelExtension {
     FEATURE_BUNDLE_1 = 2,
     EXPR = 3,
     WRAP_ACTIONS = 4,
+    /// RFC 0010 (draft) Environment parameters. Rust path only: the
+    /// pure-Python ``openjd.model.v2023_09.ExtensionName`` has no member.
+    ENV_PARAMS = 5,
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
@@ -240,6 +243,7 @@ impl From<PyModelExtension> for ModelExtension {
             PyModelExtension::FEATURE_BUNDLE_1 => ModelExtension::FeatureBundle1,
             PyModelExtension::EXPR => ModelExtension::Expr,
             PyModelExtension::WRAP_ACTIONS => ModelExtension::WrapActions,
+            PyModelExtension::ENV_PARAMS => ModelExtension::EnvParams,
         }
     }
 }
@@ -252,6 +256,7 @@ impl From<ModelExtension> for PyModelExtension {
             ModelExtension::FeatureBundle1 => PyModelExtension::FEATURE_BUNDLE_1,
             ModelExtension::Expr => PyModelExtension::EXPR,
             ModelExtension::WrapActions => PyModelExtension::WRAP_ACTIONS,
+            ModelExtension::EnvParams => PyModelExtension::ENV_PARAMS,
             // `ModelExtension` is `#[non_exhaustive]`, so downstream
             // crates cannot write an exhaustive match. This arm is
             // mandatory, and the compiler will not warn when the Rust

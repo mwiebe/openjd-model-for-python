@@ -60,6 +60,9 @@ class TestTemplateSpecificationVersion:
         assert t.specification_version.value == "jobtemplate-2023-09"
 
 
+_RUST_ONLY_EXTENSIONS = {"ENV_PARAMS"}
+
+
 def _rust_extension_members() -> set[str]:
     # `ModelExtension` is a PyO3 pyclass enum, not a real `enum.Enum`, so
     # it is not iterable. Discover members by identity instead of relying
@@ -92,7 +95,15 @@ class TestModelExtension:
         # set of 2023-09 extensions. Divergence in either direction is a
         # bug: a missing member means the catch-all aliases it to the
         # wrong extension; an extra member means Python cannot name it.
-        assert _rust_extension_members() == {e.value for e in ExtensionName}
+        #
+        # Exception: ``ENV_PARAMS`` (RFC 0010, draft) exists only on the Rust
+        # path. The pure-Python model does not implement it and must not
+        # name it, so it is the one documented Rust-only member.
+        assert _rust_extension_members() - _RUST_ONLY_EXTENSIONS == {
+            e.value for e in ExtensionName
+        }
+        assert _RUST_ONLY_EXTENSIONS <= _rust_extension_members()
+        assert not _RUST_ONLY_EXTENSIONS & {e.value for e in ExtensionName}
 
     @pytest.mark.parametrize("name", [e.value for e in ExtensionName])
     def test_name_round_trips_to_its_own_member(self, name: str) -> None:

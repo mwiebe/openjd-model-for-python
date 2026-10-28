@@ -361,31 +361,36 @@ class TestUnknownListLiterals:
 
 
 class TestUnknownListComprehensions:
-    """Test list comprehension with unresolved iterables."""
+    """Test list comprehension with unresolved iterables.
+
+    openjd-rs#462 types a comprehension by its element expression and lets the
+    run keep no element, so the element type is nullable (``int?`` is
+    ``int | nulltype``) wherever the filter or the iterable is not concrete.
+    """
 
     def test_unknown_list_iterable(self) -> None:
-        """[x for x in unresolved[list[int]]] -> unresolved[list[int]]."""
+        """[x for x in unresolved[list[int]]] -> unresolved[list[int?]]."""
         values = SymbolTable({"X": ExprValue.unresolved("list[int]")})
         result = evaluate_expression("[x for x in X]", values=values)
-        assert result.type == ExprType("unresolved[list[int]]")
+        assert result.type == ExprType("unresolved[list[int?]]")
 
     def test_unknown_list_with_body_expr(self) -> None:
-        """[x + 1 for x in unresolved[list[int]]] -> unresolved[list[int]]."""
+        """[x + 1 for x in unresolved[list[int]]] -> unresolved[list[int?]]."""
         values = SymbolTable({"X": ExprValue.unresolved("list[int]")})
         result = evaluate_expression("[x + 1 for x in X]", values=values)
-        assert result.type == ExprType("unresolved[list[int]]")
+        assert result.type == ExprType("unresolved[list[int?]]")
 
     def test_unknown_range_iterable(self) -> None:
-        """[x for x in unresolved[range_expr]] -> unresolved[list[int]]."""
+        """[x for x in unresolved[range_expr]] -> unresolved[list[int?]]."""
         values = SymbolTable({"X": ExprValue.unresolved("range_expr")})
         result = evaluate_expression("[x for x in X]", values=values)
-        assert result.type == ExprType("unresolved[list[int]]")
+        assert result.type == ExprType("unresolved[list[int?]]")
 
     def test_unknown_iterable_with_transform(self) -> None:
-        """[string(x) for x in unresolved[list[int]]] -> unresolved[list[string]]."""
+        """[string(x) for x in unresolved[list[int]]] -> unresolved[list[string?]]."""
         values = SymbolTable({"X": ExprValue.unresolved("list[int]")})
         result = evaluate_expression("[string(x) for x in X]", values=values)
-        assert result.type == ExprType("unresolved[list[string]]")
+        assert result.type == ExprType("unresolved[list[string?]]")
 
 
 class TestUnknownCoercion:
@@ -746,12 +751,12 @@ class TestConcreteIterableUnresolvedFilter:
     def test_concrete_list_iterable(self) -> None:
         values = SymbolTable({"Skip": ExprValue.unresolved(ExprType("string"))})
         result = evaluate_expression("[f for f in 'a,b,c'.split(',') if f != Skip]", values=values)
-        assert result.type == ExprType("unresolved[list[string]]")
+        assert result.type == ExprType("unresolved[list[string?]]")
 
     def test_concrete_range_iterable(self) -> None:
         values = SymbolTable({"N": ExprValue.unresolved(ExprType("int"))})
         result = evaluate_expression("[x * 2 for x in range(3) if x > N]", values=values)
-        assert result.type == ExprType("unresolved[list[int]]")
+        assert result.type == ExprType("unresolved[list[int?]]")
 
     def test_the_body_type_is_derived_under_an_unresolved_loop_variable(self) -> None:
         """``10 // 0`` would raise if the body were evaluated on the concrete element
@@ -761,7 +766,7 @@ class TestConcreteIterableUnresolvedFilter:
         each element"."""
         values = SymbolTable({"N": ExprValue.unresolved(ExprType("int"))})
         result = evaluate_expression("[10 // x for x in [0, 2] if x > N]", values=values)
-        assert result.type == ExprType("unresolved[list[int]]")
+        assert result.type == ExprType("unresolved[list[int?]]")
 
     def test_a_filter_short_circuiting_before_the_unresolved_term(self) -> None:
         """For ``x = 0`` the filter is decided concretely (``0 > 0`` is false); for
@@ -769,7 +774,7 @@ class TestConcreteIterableUnresolvedFilter:
         rather than returned as a partial list."""
         values = SymbolTable({"B": ExprValue.unresolved(ExprType("bool"))})
         result = evaluate_expression("[x for x in [0, 1, 2] if x > 0 and B]", values=values)
-        assert result.type == ExprType("unresolved[list[int]]")
+        assert result.type == ExprType("unresolved[list[int?]]")
 
     def test_a_filter_that_can_never_be_a_boolean_is_still_rejected(self) -> None:
         """Negative control. The change is not "stop checking the filter type" — a
@@ -787,7 +792,7 @@ class TestConcreteIterableUnresolvedFilter:
             {"X": ExprValue.unresolved("list[int]"), "N": ExprValue.unresolved("int")}
         )
         result = evaluate_expression("[x for x in X if x > N]", values=values)
-        assert result.type == ExprType("unresolved[list[int]]")
+        assert result.type == ExprType("unresolved[list[int?]]")
 
 
 class TestBoolOpBudgetErrorsPropagate:
