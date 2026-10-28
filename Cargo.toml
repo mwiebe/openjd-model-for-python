@@ -14,8 +14,12 @@ resolver = "2"
 # openjd-sessions = { path = "../openjd-rs/crates/openjd-sessions" }
 
 # ENV_PARAMS prototype (env-params branch only): build against the sibling
-# openjd-rs-ep checkout on branch env-params-prototype.
+# openjd-rs-ep repository, branch env-params-prototype, pinned to one commit.
+# A git rev rather than a path, because other sessions commit to and edit
+# that shared checkout's working tree; a path would build whatever is on
+# disk. To iterate against the working tree instead, use
+#   openjd-model = { path = "../openjd-rs-ep/crates/openjd-model" }  (etc.)
 [patch.crates-io]
-openjd-expr     = { path = "../openjd-rs-ep/crates/openjd-expr" }
-openjd-model    = { path = "../openjd-rs-ep/crates/openjd-model" }
-openjd-sessions = { path = "../openjd-rs-ep/crates/openjd-sessions" }
+openjd-expr     = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "aad5bd2048e9ddeddc8baecef48d139691b32aa3" }
+openjd-model    = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "aad5bd2048e9ddeddc8baecef48d139691b32aa3" }
+openjd-sessions = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "aad5bd2048e9ddeddc8baecef48d139691b32aa3" }
