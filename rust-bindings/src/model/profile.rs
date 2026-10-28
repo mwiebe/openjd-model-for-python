@@ -666,15 +666,24 @@ pub(crate) struct PyValidationContext {
 #[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl PyValidationContext {
-    /// Build a context from a profile, with optional caller limits.
+    /// Build a context from a profile, with optional caller limits and
+    /// the ENV_PARAMS submission path policy.
     #[new]
-    #[pyo3(signature = (profile, *, caller_limits=None))]
-    fn new(profile: &PyModelProfile, caller_limits: Option<&PyCallerLimits>) -> Self {
+    #[pyo3(signature = (profile, *, caller_limits=None, submission_path_format=None, allow_uri_path_values=false))]
+    fn new(
+        profile: &PyModelProfile,
+        caller_limits: Option<&PyCallerLimits>,
+        submission_path_format: Option<crate::expr::path_format::PyPathFormat>,
+        allow_uri_path_values: bool,
+    ) -> Self {
         let limits = caller_limits.map(|c| c.inner.clone()).unwrap_or_default();
-        Self {
-            inner: ValidationContext::from_profile(profile.inner.clone())
-                .with_caller_limits(limits),
+        let mut inner = ValidationContext::from_profile(profile.inner.clone())
+            .with_caller_limits(limits)
+            .with_allow_uri_path_values(allow_uri_path_values);
+        if let Some(f) = submission_path_format {
+            inner = inner.with_submission_path_format(f.into());
         }
+        Self { inner }
     }
 
     #[getter]
@@ -688,6 +697,40 @@ impl PyValidationContext {
     fn caller_limits(&self) -> PyCallerLimits {
         PyCallerLimits {
             inner: self.inner.caller_limits.clone(),
+        }
+    }
+
+    /// ENV_PARAMS: the path format Environment parameter PATH values must
+    /// be absolute in. Default: the host format.
+    #[getter]
+    fn submission_path_format(&self) -> crate::expr::path_format::PyPathFormat {
+        self.inner.submission_path_format.into()
+    }
+
+    /// ENV_PARAMS: whether a URI is accepted as an Environment parameter
+    /// PATH value. Default ``False``.
+    #[getter]
+    fn allow_uri_path_values(&self) -> bool {
+        self.inner.allow_uri_path_values
+    }
+
+    /// A copy with ``submission_path_format`` set.
+    fn with_submission_path_format(
+        &self,
+        path_format: crate::expr::path_format::PyPathFormat,
+    ) -> Self {
+        Self {
+            inner: self
+                .inner
+                .clone()
+                .with_submission_path_format(path_format.into()),
+        }
+    }
+
+    /// A copy with ``allow_uri_path_values`` set.
+    fn with_allow_uri_path_values(&self, allow: bool) -> Self {
+        Self {
+            inner: self.inner.clone().with_allow_uri_path_values(allow),
         }
     }
 
@@ -729,6 +772,8 @@ impl PyValidationContext {
                 inner: self.inner.caller_limits.clone(),
             },
         )?;
+        kwargs.set_item("submission_path_format", self.submission_path_format())?;
+        kwargs.set_item("allow_uri_path_values", self.inner.allow_uri_path_values)?;
         let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
         Ok((helper, args.into()))
     }
@@ -751,6 +796,9 @@ impl PyValidationContext {
         let cl_other = PyCallerLimits {
             inner: other.inner.caller_limits.clone(),
         };
-        p_self.__eq__(&p_other) && cl_self.__eq__(&cl_other)
+        p_self.__eq__(&p_other)
+            && cl_self.__eq__(&cl_other)
+            && self.inner.submission_path_format == other.inner.submission_path_format
+            && self.inner.allow_uri_path_values == other.inner.allow_uri_path_values
     }
 }

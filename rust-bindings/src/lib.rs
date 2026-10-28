@@ -151,6 +151,11 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAttributeRequirement>()?;
     m.add_class::<PyStepParameterSpace>()?;
     m.add_class::<PyStepDependency>()?;
+    m.add_class::<PyDocument>()?;
+    m.add_class::<PyEnvironmentRef>()?;
+    m.add_class::<PyEnvironmentParameterValues>()?;
+    m.add_class::<PyStepDisabledEnvironments>()?;
+    m.add_class::<PyCreatedJob>()?;
     m.add_class::<PyCancelationMode>()?;
     m.add_class::<PyStepParameterSpaceIterator>()?;
     m.add_class::<PyStepDependencyGraph>()?;
@@ -222,6 +227,11 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode_environment_template_str, m)?)?;
     m.add_function(wrap_pyfunction!(decode_environment_template, m)?)?;
     m.add_function(wrap_pyfunction!(py_create_job, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        py_create_job_with_environment_templates,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(py_check_environment_templates, m)?)?;
     m.add_function(wrap_pyfunction!(py_create_environment, m)?)?;
     m.add_function(wrap_pyfunction!(py_deserialize_step, m)?)?;
     m.add_function(wrap_pyfunction!(py_preprocess_job_parameters, m)?)?;

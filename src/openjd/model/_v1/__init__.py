@@ -43,6 +43,9 @@ from openjd._openjd_rs import (
     decode_environment_template_str,
     # Job creation
     create_job,
+    # ENV_PARAMS: job creation with attached Environment Templates
+    create_job_with_environment_templates,
+    check_environment_templates,
     preprocess_job_parameters,
     merge_job_parameter_definitions,
     evaluate_let_bindings,
@@ -98,7 +101,9 @@ __all__ = (
     "template",
     "types",
     # Decode + create entry points
+    "check_environment_templates",
     "create_job",
+    "create_job_with_environment_templates",
     "decode_environment_template",
     "decode_environment_template_str",
     "decode_job_template",

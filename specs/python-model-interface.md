@@ -273,6 +273,65 @@ job.steps[0].name                 # "Render"
 str(job.steps[0].script.actions.onRun.command)  # "render"
 ```
 
+#### `create_job_with_environment_templates` / `check_environment_templates` (ENV_PARAMS)
+
+`ENV_PARAMS` (RFC 0010, draft) is implemented on the Rust path only. The
+pure-Python `openjd.model` has no `ENV_PARAMS` member in `ExtensionName` and
+rejects templates that use it.
+
+`create_job_with_environment_templates` creates a Job with the Environment
+Templates attached to the submission, in the order Sessions enter them
+(before the Job Template's `jobEnvironments`). Items of
+`environment_templates` are `EnvironmentTemplate` or
+`(EnvironmentTemplate, label)`; the label names the document in messages.
+Job Parameter values go through `preprocess_job_parameters` against the merged
+definitions first, as for `create_job`. `create_job` is the same with no
+attachments, returning only the `Job`.
+
+```python
+from openjd.model._v1 import (
+    check_environment_templates,
+    create_job_with_environment_templates,
+    decode_environment_template,
+    decode_job_template,
+)
+from openjd.model._v1.job import Document
+
+jt = decode_job_template(template=job_dict, supported_extensions=["ENV_PARAMS", "EXPR"])
+conda = decode_environment_template(template=env_dict, supported_extensions=["ENV_PARAMS", "EXPR"])
+
+warnings = check_environment_templates(            # list[str], no Job Parameter values needed
+    job_template=jt, environment_templates=[(conda, "queue")]
+)
+created = create_job_with_environment_templates(
+    job_template=jt,
+    job_parameter_values={},
+    environment_templates=[(conda, "queue")],
+    validation_context=None,                       # default: jt's own profile
+)
+created.job                     # Job: attached Environments first, then jobEnvironments
+created.environment_documents   # list[Document], index for index with job.job_environments
+created.warnings                # list[str], each "<path>: <message>"
+created.disabled_environments   # list[StepDisabledEnvironments], one per Step
+
+step = created.job.steps[0]
+step.environments               # Optional[list[EnvironmentRef]]; None = every Job Environment
+step.environment_parameters     # Optional[list[EnvironmentParameterValues]]
+step.enters_environment("Conda", Document.environment_template(0, "queue"))   # bool
+values = step.environment_parameters_for("Conda", Document.environment_template(0, "queue"))
+values.values.to_json_str()     # '[{"name":"Packages","type":"string","value":"ffmpeg=7"}, ...]'
+```
+
+Errors are raised as `ModelValidationError`. A Job Template check reports for
+`JobTemplate` with paths from the template root; the submission-stage checks
+(entry resolution, attached values, constraints 5–7 over the combined Job)
+report for `Submission`, with paths starting at the document
+(`JobTemplate -> steps[0] -> ...`).
+
+PATH Environment parameter values are checked against
+`ValidationContext.submission_path_format` and
+`ValidationContext.allow_uri_path_values` (see [Profile](#profile)).
+
 #### `preprocess_job_parameters`
 
 Validate and coerce job parameter values. Accepts `str` or `pathlib.Path`
@@ -601,7 +660,47 @@ step.dependencies           # Optional[list[StepDependency]]
 step.host_requirements      # Optional[HostRequirements] (alias: hostRequirements)
 step.resolvedBindings       # Optional[list[str]] — let binding strings
 step.resolved_symtab        # Optional[SymbolTable] — resolved at step scope
+
+# ENV_PARAMS (Rust path only)
+step.environments           # Optional[list[EnvironmentRef]] — Job Environments its Sessions
+                            #   enter, in job_environments order; None means every one
+step.environment_parameters # Optional[list[EnvironmentParameterValues]] — one per entered
+                            #   Environment that declares parameters
+step.environment_parameters_for(environment, document=None)  # Optional[EnvironmentParameterValues]
+step.enters_environment(environment, document=None)          # bool; True for any name when
+                                                             #   environments is None
+step.same_environments(other)        # bool — §3.2.2 first condition
+step.environment_values_equal(other) # bool — §3.2.2 value equality
 ```
+
+`document` defaults to `Document.job_template()`.
+
+### ENV_PARAMS job types: `Document` / `EnvironmentRef` / `EnvironmentParameterValues` / `CreatedJob` / `StepDisabledEnvironments`
+
+All live in `openjd.model._v1.job` and are frozen.
+
+```python
+Document.job_template()                        # the Job Template
+Document.environment_template(index, label=None)
+doc.is_job_template / doc.index / doc.label    # str(doc): "JobTemplate" | label | "EnvironmentTemplate[i]"
+
+EnvironmentRef(document=doc, environment="Tool")   # .document, .environment; eq + hash
+
+EnvironmentParameterValues(environment="Tool", values=SerializedSymbolTable, document=None)
+epv.document / epv.environment / epv.values        # values: one entry per parameter, bare names,
+                                                   #   typed with the parameter's expression type,
+                                                   #   PATH unmapped, RANGE_EXPR canonical
+epv.values_equal(other)                            # §3.2.2 equality of the values only
+epv.to_json_str() / EnvironmentParameterValues.from_json_str(text)
+#   {"document": {"kind": "JobTemplate"}, "environment": "Tool", "values": [...]}
+#   {"document": {"kind": "EnvironmentTemplate", "index": 0, "label": "queue"}, ...}
+
+StepDisabledEnvironments.environments       # list[EnvironmentRef] its enableIf disabled
+StepDisabledEnvironments.step_environments  # list[str]
+```
+
+`EnvironmentParameterValues` is equal when document, environment, and the
+transport table are equal; pickles through `to_json_str`.
 
 `Step` defines `__eq__` and `__hash__` by **name only** — two
 ``Step`` instances with the same ``name`` compare equal and hash
@@ -638,6 +737,10 @@ command_str = str(action.command.resolve(symtab, library))
 ```
 
 ### `Environment`
+
+`Environment.resolved_symtab` (`Optional[SerializedSymbolTable]`) is the
+Environment's own table from job creation (`Job.Name`, `Job.EnvNames`, ...);
+pass it to `Session.enter_environment(resolved_symtab=...)`.
 
 ```python
 env = job.job_environments[0]
@@ -1394,6 +1497,16 @@ above), matching the Rust API. `ModelProfile` is an *output* of
 decoding (read it off `JobTemplate.profile`) and an *input* to
 `create_job(validation_context=...)` and to the bridge to the
 expression engine.
+
+`ModelExtension.ENV_PARAMS` exists on the Rust path only (the one member
+with no counterpart in the pure-Python `ExtensionName`).
+
+`ValidationContext(profile, *, caller_limits=None, submission_path_format=None,
+allow_uri_path_values=False)` also carries the ENV_PARAMS submission path
+policy, read only by job creation of Environment parameter values:
+`submission_path_format` (`PathFormat`, default the host format) and
+`allow_uri_path_values` (`bool`). `with_submission_path_format(fmt)` and
+`with_allow_uri_path_values(allow)` return copies.
 
 ```python
 from openjd.model._v1 import (

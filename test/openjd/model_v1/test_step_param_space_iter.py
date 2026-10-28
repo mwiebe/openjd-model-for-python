@@ -1014,9 +1014,7 @@ class TestChunksTaskCountOverride:
 # openjd-model crate) writes range expressions in canonical form, so the Rust
 # path renders ``[1, 2, 4, 6]`` as ``1,2-6:2`` and ``[1, 3, 4, 5]`` as
 # ``1,3-5``. The v0 reference still renders the explicit list.
-_CANONICAL_RANGE_GAP = (
-    "openjd-rs#469 canonical range form differs from the v0 reference rendering"
-)
+_CANONICAL_RANGE_GAP = "openjd-rs#469 canonical range form differs from the v0 reference rendering"
 
 
 class TestNoncontiguousChunkRendering:

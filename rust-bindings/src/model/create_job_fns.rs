@@ -17,7 +17,9 @@ use super::errors::model_err_to_py;
 use super::job::{PyEnvironment, PyJob, PyStep};
 use super::template::{PyEnvironmentTemplate, PyJobTemplate};
 
-fn extract_input_values(py_dict: &Bound<'_, PyDict>) -> PyResult<JobParameterInputValues> {
+pub(crate) fn extract_input_values(
+    py_dict: &Bound<'_, PyDict>,
+) -> PyResult<JobParameterInputValues> {
     let mut result = JobParameterInputValues::new();
     for (key, val) in py_dict.iter() {
         let name: String = key.extract()?;

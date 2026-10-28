@@ -273,6 +273,7 @@ divergence flagged in §8.
 | `preprocess_job_parameters` | present | present | ✓ shape-equivalent: returns `dict[str, ParameterValue|JobParameterValue]` |
 | `merge_job_parameter_definitions` | returns `list[Job*ParameterDefinition]` | returns `list[dict]` | ⚠ shape change documented; ❌ `default` always str (Rec #3); ❌ `description` dropped (Rec #4) |
 | `model_to_object` | present | absent | ⚠ documented as v0-only |
+| `ModelExtension.ENV_PARAMS`, `create_job_with_environment_templates`, `check_environment_templates`, `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`, `Step.environments` / `environment_parameters` (RFC 0010, `env-params` branch) | absent | present | ⚠ Rust-only by design: ENV_PARAMS is implemented only in openjd-rs; the v0 reference keeps rejecting it (`test_env_params.py::TestLegacyPathUnchanged`) |
 | `parse_model` | present | absent | ❌ undocumented (Rec #9 — covered alongside `TokenError`) |
 | `evaluate_let_bindings` | not in v0 (lived inside `_create_job`) | present | ✓ — new public surface for v1 |
 | `document_string_to_object` | present | present | ✓ |

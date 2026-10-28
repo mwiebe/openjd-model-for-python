@@ -44,6 +44,12 @@ from openjd._openjd_rs import (
     StringTaskParameter,
     PathTaskParameter,
     ChunkIntTaskParameter,
+    # ENV_PARAMS (RFC 0010, draft; Rust path only)
+    CreatedJob,
+    Document,
+    EnvironmentParameterValues,
+    EnvironmentRef,
+    StepDisabledEnvironments,
 )
 
 __all__ = (
@@ -52,9 +58,13 @@ __all__ = (
     "AttributeRequirement",
     "CancelationMode",
     "ChunkIntTaskParameter",
+    "CreatedJob",
+    "Document",
     "EmbeddedFile",
     "Environment",
     "EnvironmentActions",
+    "EnvironmentParameterValues",
+    "EnvironmentRef",
     "EnvironmentScript",
     "FloatTaskParameter",
     "HostRequirements",
@@ -68,6 +78,7 @@ __all__ = (
     "StepDependencyEdge",
     "StepDependencyGraph",
     "StepDependencyNode",
+    "StepDisabledEnvironments",
     "StepParameterSpace",
     "StepParameterSpaceIterator",
     "StepScript",

@@ -187,6 +187,71 @@ impl PyStep {
         self.host_requirements()
     }
 
+    /// ENV_PARAMS: the Job Environments this Step's Sessions enter, in
+    /// ``Job.job_environments`` order. ``None`` means every one.
+    #[getter]
+    fn environments(&self) -> Option<Vec<super::env_params::PyEnvironmentRef>> {
+        self.inner.environments.as_ref().map(|refs| {
+            refs.iter()
+                .map(|r| super::env_params::PyEnvironmentRef { inner: r.clone() })
+                .collect()
+        })
+    }
+
+    /// ENV_PARAMS: the effective parameter values, one entry per
+    /// Environment the Step's Sessions enter that declares parameters.
+    /// ``None`` when there are none.
+    #[getter]
+    fn environment_parameters(
+        &self,
+    ) -> Option<Vec<super::env_params::PyEnvironmentParameterValues>> {
+        self.inner.environment_parameters.as_ref().map(|vals| {
+            vals.iter()
+                .map(|v| super::env_params::PyEnvironmentParameterValues { inner: v.clone() })
+                .collect()
+        })
+    }
+
+    /// ENV_PARAMS: the ``environment_parameters`` entry for the Job
+    /// Environment ``environment`` of ``document`` (default: the Job
+    /// Template), or ``None``.
+    #[pyo3(signature = (environment, document=None))]
+    fn environment_parameters_for(
+        &self,
+        environment: &str,
+        document: Option<&super::env_params::PyDocument>,
+    ) -> Option<super::env_params::PyEnvironmentParameterValues> {
+        let doc = document.map(|d| d.inner.clone()).unwrap_or_default();
+        self.inner
+            .environment_parameters
+            .as_ref()?
+            .iter()
+            .find(|v| v.environment == environment && v.document == doc)
+            .map(|v| super::env_params::PyEnvironmentParameterValues { inner: v.clone() })
+    }
+
+    /// ENV_PARAMS: whether this Step's Sessions enter the Job Environment
+    /// ``environment`` of ``document`` (default: the Job Template).
+    #[pyo3(signature = (environment, document=None))]
+    fn enters_environment(
+        &self,
+        environment: &str,
+        document: Option<&super::env_params::PyDocument>,
+    ) -> bool {
+        let doc = document.map(|d| d.inner.clone()).unwrap_or_default();
+        self.inner.enters_environment(&doc, environment)
+    }
+
+    /// ENV_PARAMS: the first condition of the §3.2.2 Session-sharing rule.
+    fn same_environments(&self, other: &PyStep) -> bool {
+        self.inner.same_environments(&other.inner)
+    }
+
+    /// ENV_PARAMS: §3.2.2 equality of the two Steps' effective values.
+    fn environment_values_equal(&self, other: &PyStep) -> bool {
+        self.inner.environment_values_equal(&other.inner)
+    }
+
     fn __repr__(&self) -> String {
         format!("Step(name={:?})", self.inner.name)
     }
@@ -429,6 +494,17 @@ impl PyEnvironment {
                 .map(|(k, v)| (k.clone(), v.raw().to_string()))
                 .collect()
         })
+    }
+
+    /// The Environment's own resolved symbol table from job creation
+    /// (``Job.Name``, ``Job.EnvNames``, ...), or ``None``. Pass it as
+    /// ``resolved_symtab`` to ``Session.enter_environment``.
+    #[getter]
+    fn resolved_symtab(&self) -> Option<crate::expr::PySerializedSymbolTable> {
+        self.inner
+            .resolved_symtab
+            .as_ref()
+            .map(|st| crate::expr::PySerializedSymbolTable { inner: st.clone() })
     }
 
     fn __repr__(&self) -> String {
