@@ -895,6 +895,10 @@ impl PyEnvironment {
                 description: description.map(openjd_model::template::Description),
                 script: script.map(|s| s.inner),
                 variables: vars,
+                env_parameter_definitions: None,
+                activation: None,
+                host_requirements: None,
+                enable_if: None,
             },
         })
     }
@@ -1229,27 +1233,48 @@ pub(crate) struct PyStepDependency {
 #[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl PyStepDependency {
+    /// A ``dependsOn: <name>`` entry.
     #[new]
     #[pyo3(signature = (*, depends_on))]
     fn new(depends_on: String) -> Self {
         PyStepDependency {
-            inner: StepDependency { depends_on },
+            inner: StepDependency::on_step(depends_on),
         }
     }
 
+    /// The Step this entry depends on, whichever key (``dependsOn`` or the
+    /// ``ENV_PARAMS`` synonym ``step``) named it. ``None`` for an
+    /// ``environment:`` entry (``ENV_PARAMS``).
     #[getter]
-    fn depends_on(&self) -> &str {
-        &self.inner.depends_on
+    fn depends_on(&self) -> Option<&str> {
+        self.inner.step()
     }
 
     #[getter]
     #[pyo3(name = "dependsOn")]
-    fn depends_on_camel(&self) -> &str {
+    fn depends_on_camel(&self) -> Option<&str> {
         self.depends_on()
     }
 
+    /// ``ENV_PARAMS``: the Environment an ``environment:`` entry requests,
+    /// or ``None`` for a Step entry.
+    #[getter]
+    fn environment(&self) -> Option<&str> {
+        self.inner.environment()
+    }
+
+    /// ``ENV_PARAMS``: ``required`` with its default (``True``) applied.
+    #[getter]
+    fn required(&self) -> bool {
+        self.inner.is_required()
+    }
+
     fn __repr__(&self) -> String {
-        format!("StepDependency(dependsOn={:?})", self.inner.depends_on)
+        match (self.inner.step(), self.inner.environment()) {
+            (Some(step), _) => format!("StepDependency(dependsOn={step:?})"),
+            (None, Some(env)) => format!("StepDependency(environment={env:?})"),
+            (None, None) => "StepDependency()".to_string(),
+        }
     }
 
     #[allow(clippy::type_complexity)]
@@ -1261,8 +1286,13 @@ impl PyStepDependency {
         let helper = py
             .import("openjd._openjd_rs")?
             .getattr("_reconstruct_kwargs")?;
+        let Some(depends_on) = slf.depends_on() else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "cannot pickle an ENV_PARAMS 'environment:' StepDependency entry",
+            ));
+        };
         let kwargs = PyDict::new(py);
-        kwargs.set_item("depends_on", slf.depends_on())?;
+        kwargs.set_item("depends_on", depends_on)?;
         let cls = py.get_type::<PyStepDependency>();
         let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
         Ok((helper, args.into()))

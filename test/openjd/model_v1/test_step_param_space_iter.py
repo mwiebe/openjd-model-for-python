@@ -1010,6 +1010,15 @@ class TestChunksTaskCountOverride:
             assert params in fresh
 
 
+# openjd-rs#469 (on the env-params openjd-rs-ep base, not yet in a published
+# openjd-model crate) writes range expressions in canonical form, so the Rust
+# path renders ``[1, 2, 4, 6]`` as ``1,2-6:2`` and ``[1, 3, 4, 5]`` as
+# ``1,3-5``. The v0 reference still renders the explicit list.
+_CANONICAL_RANGE_GAP = (
+    "openjd-rs#469 canonical range form differs from the v0 reference rendering"
+)
+
+
 class TestNoncontiguousChunkRendering:
     """A NONCONTIGUOUS chunk renders its values the way the v0 reference's
     ``IntRangeExpr.from_list`` does: commit to the first gap as the step, and
@@ -1062,8 +1071,18 @@ class TestNoncontiguousChunkRendering:
     @pytest.mark.parametrize(
         "range_values, expected",
         [
-            pytest.param(["1", "2", "4", "6"], "1,2,4,6", id="pair then even progression"),
-            pytest.param(["1", "3", "4", "5"], "1,3,4,5", id="gap then consecutive run"),
+            pytest.param(
+                ["1", "2", "4", "6"],
+                "1,2,4,6",
+                id="pair then even progression",
+                marks=pytest.mark.xfail(strict=True, reason=_CANONICAL_RANGE_GAP),
+            ),
+            pytest.param(
+                ["1", "3", "4", "5"],
+                "1,3,4,5",
+                id="gap then consecutive run",
+                marks=pytest.mark.xfail(strict=True, reason=_CANONICAL_RANGE_GAP),
+            ),
             pytest.param(["7", "8"], "7,8", id="lone pair"),
             pytest.param(["1", "3", "5", "7"], "1-7:2", id="control: uniform step compresses"),
         ],
