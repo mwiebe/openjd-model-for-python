@@ -100,6 +100,19 @@ impl PyDocument {
             _ => "Document.job_template()".to_string(),
         }
     }
+
+    /// Pickle support — round-trips through the static constructors.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
+    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, Py<PyTuple>)> {
+        let cls = py.get_type::<Self>();
+        match &self.inner {
+            Document::EnvironmentTemplate { index, label } => {
+                let args = (*index, label.clone()).into_pyobject(py)?;
+                Ok((cls.getattr("environment_template")?, args.unbind()))
+            }
+            _ => Ok((cls.getattr("job_template")?, PyTuple::empty(py).unbind())),
+        }
+    }
 }
 
 // ── EnvironmentRef ──
@@ -154,6 +167,19 @@ impl PyEnvironmentRef {
             .__repr__(),
             self.inner.environment
         )
+    }
+
+    /// Pickle support — round-trips through ``__init__``.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
+    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, Py<PyTuple>)> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_kwargs")?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("document", self.document())?;
+        kwargs.set_item("environment", &self.inner.environment)?;
+        let args = PyTuple::new(py, [py.get_type::<Self>().into_any(), kwargs.into_any()])?;
+        Ok((helper, args.unbind()))
     }
 }
 

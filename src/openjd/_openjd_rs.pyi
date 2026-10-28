@@ -530,6 +530,10 @@ class Document:
 
     def __str__(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]:
+        r"""
+        Pickle support — round-trips through the static constructors.
+        """
 
 @typing.final
 class EmbeddedFile:
@@ -685,6 +689,10 @@ class EnvironmentRef:
     def __hash__(self) -> builtins.int: ...
     def __new__(cls, *, document: Document, environment: builtins.str) -> EnvironmentRef: ...
     def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple]:
+        r"""
+        Pickle support — round-trips through ``__init__``.
+        """
 
 @typing.final
 class EnvironmentScript:

@@ -66,9 +66,9 @@ canonical location.
 
 | Submodule | Contents |
 |---|---|
-| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `evaluate_let_bindings`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), the Rust pyclass enums `SpecificationRevision` and `TemplateSpecificationVersion` (re-exported from `openjd._openjd_rs`; behave like `str`-Enums with lowercase variant names — see their dedicated sections below), and the capability-validation helpers (`validate_amount_capability_name`, `validate_attribute_capability_name`, `standard_amount_capability_names`, `standard_attribute_capability_names`, `standard_attribute_capabilities`). **Explicitly NOT exposed at v1**: the v0 names `ParameterValue`, `ParameterValueType`, `ValueReferenceConstants`, `CancelationMethodTerminate`, `CancelationMethodNotifyThenTerminate`, `CompatibilityError`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`, `FormatStringError`, `RevisionExtensions`, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`). Use the canonical locations: `openjd.model._v1.types` (parameter types/values, `JobParameterValue`/`TaskParameterValue`, `JobParameterType`/`TaskParameterType`); `openjd.model._v1.template` / `openjd.model._v1.job` (structural pyclasses, `EmbeddedFile`, `StepDependencyEdge`); `openjd.model._v1.errors` (`DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`); and `openjd.expr` (expression-layer types). For revision/extensions information, use `ModelProfile.from_strings(revision, extensions)` directly — `RevisionExtensions` was a v0 wrapper that no longer has a v1 counterpart. The `openjd.model._v1.v2023_09` submodule is also gone — it was a v0-shaped per-revision compat shim with no Rust-API counterpart; structural pyclasses live in their canonical submodules (`_v1.template`, `_v1.job`, `_v1.types`, `_v1.errors`) and revision is a property of types, not a namespace. |
+| `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `create_job_with_environment_templates`, `check_environment_templates`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `evaluate_let_bindings`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), the Rust pyclass enums `SpecificationRevision` and `TemplateSpecificationVersion` (re-exported from `openjd._openjd_rs`; behave like `str`-Enums with lowercase variant names — see their dedicated sections below), and the capability-validation helpers (`validate_amount_capability_name`, `validate_attribute_capability_name`, `standard_amount_capability_names`, `standard_attribute_capability_names`, `standard_attribute_capabilities`). **Explicitly NOT exposed at v1**: the v0 names `ParameterValue`, `ParameterValueType`, `ValueReferenceConstants`, `CancelationMethodTerminate`, `CancelationMethodNotifyThenTerminate`, `CompatibilityError`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`, `FormatStringError`, `RevisionExtensions`, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`). Use the canonical locations: `openjd.model._v1.types` (parameter types/values, `JobParameterValue`/`TaskParameterValue`, `JobParameterType`/`TaskParameterType`); `openjd.model._v1.template` / `openjd.model._v1.job` (structural pyclasses, `EmbeddedFile`, `StepDependencyEdge`); `openjd.model._v1.errors` (`DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`); and `openjd.expr` (expression-layer types). For revision/extensions information, use `ModelProfile.from_strings(revision, extensions)` directly — `RevisionExtensions` was a v0 wrapper that no longer has a v1 counterpart. The `openjd.model._v1.v2023_09` submodule is also gone — it was a v0-shaped per-revision compat shim with no Rust-API counterpart; structural pyclasses live in their canonical submodules (`_v1.template`, `_v1.job`, `_v1.types`, `_v1.errors`) and revision is a property of types, not a namespace. |
 | `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the 12 typed job-parameter-definition variants (`JobStringParameterDefinition`, `JobIntParameterDefinition`, `JobFloatParameterDefinition`, `JobPathParameterDefinition`, `JobBoolParameterDefinition`, `JobRangeExprParameterDefinition`, `JobListStringParameterDefinition`, `JobListPathParameterDefinition`, `JobListIntParameterDefinition`, `JobListFloatParameterDefinition`, `JobListBoolParameterDefinition`, `JobListListIntParameterDefinition`), the typed task-parameter-definition variants, and the `*UserInterface` pyclasses. |
-| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, and the job-time `EmbeddedFile`. |
+| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, the job-time `EmbeddedFile`, and the ENV_PARAMS types `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`. |
 | `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `JobParameterValue`, `TaskParameterType`, `TaskParameterValue`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision`, `TemplateSpecificationVersion`, `CallerLimits`, `ValidationContext`. |
 | `openjd.model._v1.errors` | Exception classes raised by decode/create paths: `DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`. |
 
@@ -700,7 +700,15 @@ StepDisabledEnvironments.step_environments  # list[str]
 ```
 
 `EnvironmentParameterValues` is equal when document, environment, and the
-transport table are equal; pickles through `to_json_str`.
+transport table are equal; pickles through `to_json_str`. `Document` and
+`EnvironmentRef` pickle too.
+
+`Document` equality includes the label, as in openjd-rs: an attachment made
+with label `"queue"` is `Document.environment_template(0, "queue")`, and
+`Document.environment_template(0)` does not match it in
+`environment_parameters_for` (nor in `enters_environment` when
+`Step.environments` is a list). Take the document from
+`CreatedJob.environment_documents` rather than rebuilding it.
 
 `Step` defines `__eq__` and `__hash__` by **name only** — two
 ``Step`` instances with the same ``name`` compare equal and hash
@@ -1104,8 +1112,19 @@ it was a `str` in both directions. The job-side `AmountRequirement.name` /
 
 ```python
 dep = step.dependencies[0]
-dep.depends_on                  # str (alias: dependsOn)
+dep.depends_on                  # Optional[str] (alias: dependsOn) — the Step, whether written
+                                #   as dependsOn or the ENV_PARAMS synonym step; None for an
+                                #   ENV_PARAMS environment: entry
+dep.environment                 # Optional[str] — ENV_PARAMS environment: entry
+dep.required                    # bool — ENV_PARAMS required, default True
+TemplateStepDependency(depends_on="A")   # constructs a dependsOn entry only
 ```
+
+Pickling an ENV_PARAMS `environment:` entry raises `TypeError`; a Step entry
+pickles as before. A Job's `Step.dependencies` holds only Step entries
+(`environment:` entries become `Step.environments` and
+`Step.environment_parameters`), so job-time `StepDependency.dependsOn` stays a
+`str`.
 
 ### `SimpleAction` (FEATURE_BUNDLE_1)
 
