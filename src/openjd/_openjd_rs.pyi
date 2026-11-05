@@ -3218,8 +3218,8 @@ class TemplateEnvironment:
         The Environment's `exclusiveGroup` (`ENV_PARAMS`, Template Schemas
         §4 item 7), or `None`. Of the Environments a Step's Sessions would
         enter that share a group, only the first in the Job's Environment
-        order that is not disabled for the Step is entered; the others are
-        superseded for that Step.
+        order whose `enableIf` is not `false` for the Step is entered; the
+        others are superseded for that Step.
         """
 
     @property

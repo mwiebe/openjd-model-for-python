@@ -174,8 +174,6 @@ fn failed_action_status(message: &str) -> ActionStatus {
     }
 }
 
-/// What identifies the session's latest action status: it changes whenever
-/// an action starts or ends.
 /// The message to report as a FAILED status for an action that `result`
 /// shows was refused before it started: an error, with the session's action
 /// fingerprint still `before` (InvalidState, MultipleWrapEnvironments,
@@ -194,6 +192,8 @@ fn refusal<T>(
     }
 }
 
+/// What identifies the session's latest action status: it changes whenever
+/// an action starts or ends.
 fn action_fingerprint(session: &Session) -> ActionFingerprint {
     session
         .action_status()

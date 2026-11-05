@@ -325,7 +325,8 @@ values.values.to_json_str()     # '[{"name":"Packages","type":"string","value":"
 Errors are raised as one `ModelValidationError`, for every Job Template,
 whether or not it lists `ENV_PARAMS` (openjd-rs reports job-creation errors in
 one pass, in Template Schemas §7.4.1 step order, then Step order, then the
-Job's Environment order):
+Job's Environment order). Job Parameter value errors are raised first, as
+`DecodeValidationError`, and are not part of this error.
 
 - with no Environment Template attached, the error is for `JobTemplate` and
   the paths start at the template root (`steps[0] -> ...`);
