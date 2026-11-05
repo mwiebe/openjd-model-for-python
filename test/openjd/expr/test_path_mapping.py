@@ -7,7 +7,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 import pytest
 
-from openjd.expr import PathMappingRule, PathFormat, ExprProfile, HostContext
+from openjd.expr import PathMappingRule, PathFormat, ExprProfile, HostContext, evaluate_expression
 
 
 class TestPathMappingRuleFromPosix:
@@ -617,3 +617,136 @@ class TestPathMappingRuleRepr:
         text = repr(r)
         assert "source_path_format=PathFormat.URI" in text
         assert "Uri" not in text  # no leaked Rust debug name
+
+
+class TestInvalidRules:
+    """openjd-expr 0.13 applies rules through a ``PathMapper``, which rejects a
+    rule whose ``source_path`` is not absolute for its format or whose paths
+    are longer than 32 KiB. The constructor still accepts such a rule (as the
+    v0 reference does); applying it raises ``ValueError``."""
+
+    @pytest.mark.parametrize(
+        "fmt, source, expected",
+        [
+            (PathFormat.POSIX, "rel/dir", "an absolute POSIX path, starting with '/'"),
+            (
+                PathFormat.WINDOWS,
+                r"rel\dir",
+                "an absolute WINDOWS path, starting with a drive such as 'C:\\' or a UNC share "
+                "such as '\\\\server\\share'",
+            ),
+        ],
+    )
+    def test_apply_rejects_a_relative_source(
+        self, fmt: PathFormat, source: str, expected: str
+    ) -> None:
+        rule = PathMappingRule(source_path_format=fmt, source_path=source, destination_path="/d")
+        with pytest.raises(ValueError) as exc:
+            rule.apply(path=source)
+        assert str(exc.value) == f"source_path '{source}' must be {expected}"
+
+    def test_apply_rejects_an_overlong_destination(self) -> None:
+        rule = PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="/s", destination_path="/" * 40000
+        )
+        with pytest.raises(ValueError) as exc:
+            rule.apply(path="/s/a")
+        assert str(exc.value) == (
+            "destination_path is 40000 bytes long, more than the limit of 32768 bytes"
+        )
+
+    def test_host_context_names_the_rule(self) -> None:
+        good = PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="/s", destination_path="/d"
+        )
+        bad = PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="rel", destination_path="/d"
+        )
+        assert HostContext.with_rules([good]).is_enabled()
+        with pytest.raises(ValueError) as exc:
+            HostContext.with_rules([good, bad])
+        assert str(exc.value) == (
+            "path mapping rule 1: source_path 'rel' must be an absolute POSIX path, "
+            "starting with '/'"
+        )
+
+    def test_no_doubled_separator_after_destination(self) -> None:
+        # openjd-rs #483: a destination ending in a separator gets no second one.
+        rule = PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="/s", destination_path="/d/"
+        )
+        assert rule.apply(path="/s/a", output_format=PathFormat.POSIX) == (True, "/d/a")
+        assert rule.apply(path="/x", output_format=PathFormat.POSIX) == (False, "/x")
+
+
+class TestRulePrecedence:
+    """openjd-expr 0.13: the rule with the longest matching ``source_path``
+    applies; between rules for the same location, the one given last wins.
+    Before, the first matching rule in the order given won."""
+
+    @staticmethod
+    def _map(rules: list, path: str) -> str:
+        profile = ExprProfile.current().with_host_context(HostContext.with_rules(rules))
+        return str(evaluate_expression(expr=f"apply_path_mapping('{path}')", profile=profile))
+
+    @pytest.mark.parametrize(
+        "order, expected",
+        [
+            (["/a", "/b"], "/b/x/f"),  # same location: the last one given wins
+            (["/b", "/a"], "/a/x/f"),
+        ],
+    )
+    def test_last_rule_for_a_location_wins(self, order: list, expected: str) -> None:
+        rules = [
+            PathMappingRule(
+                source_path_format=PathFormat.POSIX, source_path="/s", destination_path=d
+            )
+            for d in order
+        ]
+        assert self._map(rules, "/s/x/f") == expected
+
+    def test_longest_source_wins_whatever_the_order(self) -> None:
+        short = PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="/s", destination_path="/a"
+        )
+        long = PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="/s/x", destination_path="/c"
+        )
+        for rules in ([short, long], [long, short]):
+            assert self._map(rules, "/s/x/f") == "/c/f"
+
+
+class TestHostContextWithRules:
+    """``HostContext.with_rules`` keeps the rules in a ``PathMapper`` (openjd-expr
+    0.13); equality, hashing, repr and pickling read them back from it."""
+
+    @staticmethod
+    def _rule(dst: str) -> PathMappingRule:
+        return PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="/s", destination_path=dst
+        )
+
+    def test_pickle_keeps_every_rule(self) -> None:
+        import pickle
+
+        hc = HostContext.with_rules([self._rule("/a"), self._rule("/b")])
+        copy = pickle.loads(pickle.dumps(hc))
+        assert copy == hc
+        assert copy != HostContext.with_rules([self._rule("/a")])
+
+    def test_hash_and_eq_follow_the_rules(self) -> None:
+        a = HostContext.with_rules([self._rule("/a")])
+        assert a == HostContext.with_rules([self._rule("/a")])
+        assert hash(a) == hash(HostContext.with_rules([self._rule("/a")]))
+        assert a != HostContext.with_rules([self._rule("/b")])
+        assert hash(a) != hash(HostContext.with_rules([self._rule("/b")]))
+        assert hash(a) != hash(HostContext.with_rules([]))
+
+    def test_repr_counts_the_rules(self) -> None:
+        hc = HostContext.with_rules([self._rule("/a"), self._rule("/b")])
+        assert repr(hc) == "HostContext.with_rules(<2 rule(s)>)"
+
+    def test_apply_honours_the_output_format(self) -> None:
+        rule = self._rule("/d")
+        assert rule.apply(path="/s/x/y", output_format=PathFormat.WINDOWS) == (True, "/d\\x\\y")
+        assert rule.apply(path="/s/x/y", output_format=PathFormat.POSIX) == (True, "/d/x/y")

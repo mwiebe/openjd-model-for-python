@@ -364,6 +364,13 @@ HostContext.unresolved().is_unresolved()  # True — uses stub implementations
 HostContext.with_rules([]).is_enabled()   # True — empty rules ≠ no host context
 HostContext.with_rules([]).is_unresolved()  # False — uses real implementations
 
+# with_rules validates the rules (openjd-expr 0.13 PathMapper) and raises
+# ValueError for an invalid one, naming its position:
+#   "path mapping rule 1: source_path 'rel' must be an absolute POSIX path, starting with '/'"
+# apply_path_mapping uses the rule with the longest matching source_path;
+# between rules for the same location, the one given last wins. (Before
+# 0.13, the first matching rule in the order given won.)
+
 # Inspecting a profile
 profile.revision      # ExprRevision.V2026_02
 profile.extensions    # [] today
@@ -634,6 +641,15 @@ matched, result = rule.apply(path="/mnt/shared/project/file.exr")
 
 matched, result = rule.apply(path="/other/path")
 # matched=False, result="/other/path"
+
+# A destination ending in a separator gets no second one (openjd-rs #483):
+# "/local/cache/" + "project/file.exr", not "/local/cache//project/file.exr".
+
+# A rule the openjd-expr PathMapper rejects can be constructed, but apply()
+# raises ValueError: a source_path that is not absolute for its format, or a
+# source_path or destination_path longer than 32 KiB.
+PathMappingRule(source_path_format=PathFormat.POSIX, source_path="rel", destination_path="/d").apply(path="rel")
+# ValueError: source_path 'rel' must be an absolute POSIX path, starting with '/'
 
 # Serialization
 d = rule.to_dict()

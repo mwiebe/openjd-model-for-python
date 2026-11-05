@@ -174,6 +174,7 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTemplateCancelationMode>()?;
     m.add_class::<PyTemplateEmbeddedFile>()?;
     m.add_class::<PyTemplateEnvironment>()?;
+    m.add_class::<PyEnvironmentActivation>()?;
     m.add_class::<PyTemplateEnvironmentActions>()?;
     m.add_class::<PyTemplateEnvironmentScript>()?;
     m.add_class::<PyTemplateHostRequirements>()?;

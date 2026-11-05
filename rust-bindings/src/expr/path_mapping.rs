@@ -6,7 +6,7 @@ use pyo3::types::PyDict;
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
-use openjd_expr::path_mapping::{PathFormat, PathMappingRule};
+use openjd_expr::path_mapping::{PathFormat, PathMapper, PathMappingRule};
 
 use crate::expr::path_format::PyPathFormat;
 
@@ -167,16 +167,29 @@ impl PyPathMappingRule {
         h.finish()
     }
 
+    /// Apply this rule alone to `path`. Returns `(True, mapped)` when the
+    /// rule matches and `(False, path)` otherwise.
+    ///
+    /// Raises `ValueError` when the rule cannot be applied: its
+    /// `source_path` is not absolute for `source_path_format`, or a path is
+    /// longer than 32 KiB.
     #[pyo3(signature = (*, path, output_format=None))]
-    fn apply(&self, path: &str, output_format: Option<PyPathFormat>) -> (bool, String) {
+    fn apply(&self, path: &str, output_format: Option<PyPathFormat>) -> PyResult<(bool, String)> {
+        // Validate first so the message carries no rule index: the
+        // mapper's own error says "path mapping rule 0: ...".
+        self.inner
+            .validate()
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let mapper = PathMapper::new(vec![self.inner.clone()])
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         let result = match output_format {
-            Some(fmt) => self.inner.apply_with_format(path, fmt.into()),
-            None => self.inner.apply(path),
+            Some(fmt) => mapper.apply_with_format(path, fmt.into()),
+            None => mapper.apply(path),
         };
-        match result {
+        Ok(match result {
             Some(mapped) => (true, mapped),
             None => (false, path.to_string()),
-        }
+        })
     }
 
     fn to_dict(&self) -> std::collections::HashMap<String, String> {

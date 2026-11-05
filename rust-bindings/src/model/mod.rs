@@ -71,7 +71,7 @@ pub(crate) use template_types::{
     PyAttributeRequirement as PyTemplateAttributeRequirement,
     PyCancelationMode as PyTemplateCancelationMode, PyEmbeddedFile as PyTemplateEmbeddedFile,
     PyEnvironment as PyTemplateEnvironment, PyEnvironmentActions as PyTemplateEnvironmentActions,
-    PyEnvironmentScript as PyTemplateEnvironmentScript,
+    PyEnvironmentActivation, PyEnvironmentScript as PyTemplateEnvironmentScript,
     PyHostRequirements as PyTemplateHostRequirements, PySimpleAction,
     PyStepActions as PyTemplateStepActions, PyStepDependency as PyTemplateStepDependency,
     PyStepScript as PyTemplateStepScript, PyStepTemplate,
