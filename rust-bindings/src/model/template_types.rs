@@ -1254,6 +1254,12 @@ impl pyo3_stub_gen::PyStubType for PyAttributeValuesArg {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         attribute_values_type()
     }
+
+    /// Any sequence of format strings is accepted for the list form.
+    fn type_input() -> pyo3_stub_gen::TypeInfo {
+        use pyo3_stub_gen::PyStubType;
+        <Vec<PyFormatString> as PyStubType>::type_input() | PyFormatString::type_input()
+    }
 }
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]

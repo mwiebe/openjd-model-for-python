@@ -2584,12 +2584,18 @@ class Step:
 
     def same_environments(self, other: Step) -> builtins.bool:
         r"""
-        ENV_PARAMS: the first condition of the §3.2.2 Session-sharing rule.
+        ENV_PARAMS: whether this Step's Sessions enter the same Job
+        Environments as ``other``'s. One Session may run Tasks of both Steps
+        without exiting and entering Job Environments between them only when
+        this and ``environment_values_equal`` hold (How Jobs Are Run,
+        Environment Parameters). Each Step's own ``step_environments`` are
+        entered and exited around its Tasks.
         """
 
     def environment_values_equal(self, other: Step) -> builtins.bool:
         r"""
-        ENV_PARAMS: §3.2.2 equality of the two Steps' effective values.
+        ENV_PARAMS: whether the two Steps' effective Environment parameter
+        values are equal (Template Schemas §3.2.2 defines the equality).
         """
 
     def __repr__(self) -> builtins.str: ...
@@ -3131,8 +3137,8 @@ class TemplateAttributeRequirement:
         cls,
         *,
         name: FormatString,
-        any_of: typing.Optional[builtins.list[FormatString] | FormatString] = None,
-        all_of: typing.Optional[builtins.list[FormatString] | FormatString] = None,
+        any_of: typing.Optional[typing.Sequence[FormatString] | FormatString] = None,
+        all_of: typing.Optional[typing.Sequence[FormatString] | FormatString] = None,
     ) -> TemplateAttributeRequirement:
         r"""
         `any_of` and `all_of` each take a list of `FormatString`s, or, for

@@ -247,12 +247,18 @@ impl PyStep {
         self.inner.enters_environment(&doc, environment)
     }
 
-    /// ENV_PARAMS: the first condition of the §3.2.2 Session-sharing rule.
+    /// ENV_PARAMS: whether this Step's Sessions enter the same Job
+    /// Environments as ``other``'s. One Session may run Tasks of both Steps
+    /// without exiting and entering Job Environments between them only when
+    /// this and ``environment_values_equal`` hold (How Jobs Are Run,
+    /// Environment Parameters). Each Step's own ``step_environments`` are
+    /// entered and exited around its Tasks.
     fn same_environments(&self, other: &PyStep) -> bool {
         self.inner.same_environments(&other.inner)
     }
 
-    /// ENV_PARAMS: §3.2.2 equality of the two Steps' effective values.
+    /// ENV_PARAMS: whether the two Steps' effective Environment parameter
+    /// values are equal (Template Schemas §3.2.2 defines the equality).
     fn environment_values_equal(&self, other: &PyStep) -> bool {
         self.inner.environment_values_equal(&other.inner)
     }
