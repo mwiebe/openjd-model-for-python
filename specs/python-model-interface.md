@@ -349,9 +349,12 @@ Job without `ENV_PARAMS` that has Environment Templates attached now reports
 its errors for `Submission`, at `JobTemplate ->` paths.
 
 `activation` (Template Schemas §4 item 4): an Environment that does not set it
-is `BY_DEFAULT`. Every Step's Sessions enter a `BY_DEFAULT` Environment unless
-the Step declines it with a disabled `environment:` entry (`enableIf: false`,
-or an expression that is false for the Step). An `ALWAYS` Environment cannot
+is `BY_DEFAULT`. Every Step's Sessions enter a `BY_DEFAULT` Environment except
+those of a Step that declines it with a disabled `environment:` entry
+(`enableIf: false`, or an expression that is false for the Step), for which its
+own `enableIf` is false, or for which it is superseded (below). `activation`
+applies to Job Environments and attached Environment Templates; a
+`stepEnvironments` entry cannot set it and reads `BY_DEFAULT`. An `ALWAYS` Environment cannot
 be declined or disabled: a disabled entry for it, or its `enableIf` being
 `false` for a Step, is an error. A declined Environment is not entered and is
 not listed in `disabled_environments`.
@@ -1326,7 +1329,12 @@ d.max_value                     # Optional[int|float]  (alias: maxValue)
 
 # LIST[*] variants (all): min_length / max_length
 # LIST[PATH] variant: also object_type / data_flow
-# RANGE_EXPR variant: min_length / max_length
+# RANGE_EXPR variant: min_length / max_length — checked against the value as
+#   written, and also against its canonical form only in a document that lists
+#   ENV_PARAMS (Template Schemas §2.10, openjd-rs RangeExprLengthCheck). Before
+#   c0333380 the canonical form was checked in every document, so a template
+#   without ENV_PARAMS whose default is long enough only as written is now
+#   accepted.
 # BOOL variant: only the common attributes
 ```
 

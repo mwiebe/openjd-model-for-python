@@ -4,7 +4,7 @@
 
 import pytest
 from openjd.expr import evaluate_expression, SymbolTable, ExpressionError, TypeCode
-from openjd.expr import RangeExpr, IntRange
+from openjd.expr import RangeExpr, IntRange, RangeExprError
 
 
 class TestRangeExpr:
@@ -354,3 +354,27 @@ class TestRangeExprRangesReturnsIntRange:
         assert ranges[0] == IntRange(1, 10, 3)
         # Confirm the iteration shape matches RangeExpr's iteration.
         assert list(ranges[0]) == list(r)
+
+
+class TestRunLimit:
+    """openjd-expr 0.13 (openjd-rs #470): at most 50,000 runs, in every
+    constructor. Squares form no arithmetic progression, so N squares are N
+    runs."""
+
+    _SQUARES = [i * i for i in range(1, 50002)]
+
+    def test_from_list_at_and_over_the_limit(self) -> None:
+        assert len(RangeExpr.from_list(self._SQUARES[:50000])) == 50000
+        with pytest.raises(RangeExprError) as exc:
+            RangeExpr.from_list(self._SQUARES)
+        assert str(exc.value) == (
+            "Range expression has too many sub-ranges in canonical form (50001); "
+            "maximum is 50000"
+        )
+
+    def test_string_at_and_over_the_limit(self) -> None:
+        assert len(RangeExpr(",".join(map(str, self._SQUARES[:50000])))) == 50000
+        text = ",".join(map(str, self._SQUARES))
+        with pytest.raises(RangeExprError) as exc:
+            RangeExpr(text)
+        assert str(exc.value) == f"Range expression has too many sub-ranges (> 50000): '{text}'"

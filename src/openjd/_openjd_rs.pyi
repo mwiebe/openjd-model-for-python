@@ -3207,7 +3207,9 @@ class TemplateEnvironment:
         r"""
         Which Sessions enter this Environment (`ENV_PARAMS`, Template
         Schemas §4 item 4), with the default applied: an Environment that
-        does not set `activation` is `EnvironmentActivation.BY_DEFAULT`.
+        does not set `activation` is `EnvironmentActivation.BY_DEFAULT`. The
+        value applies to Job Environments and Environment Templates; a
+        `stepEnvironments` entry cannot set it, and it means nothing there.
         """
 
     @property
