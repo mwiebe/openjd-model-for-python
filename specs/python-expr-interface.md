@@ -745,7 +745,16 @@ RangeExpr.from_list(["1", "2", "3"])      # 1-3
 
 `RangeExpr.from_list([])` raises `ValueError`. `RangeExpr("...")` and
 `RangeExpr.from_str("...")` raise `RangeExprError` on a malformed
-input string. Two `RangeExpr` values that compare equal also hash
+input string.
+
+A range expression has at most 50,000 runs (openjd-expr 0.13, openjd-rs
+#470), in every constructor. `RangeExpr("...")` and `from_str` raise
+`RangeExprError` for a string with more than 50,000 comma-separated parts
+(`Range expression has too many sub-ranges (> 50000): ...`), and every
+constructor, `from_list` included, raises it when the canonical form has
+more than 50,000 runs
+(`Range expression has too many sub-ranges in canonical form (50001); maximum is 50000`).
+Before, a string was limited to 10,000 parts and `from_list` had no limit. Two `RangeExpr` values that compare equal also hash
 equal (suitable as `set` / `dict` keys).
 
 ### `IntRange`

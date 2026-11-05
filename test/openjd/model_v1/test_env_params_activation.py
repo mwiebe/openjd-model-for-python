@@ -545,11 +545,54 @@ class TestAttributeValues:
         assert copy.any_of.raw() == "{{Param.Archs}}"
         assert copy.all_of is None
 
-    @pytest.mark.parametrize("value", ["a", 3, [FormatString("a"), "b"]])
-    def test_constructor_rejects_other_types(self, value: Any) -> None:
+    @pytest.mark.parametrize(
+        "value, got",
+        [("a", "str"), (3, "int"), ([FormatString("a"), "b"], "list containing str")],
+    )
+    @pytest.mark.parametrize("field", ["any_of", "all_of"])
+    def test_constructor_rejects_other_types(self, field: str, value: Any, got: str) -> None:
         with pytest.raises(TypeError) as exc:
-            TemplateAttributeRequirement(name=FormatString("attr.custom.x"), any_of=value)
+            TemplateAttributeRequirement(name=FormatString("attr.custom.x"), **{field: value})
         assert str(exc.value) == (
             "any_of and all_of must each be a list of FormatString, or one FormatString for the "
-            f"<ListExpressionString> form, got {type(value).__name__}"
+            f"<ListExpressionString> form, got {got}"
+        )
+
+    def test_constructor_accepts_any_sequence(self) -> None:
+        req = TemplateAttributeRequirement(
+            name=FormatString("attr.custom.x"), any_of=(FormatString("a"), FormatString("b"))
+        )
+        assert isinstance(req.any_of, list)
+        assert [v.raw() for v in req.any_of] == ["a", "b"]
+
+
+class TestRangeExprLengthCheck:
+    """openjd-rs c0333380 (spec §2.10): a RANGE_EXPR Job Parameter's
+    ``minLength`` / ``maxLength`` apply to its canonical form only in a document
+    that lists ENV_PARAMS; the value as written is checked in every document."""
+
+    @staticmethod
+    def _template(extensions: list[str]) -> dict[str, Any]:
+        return {
+            "specificationVersion": "jobtemplate-2023-09",
+            "extensions": extensions,
+            "name": "J",
+            "parameterDefinitions": [
+                # "1,2,3,5" is 7 characters; its canonical form "1-3,5" is 5.
+                {"name": "R", "type": "RANGE_EXPR", "minLength": 7, "default": "1,2,3,5"}
+            ],
+            "steps": [{"name": "S", "script": _ECHO}],
+        }
+
+    def test_without_env_params_only_as_written(self) -> None:
+        jt = decode_job_template(template=self._template(["EXPR"]), supported_extensions=_EXTS)
+        assert jt.name == "J"
+
+    def test_with_env_params_also_canonical(self) -> None:
+        with pytest.raises(ModelValidationError) as exc:
+            decode_job_template(template=self._template(_EXTS), supported_extensions=_EXTS)
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "parameterDefinitions[0]:\n"
+            "\tParameter 'R': canonical form '1-3,5' length 5 is less than minimum 7 (default)"
         )

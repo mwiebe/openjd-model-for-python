@@ -945,7 +945,9 @@ impl PyEnvironment {
 
     /// Which Sessions enter this Environment (`ENV_PARAMS`, Template
     /// Schemas §4 item 4), with the default applied: an Environment that
-    /// does not set `activation` is `EnvironmentActivation.BY_DEFAULT`.
+    /// does not set `activation` is `EnvironmentActivation.BY_DEFAULT`. The
+    /// value applies to Job Environments and Environment Templates; a
+    /// `stepEnvironments` entry cannot set it, and it means nothing there.
     #[getter]
     fn activation(&self) -> PyEnvironmentActivation {
         self.inner.activation().into()
@@ -1198,7 +1200,23 @@ impl<'a, 'py> FromPyObject<'a, 'py> for PyAttributeValuesArg {
         if let Ok(items) = obj.extract::<Vec<PyFormatString>>() {
             return Ok(Self::List(items));
         }
-        let type_name = obj.get_type().name()?.to_string();
+        let mut type_name = obj.get_type().name()?.to_string();
+        // Name the first element that is not a FormatString, for a sequence
+        // (not a str, whose elements are characters).
+        let items = if obj.is_instance_of::<pyo3::types::PyString>() {
+            None
+        } else {
+            obj.try_iter().ok()
+        };
+        if let Some(items) = items {
+            for item in items {
+                let item = item?;
+                if item.extract::<PyFormatString>().is_err() {
+                    type_name = format!("{type_name} containing {}", item.get_type().name()?);
+                    break;
+                }
+            }
+        }
         Err(pyo3::exceptions::PyTypeError::new_err(format!(
             "any_of and all_of must each be a list of FormatString, or one FormatString for \
              the <ListExpressionString> form, got {type_name}"
