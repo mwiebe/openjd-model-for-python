@@ -238,7 +238,8 @@ impl PyHostContext {
     /// passing no host context at all.
     ///
     /// Raises `ValueError` when a rule is invalid (a `source_path` that is
-    /// not absolute for its format, or a path longer than 32 KiB) or the
+    /// not absolute for its format, or a `source_path` or `destination_path`
+    /// longer than 32 KiB) or the
     /// rules together pass the path mapper's size limit (30 MiB). The
     /// message names the rule's position, e.g. `path mapping rule 1: ...`.
     #[classmethod]

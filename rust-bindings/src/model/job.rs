@@ -167,8 +167,13 @@ impl PyStep {
         })
     }
 
-    /// Job-time host requirements for this step. ``None`` if the
-    /// template did not declare any. Returns the resolved
+    /// Job-time host requirements for this step. With ENV_PARAMS they
+    /// combine the Step's own with those of the Environments its Sessions
+    /// enter (Template Schemas §3.3.3). ``None`` if none are declared, or,
+    /// in a document that lists ENV_PARAMS, if every one resolved to
+    /// nothing and was discarded (§3.3); the bindings do not expose which
+    /// were discarded (openjd-rs ``CreatedJob::discarded_host_requirements``).
+    /// Returns the resolved
     /// :class:`HostRequirements` from
     /// :mod:`openjd.model._v1.job` (distinct from the
     /// template-time :class:`TemplateHostRequirements`).

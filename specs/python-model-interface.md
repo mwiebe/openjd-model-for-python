@@ -366,6 +366,12 @@ supersede a Job Environment. `disabled_environments` lists the superseded
 Environments with those their `enableIf` disabled; openjd-rs does not record
 which reason applied, so the bindings cannot tell them apart either.
 
+openjd-rs `CreatedJob::discarded_host_requirements` (the ENV_PARAMS host
+requirements of each Step that resolved to `null` and were discarded,
+Template Schemas §3.3) is not bound; openjd-rs keeps it for display. A Step
+whose requirements were all discarded has `host_requirements` `None`, the
+same as one that declares none.
+
 PATH Environment parameter values are checked against
 `ValidationContext.submission_path_format` and
 `ValidationContext.allow_uri_path_values` (see [Profile](#profile)).
@@ -695,7 +701,9 @@ step.script                 # StepScript
 step.parameterSpace         # Optional[StepParameterSpace]
 step.stepEnvironments       # Optional[list[Environment]]
 step.dependencies           # Optional[list[StepDependency]]
-step.host_requirements      # Optional[HostRequirements] (alias: hostRequirements)
+step.host_requirements      # Optional[HostRequirements] (alias: hostRequirements); ENV_PARAMS:
+                            #   combined with the entered Environments' (§3.3.3); None also
+                            #   when every requirement resolved to nothing and was discarded
 step.resolvedBindings       # Optional[list[str]] — let binding strings
 step.resolved_symtab        # Optional[SymbolTable] — resolved at step scope
 

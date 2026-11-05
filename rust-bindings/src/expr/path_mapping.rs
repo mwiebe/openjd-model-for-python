@@ -171,8 +171,9 @@ impl PyPathMappingRule {
     /// rule matches and `(False, path)` otherwise.
     ///
     /// Raises `ValueError` when the rule cannot be applied: its
-    /// `source_path` is not absolute for `source_path_format`, or a path is
-    /// longer than 32 KiB.
+    /// `source_path` is not absolute for `source_path_format`, or its
+    /// `source_path` or `destination_path` is longer than 32 KiB. A `path`
+    /// longer than 32 KiB matches no rule.
     #[pyo3(signature = (*, path, output_format=None))]
     fn apply(&self, path: &str, output_format: Option<PyPathFormat>) -> PyResult<(bool, String)> {
         // Validate first so the message carries no rule index: the

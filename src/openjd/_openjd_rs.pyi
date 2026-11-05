@@ -1227,7 +1227,8 @@ class HostContext:
         passing no host context at all.
 
         Raises `ValueError` when a rule is invalid (a `source_path` that is
-        not absolute for its format, or a path longer than 32 KiB) or the
+        not absolute for its format, or a `source_path` or `destination_path`
+        longer than 32 KiB) or the
         rules together pass the path mapper's size limit (30 MiB). The
         message names the rule's position, e.g. `path mapping rule 1: ...`.
         """
@@ -2105,8 +2106,9 @@ class PathMappingRule:
         rule matches and `(False, path)` otherwise.
 
         Raises `ValueError` when the rule cannot be applied: its
-        `source_path` is not absolute for `source_path_format`, or a path is
-        longer than 32 KiB.
+        `source_path` is not absolute for `source_path_format`, or its
+        `source_path` or `destination_path` is longer than 32 KiB. A `path`
+        longer than 32 KiB matches no rule.
         """
 
     def to_dict(self) -> builtins.dict[builtins.str, builtins.str]: ...
@@ -2381,8 +2383,16 @@ class Session:
         r"""
         Extend the session's path mapping rules with additional rules.
 
-        Rules are stored sorted by source-path length (longest first) so that
-        the most specific rule matches first during FormatString resolution.
+        The rules keep their order. The matching rule whose `source_path` has
+        the most path names applies, and between rules for the same location
+        the one given last wins, so an added rule takes precedence over an
+        existing one.
+
+        Raises `SessionError` (`Invalid path mapping rules: path mapping rule
+        <i>: ...`, counting the existing rules first) and leaves the rules
+        unchanged when an added rule is invalid: a `source_path` that is not
+        absolute for its format, or a `source_path` or `destination_path`
+        longer than 32 KiB.
 
         Consumers (notably the Deadline Cloud worker agent's Job Attachments
         download action) call this after an action assigns additional path
@@ -2519,8 +2529,13 @@ class Step:
     @property
     def host_requirements(self) -> typing.Optional[HostRequirements]:
         r"""
-        Job-time host requirements for this step. ``None`` if the
-        template did not declare any. Returns the resolved
+        Job-time host requirements for this step. With ENV_PARAMS they
+        combine the Step's own with those of the Environments its Sessions
+        enter (Template Schemas §3.3.3). ``None`` if none are declared, or,
+        in a document that lists ENV_PARAMS, if every one resolved to
+        nothing and was discarded (§3.3); the bindings do not expose which
+        were discarded (openjd-rs ``CreatedJob::discarded_host_requirements``).
+        Returns the resolved
         :class:`HostRequirements` from
         :mod:`openjd.model._v1.job` (distinct from the
         template-time :class:`TemplateHostRequirements`).
