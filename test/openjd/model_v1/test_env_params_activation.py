@@ -547,7 +547,12 @@ class TestAttributeValues:
 
     @pytest.mark.parametrize(
         "value, got",
-        [("a", "str"), (3, "int"), ([FormatString("a"), "b"], "list containing str")],
+        [
+            ("a", "str"),
+            (3, "int"),
+            ([FormatString("a"), "b"], "list containing str"),
+            ([1, "b"], "list containing int"),
+        ],
     )
     @pytest.mark.parametrize("field", ["any_of", "all_of"])
     def test_constructor_rejects_other_types(self, field: str, value: Any, got: str) -> None:
@@ -557,6 +562,11 @@ class TestAttributeValues:
             "any_of and all_of must each be a list of FormatString, or one FormatString for the "
             f"<ListExpressionString> form, got {got}"
         )
+
+    def test_empty_list(self) -> None:
+        req = TemplateAttributeRequirement(name=FormatString("attr.custom.x"), any_of=[])
+        assert req.any_of == []
+        assert pickle.loads(pickle.dumps(req)).any_of == []
 
     def test_constructor_accepts_any_sequence(self) -> None:
         req = TemplateAttributeRequirement(
