@@ -281,14 +281,17 @@ class TestCreateJob:
             "steps[0]:\n"
             "\tmust supply, in an 'environment:' dependency, every parameter without a default "
             "of each Environment its Sessions enter (every jobEnvironments entry with activation "
-            "ALWAYS, and each one with activation ON_REQUEST that the Step requests; Template "
-            "Schemas §3.2 constraint 7); missing: 'Flavor' of Environment 'Tool'."
+            "ALWAYS, each one with activation BY_DEFAULT that the Step does not decline, and each "
+            "one with activation ON_REQUEST that the Step requests; Template Schemas §3.2 "
+            "constraint 7); missing: 'Flavor' of Environment 'Tool'."
         )
 
 
+# With no Environment Template attached, a job-creation error is reported for
+# ``JobTemplate`` at paths relative to it (openjd-rs one-pass error shape).
 _CONDA_REQUIRED_MISSING = (
-    "1 validation error for Submission\n"
-    "JobTemplate -> steps[0] -> dependencies[0] -> environment:\n"
+    "1 validation error for JobTemplate\n"
+    "steps[0] -> dependencies[0] -> environment:\n"
     "\tnames Environment 'Conda', which is not a jobEnvironments entry of the Job Template, "
     "and no Environment Template is attached. The entry is required; set 'required: false' "
     "if the Step can run without the Environment (Template Schemas §3.2.1 item 2)."

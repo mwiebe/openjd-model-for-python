@@ -19,14 +19,14 @@
 //! in the bindings.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyType};
 #[cfg(feature = "stub-gen")]
 use pyo3_stub_gen::derive::*;
 
 use openjd_model::template::{
-    Action, AmountRequirement, AttributeRequirement, CancelationMode, EmbeddedFile, Environment,
-    EnvironmentActions, EnvironmentScript, HostRequirements, SimpleAction, StepActions,
-    StepDependency, StepScript, StepTemplate,
+    Action, AmountRequirement, AttributeRequirement, AttributeValues, CancelationMode,
+    EmbeddedFile, Environment, EnvironmentActions, EnvironmentActivation, EnvironmentScript,
+    HostRequirements, SimpleAction, StepActions, StepDependency, StepScript, StepTemplate,
 };
 use openjd_model::types::{EndOfLine, FileType};
 
@@ -869,14 +869,21 @@ pub(crate) struct PyEnvironment {
 #[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl PyEnvironment {
+    /// `activation` and `exclusive_group` are the `ENV_PARAMS` fields of
+    /// Template Schemas §4 items 4 and 7. They are stored as given; nothing
+    /// here validates them (template validation does, when a template is
+    /// decoded).
     #[new]
-    #[pyo3(signature = (*, name, description=None, script=None, variables=None))]
+    #[pyo3(signature = (*, name, description=None, script=None, variables=None, activation=None, exclusive_group=None))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         py: Python<'_>,
         name: String,
         description: Option<String>,
         script: Option<PyEnvironmentScript>,
         variables: Option<&Bound<'_, PyDict>>,
+        activation: Option<PyEnvironmentActivation>,
+        exclusive_group: Option<String>,
     ) -> PyResult<Self> {
         let _ = py;
         let mut vars: Option<std::collections::HashMap<String, openjd_expr::FormatString>> = None;
@@ -896,9 +903,10 @@ impl PyEnvironment {
                 script: script.map(|s| s.inner),
                 variables: vars,
                 env_parameter_definitions: None,
-                activation: None,
+                activation: activation.map(Into::into),
                 host_requirements: None,
                 enable_if: None,
+                exclusive_group,
             },
         })
     }
@@ -935,6 +943,31 @@ impl PyEnvironment {
         }
     }
 
+    /// Which Sessions enter this Environment (`ENV_PARAMS`, Template
+    /// Schemas §4 item 4), with the default applied: an Environment that
+    /// does not set `activation` is `EnvironmentActivation.BY_DEFAULT`.
+    #[getter]
+    fn activation(&self) -> PyEnvironmentActivation {
+        self.inner.activation().into()
+    }
+
+    /// The Environment's `exclusiveGroup` (`ENV_PARAMS`, Template Schemas
+    /// §4 item 7), or `None`. Of the Environments a Step's Sessions would
+    /// enter that share a group, only the first in the Job's Environment
+    /// order that is not disabled for the Step is entered; the others are
+    /// superseded for that Step.
+    #[getter]
+    fn exclusive_group(&self) -> Option<&str> {
+        self.inner.exclusive_group.as_deref()
+    }
+
+    /// camelCase alias for `exclusive_group`.
+    #[getter]
+    #[pyo3(name = "exclusiveGroup")]
+    fn exclusive_group_camel(&self) -> Option<&str> {
+        self.exclusive_group()
+    }
+
     fn __repr__(&self) -> String {
         format!("Environment(name={:?})", self.inner.name)
     }
@@ -959,9 +992,110 @@ impl PyEnvironment {
         if let Some(v) = slf.variables(py)? {
             kwargs.set_item("variables", v)?;
         }
+        // The stored value, not the getter's: an absent `activation` stays
+        // absent, since template validation rejects the field without
+        // `ENV_PARAMS`.
+        if let Some(a) = slf.inner.activation {
+            kwargs.set_item("activation", PyEnvironmentActivation::from(a))?;
+        }
+        if let Some(g) = slf.exclusive_group() {
+            kwargs.set_item("exclusive_group", g)?;
+        }
         let cls = py.get_type::<PyEnvironment>();
         let args = PyTuple::new(py, [cls.into_any(), kwargs.into_any()])?;
         Ok((helper, args.into()))
+    }
+}
+
+// ── EnvironmentActivation ──
+
+/// Which Sessions of a Job enter an Environment (`ENV_PARAMS`, Template
+/// Schemas §4 item 4). An Environment that does not set `activation` is
+/// `BY_DEFAULT`.
+///
+/// - `ALWAYS`: every Session enters it. It cannot be disabled or declined:
+///   its `enableIf` being `false` for a Step, or a Step's disabled
+///   `environment:` entry for it, is an error.
+/// - `BY_DEFAULT`: every Session enters it, except those of a Step that
+///   declines it with a disabled `environment:` entry, for which its
+///   `enableIf` is `false`, or for which an earlier Environment of its
+///   `exclusiveGroup` supersedes it.
+/// - `ON_REQUEST`: only the Sessions of a Step that requests it with an
+///   enabled `environment:` entry enter it, less those for which its
+///   `enableIf` is `false` or it is superseded.
+///
+/// `value` is the spelling a template uses (`"BY_DEFAULT"`).
+#[cfg_attr(
+    feature = "stub-gen",
+    gen_stub_pyclass_enum(module = "openjd._openjd_rs")
+)]
+#[pyclass(
+    module = "openjd.model._v1.template",
+    name = "EnvironmentActivation",
+    eq,
+    eq_int,
+    frozen,
+    hash,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+pub(crate) enum PyEnvironmentActivation {
+    ALWAYS = 0,
+    BY_DEFAULT = 1,
+    ON_REQUEST = 2,
+}
+
+impl From<EnvironmentActivation> for PyEnvironmentActivation {
+    fn from(v: EnvironmentActivation) -> Self {
+        match v {
+            EnvironmentActivation::Always => Self::ALWAYS,
+            EnvironmentActivation::ByDefault => Self::BY_DEFAULT,
+            EnvironmentActivation::OnRequest => Self::ON_REQUEST,
+        }
+    }
+}
+
+impl From<PyEnvironmentActivation> for EnvironmentActivation {
+    fn from(v: PyEnvironmentActivation) -> Self {
+        match v {
+            PyEnvironmentActivation::ALWAYS => Self::Always,
+            PyEnvironmentActivation::BY_DEFAULT => Self::ByDefault,
+            PyEnvironmentActivation::ON_REQUEST => Self::OnRequest,
+        }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyEnvironmentActivation {
+    /// Variant name as a string (e.g. `"BY_DEFAULT"`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        EnvironmentActivation::from(*self).as_str()
+    }
+
+    /// The value as a template writes it (`"ALWAYS"`, `"BY_DEFAULT"` or
+    /// `"ON_REQUEST"`); the same as `name`.
+    #[getter]
+    fn value(&self) -> &'static str {
+        self.name()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("EnvironmentActivation.{}", self.name())
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Bound<'py, PyType>, &'static str))> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
     }
 }
 
@@ -1047,6 +1181,81 @@ impl PyAmountRequirement {
     }
 }
 
+/// An `any_of` / `all_of` argument: a list of format strings, or one format
+/// string for the `<ListExpressionString>` form.
+pub(crate) enum PyAttributeValuesArg {
+    List(Vec<PyFormatString>),
+    Expression(PyFormatString),
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for PyAttributeValuesArg {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        if let Ok(fs) = obj.extract::<PyFormatString>() {
+            return Ok(Self::Expression(fs));
+        }
+        if let Ok(items) = obj.extract::<Vec<PyFormatString>>() {
+            return Ok(Self::List(items));
+        }
+        let type_name = obj.get_type().name()?.to_string();
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "any_of and all_of must each be a list of FormatString, or one FormatString for \
+             the <ListExpressionString> form, got {type_name}"
+        )))
+    }
+}
+
+impl PyAttributeValuesArg {
+    fn into_inner(self) -> AttributeValues {
+        match self {
+            Self::List(v) => AttributeValues::List(v.into_iter().map(|fs| fs.inner).collect()),
+            Self::Expression(fs) => AttributeValues::Expression(fs.inner),
+        }
+    }
+}
+
+/// `AttributeValues` as Python: a `list[FormatString]` for the list form,
+/// one `FormatString` for the expression form.
+pub(crate) struct PyAttributeValuesOut(AttributeValues);
+
+impl<'py> IntoPyObject<'py> for PyAttributeValuesOut {
+    type Target = PyAny;
+    type Output = Bound<'py, PyAny>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self.0 {
+            AttributeValues::List(items) => {
+                PyList::new(py, items.into_iter().map(|inner| PyFormatString { inner }))?.into_any()
+            }
+            AttributeValues::Expression(inner) => {
+                PyFormatString { inner }.into_pyobject(py)?.into_any()
+            }
+        })
+    }
+}
+
+#[cfg(feature = "stub-gen")]
+fn attribute_values_type() -> pyo3_stub_gen::TypeInfo {
+    use pyo3_stub_gen::PyStubType;
+    pyo3_stub_gen::TypeInfo::list_of::<PyFormatString>() | PyFormatString::type_output()
+}
+
+#[cfg(feature = "stub-gen")]
+impl pyo3_stub_gen::PyStubType for PyAttributeValuesOut {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        attribute_values_type()
+    }
+}
+
+#[cfg(feature = "stub-gen")]
+impl pyo3_stub_gen::PyStubType for PyAttributeValuesArg {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        attribute_values_type()
+    }
+}
+
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
     module = "openjd.model._v1.template",
@@ -1061,18 +1270,21 @@ pub(crate) struct PyAttributeRequirement {
 #[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
 #[pymethods]
 impl PyAttributeRequirement {
+    /// `any_of` and `all_of` each take a list of `FormatString`s, or, for
+    /// the `ENV_PARAMS` `<ListExpressionString>` form (Template Schemas
+    /// §3.3.2), one `FormatString` written in place of the list.
     #[new]
     #[pyo3(signature = (*, name, any_of=None, all_of=None))]
     fn new(
         name: PyFormatString,
-        any_of: Option<Vec<PyFormatString>>,
-        all_of: Option<Vec<PyFormatString>>,
+        any_of: Option<PyAttributeValuesArg>,
+        all_of: Option<PyAttributeValuesArg>,
     ) -> Self {
         PyAttributeRequirement {
             inner: AttributeRequirement {
                 name: name.inner,
-                any_of: any_of.map(|v| v.into_iter().map(|fs| fs.inner).collect()),
-                all_of: all_of.map(|v| v.into_iter().map(|fs| fs.inner).collect()),
+                any_of: any_of.map(PyAttributeValuesArg::into_inner),
+                all_of: all_of.map(PyAttributeValuesArg::into_inner),
             },
         }
     }
@@ -1088,33 +1300,29 @@ impl PyAttributeRequirement {
         }
     }
 
+    /// The `anyOf` values: a list of `FormatString`s, or one `FormatString`
+    /// when the template writes the `ENV_PARAMS` `<ListExpressionString>`
+    /// form in place of the list (Template Schemas §3.3.2).
     #[getter]
-    fn any_of(&self) -> Option<Vec<PyFormatString>> {
-        self.inner.any_of.as_ref().map(|v| {
-            v.iter()
-                .map(|fs| PyFormatString { inner: fs.clone() })
-                .collect()
-        })
+    fn any_of(&self) -> Option<PyAttributeValuesOut> {
+        self.inner.any_of.clone().map(PyAttributeValuesOut)
     }
 
     #[getter]
     #[pyo3(name = "anyOf")]
-    fn any_of_camel(&self) -> Option<Vec<PyFormatString>> {
+    fn any_of_camel(&self) -> Option<PyAttributeValuesOut> {
         self.any_of()
     }
 
+    /// The `allOf` values, in the same forms as `any_of`.
     #[getter]
-    fn all_of(&self) -> Option<Vec<PyFormatString>> {
-        self.inner.all_of.as_ref().map(|v| {
-            v.iter()
-                .map(|fs| PyFormatString { inner: fs.clone() })
-                .collect()
-        })
+    fn all_of(&self) -> Option<PyAttributeValuesOut> {
+        self.inner.all_of.clone().map(PyAttributeValuesOut)
     }
 
     #[getter]
     #[pyo3(name = "allOf")]
-    fn all_of_camel(&self) -> Option<Vec<PyFormatString>> {
+    fn all_of_camel(&self) -> Option<PyAttributeValuesOut> {
         self.all_of()
     }
 

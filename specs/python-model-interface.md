@@ -67,7 +67,7 @@ canonical location.
 | Submodule | Contents |
 |---|---|
 | `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `create_job_with_environment_templates`, `check_environment_templates`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `evaluate_let_bindings`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), the Rust pyclass enums `SpecificationRevision` and `TemplateSpecificationVersion` (re-exported from `openjd._openjd_rs`; behave like `str`-Enums with lowercase variant names — see their dedicated sections below), and the capability-validation helpers (`validate_amount_capability_name`, `validate_attribute_capability_name`, `standard_amount_capability_names`, `standard_attribute_capability_names`, `standard_attribute_capabilities`). **Explicitly NOT exposed at v1**: the v0 names `ParameterValue`, `ParameterValueType`, `ValueReferenceConstants`, `CancelationMethodTerminate`, `CancelationMethodNotifyThenTerminate`, `CompatibilityError`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`, `FormatStringError`, `RevisionExtensions`, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`). Use the canonical locations: `openjd.model._v1.types` (parameter types/values, `JobParameterValue`/`TaskParameterValue`, `JobParameterType`/`TaskParameterType`); `openjd.model._v1.template` / `openjd.model._v1.job` (structural pyclasses, `EmbeddedFile`, `StepDependencyEdge`); `openjd.model._v1.errors` (`DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`); and `openjd.expr` (expression-layer types). For revision/extensions information, use `ModelProfile.from_strings(revision, extensions)` directly — `RevisionExtensions` was a v0 wrapper that no longer has a v1 counterpart. The `openjd.model._v1.v2023_09` submodule is also gone — it was a v0-shaped per-revision compat shim with no Rust-API counterpart; structural pyclasses live in their canonical submodules (`_v1.template`, `_v1.job`, `_v1.types`, `_v1.errors`) and revision is a property of types, not a namespace. |
-| `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the 12 typed job-parameter-definition variants (`JobStringParameterDefinition`, `JobIntParameterDefinition`, `JobFloatParameterDefinition`, `JobPathParameterDefinition`, `JobBoolParameterDefinition`, `JobRangeExprParameterDefinition`, `JobListStringParameterDefinition`, `JobListPathParameterDefinition`, `JobListIntParameterDefinition`, `JobListFloatParameterDefinition`, `JobListBoolParameterDefinition`, `JobListListIntParameterDefinition`), the typed task-parameter-definition variants, and the `*UserInterface` pyclasses. |
+| `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the 12 typed job-parameter-definition variants (`JobStringParameterDefinition`, `JobIntParameterDefinition`, `JobFloatParameterDefinition`, `JobPathParameterDefinition`, `JobBoolParameterDefinition`, `JobRangeExprParameterDefinition`, `JobListStringParameterDefinition`, `JobListPathParameterDefinition`, `JobListIntParameterDefinition`, `JobListFloatParameterDefinition`, `JobListBoolParameterDefinition`, `JobListListIntParameterDefinition`), the typed task-parameter-definition variants, the `*UserInterface` pyclasses, and the ENV_PARAMS enum `EnvironmentActivation`. |
 | `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, the job-time `EmbeddedFile`, and the ENV_PARAMS types `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`. |
 | `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `JobParameterValue`, `TaskParameterType`, `TaskParameterValue`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision`, `TemplateSpecificationVersion`, `CallerLimits`, `ValidationContext`. |
 | `openjd.model._v1.errors` | Exception classes raised by decode/create paths: `DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`. |
@@ -322,11 +322,49 @@ values = step.environment_parameters_for("Conda", Document.environment_template(
 values.values.to_json_str()     # '[{"name":"Packages","type":"string","value":"ffmpeg=7"}, ...]'
 ```
 
-Errors are raised as `ModelValidationError`. A Job Template check reports for
-`JobTemplate` with paths from the template root; the submission-stage checks
-(entry resolution, attached values, constraints 5–7 over the combined Job)
-report for `Submission`, with paths starting at the document
-(`JobTemplate -> steps[0] -> ...`).
+Errors are raised as one `ModelValidationError`, for every Job Template,
+whether or not it lists `ENV_PARAMS` (openjd-rs reports job-creation errors in
+one pass, in Template Schemas §7.4.1 step order, then Step order, then the
+Job's Environment order):
+
+- with no Environment Template attached, the error is for `JobTemplate` and
+  the paths start at the template root (`steps[0] -> ...`);
+- with any attached, it is for `Submission` and every path starts with its
+  document: `JobTemplate -> steps[0] -> ...`, or the attachment's label, or
+  `EnvironmentTemplate[i]` for one without a label.
+
+```text
+2 validation errors for Submission
+JobTemplate -> steps[0] -> dependencies[0] -> environment:
+	names Environment 'Missing', which is not a jobEnvironments entry of the Job Template, and none of the attached Environment Templates (queue) defines it. ...
+JobTemplate -> steps[1]:
+	must supply, in an 'environment:' dependency, every parameter without a default of each Environment its Sessions enter (...); missing: 'Seats' of Environment 'Lic'.
+```
+
+A Step with an error from §7.4.1 steps 1–4 gets no checks from steps 5–8, so
+its value and constraint 7 errors appear once those are fixed. Before
+openjd-rs c0333380, a Job Template's own errors were reported alone, for
+`JobTemplate`, and the submission-stage errors only when there were none; so a
+Job without `ENV_PARAMS` that has Environment Templates attached now reports
+its errors for `Submission`, at `JobTemplate ->` paths.
+
+`activation` (Template Schemas §4 item 4): an Environment that does not set it
+is `BY_DEFAULT`. Every Step's Sessions enter a `BY_DEFAULT` Environment unless
+the Step declines it with a disabled `environment:` entry (`enableIf: false`,
+or an expression that is false for the Step). An `ALWAYS` Environment cannot
+be declined or disabled: a disabled entry for it, or its `enableIf` being
+`false` for a Step, is an error. A declined Environment is not entered and is
+not listed in `disabled_environments`.
+
+`exclusiveGroup` (§4 item 7): of the Environments a Step's Sessions would
+enter that share a group, only the first in the Job's Environment order
+(attached ones first) whose `enableIf` is not `false` is entered. The others
+are superseded for the Step: they are not entered, have no
+`environment_parameters` entry, are not held to constraint 7, and their
+`enableIf` is not evaluated for that Step. An attached Environment can
+supersede a Job Environment. `disabled_environments` lists the superseded
+Environments with those their `enableIf` disabled; openjd-rs does not record
+which reason applied, so the bindings cannot tell them apart either.
 
 PATH Environment parameter values are checked against
 `ValidationContext.submission_path_format` and
@@ -695,8 +733,9 @@ epv.to_json_str() / EnvironmentParameterValues.from_json_str(text)
 #   {"document": {"kind": "JobTemplate"}, "environment": "Tool", "values": [...]}
 #   {"document": {"kind": "EnvironmentTemplate", "index": 0, "label": "queue"}, ...}
 
-StepDisabledEnvironments.environments       # list[EnvironmentRef] its enableIf disabled
-StepDisabledEnvironments.step_environments  # list[str]
+StepDisabledEnvironments.environments       # list[EnvironmentRef] its enableIf disabled or
+                                            #   an earlier one of its exclusiveGroup superseded
+StepDisabledEnvironments.step_environments  # list[str] Step Environments its enableIf disabled
 ```
 
 `EnvironmentParameterValues` is equal when document, environment, and the
@@ -1019,6 +1058,29 @@ env.name                        # str
 env.description                 # Optional[str]
 env.script                      # Optional[EnvironmentScript]
 env.variables                   # Optional[dict[str, FormatString]]
+env.activation                  # EnvironmentActivation — ENV_PARAMS §4 item 4; BY_DEFAULT when absent
+env.exclusive_group             # Optional[str] (alias: exclusiveGroup) — ENV_PARAMS §4 item 7
+
+TemplateEnvironment(name="X", variables=None, script=None, description=None,
+                    activation=EnvironmentActivation.ON_REQUEST, exclusive_group="G")
+```
+
+`activation` applies the default, so an Environment without the field reads
+`BY_DEFAULT`; pickling keeps the field absent. The constructor stores both
+fields as given and validates nothing; decoding a template validates them.
+The other ENV_PARAMS fields of an Environment (`envParameterDefinitions`,
+`hostRequirements`, `enableIf`) have no getter and are not kept by pickling.
+
+### `EnvironmentActivation` (ENV_PARAMS)
+
+```python
+from openjd.model._v1.template import EnvironmentActivation
+
+EnvironmentActivation.ALWAYS      # every Session; cannot be declined or disabled
+EnvironmentActivation.BY_DEFAULT  # every Session, unless the Step declines it, its
+                                  #   enableIf is false, or it is superseded
+EnvironmentActivation.ON_REQUEST  # only Sessions of a Step that requests it
+a.name / a.value                  # "BY_DEFAULT" — the template spelling; eq, hash, pickle
 ```
 
 ### `EnvironmentScript` / `StepScript`
@@ -1082,9 +1144,17 @@ amt.max                         # Optional[FormatString]
 
 attr = hr.attributes[0]
 attr.name                       # FormatString — raw, may hold expressions
-attr.any_of                     # Optional[list[FormatString]] (alias: anyOf)
-attr.all_of                     # Optional[list[FormatString]] (alias: allOf)
+attr.any_of                     # Optional[list[FormatString] | FormatString] (alias: anyOf)
+attr.all_of                     # Optional[list[FormatString] | FormatString] (alias: allOf)
+TemplateAttributeRequirement(name=FormatString("attr.custom.x"),
+                             any_of=FormatString("{{Param.Archs}}"))
 ```
+
+`any_of` and `all_of` are a list, or one `FormatString` when the template
+writes the ENV_PARAMS `<ListExpressionString>` form (a string holding one
+`{{ }}` expression) in place of the list (§3.3.2). The constructor takes either
+form and raises `TypeError` for anything else. The job-side
+`AttributeRequirement.any_of` / `all_of` hold the resolved `list[str]`.
 
 `name` is `@fmtstring` (§3.3.1, §3.3.2): `"{{Param.FleetAttribute}}"` is a
 valid template-time name, and the §3.3.1.1 / §3.3.2.1 capability-name

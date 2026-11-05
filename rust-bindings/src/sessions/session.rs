@@ -498,8 +498,9 @@ impl PySession {
         })?;
         let rules: Vec<openjd_expr::path_mapping::PathMappingRule> =
             additional.into_iter().map(|p| p.inner).collect();
-        session.extend_path_mapping_rules(rules);
-        Ok(())
+        session
+            .extend_path_mapping_rules(rules)
+            .map_err(session_err_to_py)
     }
 
     // ── Non-blocking action methods ──

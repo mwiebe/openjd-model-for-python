@@ -101,6 +101,7 @@ EXPECTED_MODULES: dict[str, str] = {
     "TemplateCancelationMode": "openjd.model._v1.template",
     "TemplateEmbeddedFile": "openjd.model._v1.template",
     "TemplateEnvironment": "openjd.model._v1.template",
+    "EnvironmentActivation": "openjd.model._v1.template",
     "TemplateEnvironmentActions": "openjd.model._v1.template",
     "TemplateEnvironmentScript": "openjd.model._v1.template",
     "TemplateHostRequirements": "openjd.model._v1.template",

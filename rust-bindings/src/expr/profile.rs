@@ -15,7 +15,6 @@
 //! pattern.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
@@ -237,13 +236,18 @@ impl PyHostContext {
     /// host context (`apply_path_mapping` is registered, returns
     /// the path unchanged). Passing zero rules is *not* the same as
     /// passing no host context at all.
+    ///
+    /// Raises `ValueError` when a rule is invalid (a `source_path` that is
+    /// not absolute for its format, or a path longer than 32 KiB) or the
+    /// rules together pass the path mapper's size limit (30 MiB). The
+    /// message names the rule's position, e.g. `path mapping rule 1: ...`.
     #[classmethod]
-    fn with_rules(_cls: &Bound<'_, PyType>, rules: Vec<PyPathMappingRule>) -> Self {
+    fn with_rules(_cls: &Bound<'_, PyType>, rules: Vec<PyPathMappingRule>) -> PyResult<Self> {
         let rust_rules: Vec<openjd_expr::path_mapping::PathMappingRule> =
             rules.into_iter().map(|r| r.inner).collect();
-        Self {
-            inner: HostContext::WithRules(Arc::new(rust_rules)),
-        }
+        let inner = HostContext::with_rules(rust_rules)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(Self { inner })
     }
 
     /// Whether this host context registers any host-context
@@ -263,7 +267,7 @@ impl PyHostContext {
             HostContext::None => "HostContext.none()".to_string(),
             HostContext::Unresolved => "HostContext.unresolved()".to_string(),
             HostContext::WithRules(rules) => {
-                format!("HostContext.with_rules(<{} rule(s)>)", rules.len())
+                format!("HostContext.with_rules(<{} rule(s)>)", rules.rules().len())
             }
         }
     }
@@ -306,6 +310,7 @@ impl PyHostContext {
             HostContext::WithRules(rules) => {
                 let f = cls.getattr("with_rules")?;
                 let py_rules: Vec<PyPathMappingRule> = rules
+                    .rules()
                     .iter()
                     .cloned()
                     .map(|inner| PyPathMappingRule { inner })
@@ -328,8 +333,9 @@ fn host_context_eq(a: &HostContext, b: &HostContext) -> bool {
     match (a, b) {
         (HostContext::None, HostContext::None) => true,
         (HostContext::Unresolved, HostContext::Unresolved) => true,
-        (HostContext::WithRules(la), HostContext::WithRules(lb)) => {
+        (HostContext::WithRules(ma), HostContext::WithRules(mb)) => {
             // Compare rule-by-rule; `Arc` identity is irrelevant.
+            let (la, lb) = (ma.rules(), mb.rules());
             la.len() == lb.len()
                 && la.iter().zip(lb.iter()).all(|(ra, rb)| {
                     ra.source_path_format == rb.source_path_format
@@ -347,7 +353,8 @@ fn host_context_hash(hc: &HostContext) -> u64 {
     match hc {
         HostContext::None => 0u8.hash(&mut h),
         HostContext::Unresolved => 1u8.hash(&mut h),
-        HostContext::WithRules(rules) => {
+        HostContext::WithRules(mapper) => {
+            let rules = mapper.rules();
             2u8.hash(&mut h);
             (rules.len() as u64).hash(&mut h);
             for r in rules.iter() {

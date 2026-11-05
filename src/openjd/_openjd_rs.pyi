@@ -26,6 +26,7 @@ __all__ = [
     "EmbeddedFile",
     "Environment",
     "EnvironmentActions",
+    "EnvironmentActivation",
     "EnvironmentParameterValues",
     "EnvironmentRef",
     "EnvironmentScript",
@@ -1224,6 +1225,11 @@ class HostContext:
         host context (`apply_path_mapping` is registered, returns
         the path unchanged). Passing zero rules is *not* the same as
         passing no host context at all.
+
+        Raises `ValueError` when a rule is invalid (a `source_path` that is
+        not absolute for its format, or a path longer than 32 KiB) or the
+        rules together pass the path mapper's size limit (30 MiB). The
+        message names the rule's position, e.g. `path mapping rule 1: ...`.
         """
 
     def is_enabled(self) -> builtins.bool:
@@ -2093,7 +2099,16 @@ class PathMappingRule:
 
     def apply(
         self, *, path: builtins.str, output_format: typing.Optional[PathFormat] = None
-    ) -> tuple[builtins.bool, builtins.str]: ...
+    ) -> tuple[builtins.bool, builtins.str]:
+        r"""
+        Apply this rule alone to `path`. Returns `(True, mapped)` when the
+        rule matches and `(False, path)` otherwise.
+
+        Raises `ValueError` when the rule cannot be applied: its
+        `source_path` is not absolute for `source_path_format`, or a path is
+        longer than 32 KiB.
+        """
+
     def to_dict(self) -> builtins.dict[builtins.str, builtins.str]: ...
     @staticmethod
     def from_dict(d: dict) -> PathMappingRule: ...
@@ -3073,20 +3088,36 @@ class TemplateAttributeRequirement:
         """
 
     @property
-    def any_of(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    def any_of(self) -> typing.Optional[builtins.list[FormatString] | FormatString]:
+        r"""
+        The `anyOf` values: a list of `FormatString`s, or one `FormatString`
+        when the template writes the `ENV_PARAMS` `<ListExpressionString>`
+        form in place of the list (Template Schemas §3.3.2).
+        """
+
     @property
-    def anyOf(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    def anyOf(self) -> typing.Optional[builtins.list[FormatString] | FormatString]: ...
     @property
-    def all_of(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    def all_of(self) -> typing.Optional[builtins.list[FormatString] | FormatString]:
+        r"""
+        The `allOf` values, in the same forms as `any_of`.
+        """
+
     @property
-    def allOf(self) -> typing.Optional[builtins.list[FormatString]]: ...
+    def allOf(self) -> typing.Optional[builtins.list[FormatString] | FormatString]: ...
     def __new__(
         cls,
         *,
         name: FormatString,
-        any_of: typing.Optional[typing.Sequence[FormatString]] = None,
-        all_of: typing.Optional[typing.Sequence[FormatString]] = None,
-    ) -> TemplateAttributeRequirement: ...
+        any_of: typing.Optional[builtins.list[FormatString] | FormatString] = None,
+        all_of: typing.Optional[builtins.list[FormatString] | FormatString] = None,
+    ) -> TemplateAttributeRequirement:
+        r"""
+        `any_of` and `all_of` each take a list of `FormatString`s, or, for
+        the `ENV_PARAMS` `<ListExpressionString>` form (Template Schemas
+        §3.3.2), one `FormatString` written in place of the list.
+        """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -3143,6 +3174,30 @@ class TemplateEnvironment:
     def script(self) -> typing.Optional[TemplateEnvironmentScript]: ...
     @property
     def variables(self) -> typing.Optional[dict]: ...
+    @property
+    def activation(self) -> EnvironmentActivation:
+        r"""
+        Which Sessions enter this Environment (`ENV_PARAMS`, Template
+        Schemas §4 item 4), with the default applied: an Environment that
+        does not set `activation` is `EnvironmentActivation.BY_DEFAULT`.
+        """
+
+    @property
+    def exclusive_group(self) -> typing.Optional[builtins.str]:
+        r"""
+        The Environment's `exclusiveGroup` (`ENV_PARAMS`, Template Schemas
+        §4 item 7), or `None`. Of the Environments a Step's Sessions would
+        enter that share a group, only the first in the Job's Environment
+        order that is not disabled for the Step is entered; the others are
+        superseded for that Step.
+        """
+
+    @property
+    def exclusiveGroup(self) -> typing.Optional[builtins.str]:
+        r"""
+        camelCase alias for `exclusive_group`.
+        """
+
     def __new__(
         cls,
         *,
@@ -3150,7 +3205,16 @@ class TemplateEnvironment:
         description: typing.Optional[builtins.str] = None,
         script: typing.Optional[TemplateEnvironmentScript] = None,
         variables: typing.Optional[dict] = None,
-    ) -> TemplateEnvironment: ...
+        activation: typing.Optional[EnvironmentActivation] = None,
+        exclusive_group: typing.Optional[builtins.str] = None,
+    ) -> TemplateEnvironment:
+        r"""
+        `activation` and `exclusive_group` are the `ENV_PARAMS` fields of
+        Template Schemas §4 items 4 and 7. They are stored as given; nothing
+        here validates them (template validation does, when a template is
+        decoded).
+        """
+
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]: ...
 
@@ -3517,6 +3581,50 @@ class DocumentType(enum.Enum):
     def name(self) -> builtins.str:
         r"""
         Variant name as a string (e.g. `"YAML"`).
+        """
+
+    def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
+        r"""
+        Pickle support — round-trips through the variant name.
+        """
+
+@typing.final
+class EnvironmentActivation(enum.Enum):
+    r"""
+    Which Sessions of a Job enter an Environment (`ENV_PARAMS`, Template
+    Schemas §4 item 4). An Environment that does not set `activation` is
+    `BY_DEFAULT`.
+
+    - `ALWAYS`: every Session enters it. It cannot be disabled or declined:
+      its `enableIf` being `false` for a Step, or a Step's disabled
+      `environment:` entry for it, is an error.
+    - `BY_DEFAULT`: every Session enters it, except those of a Step that
+      declines it with a disabled `environment:` entry, for which its
+      `enableIf` is `false`, or for which an earlier Environment of its
+      `exclusiveGroup` supersedes it.
+    - `ON_REQUEST`: only the Sessions of a Step that requests it with an
+      enabled `environment:` entry enter it, less those for which its
+      `enableIf` is `false` or it is superseded.
+
+    `value` is the spelling a template uses (`"BY_DEFAULT"`).
+    """
+
+    ALWAYS = ...
+    BY_DEFAULT = ...
+    ON_REQUEST = ...
+
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        Variant name as a string (e.g. `"BY_DEFAULT"`).
+        """
+
+    @property
+    def value(self) -> builtins.str:
+        r"""
+        The value as a template writes it (`"ALWAYS"`, `"BY_DEFAULT"` or
+        `"ON_REQUEST"`); the same as `name`.
         """
 
     def __repr__(self) -> builtins.str: ...

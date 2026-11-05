@@ -39,6 +39,8 @@ from openjd._openjd_rs import (
     # Structural types with no name collision
     StepTemplate,
     SimpleAction,
+    # ENV_PARAMS: an Environment's ``activation`` (Template Schemas §4 item 4)
+    EnvironmentActivation,
     # JobParameterDefinition — 12 typed variants returned by
     # ``JobTemplate.parameter_definitions`` and
     # ``EnvironmentTemplate.parameter_definitions``.
@@ -109,6 +111,7 @@ __all__ = (
     "EmbeddedFile",
     "Environment",
     "EnvironmentActions",
+    "EnvironmentActivation",
     "EnvironmentScript",
     "HostRequirements",
     "SimpleAction",

@@ -186,6 +186,26 @@ with the error as `fail_message`, rather than leaving the previous action's
 status in place. `EnvironmentParameterValues` is re-exported from
 `openjd.sessions._v1`.
 
+A Job Environment that `Step.enters_environment` does not name is never
+entered or exited for that Step: one its `enableIf` disabled, one the Step
+declined (a disabled `environment:` entry for a `BY_DEFAULT` Environment), and
+one an earlier Environment of its `exclusiveGroup` superseded. The Step has
+no `environment_parameters` entry for any of them. The Session takes the
+Environments it is given and does not check this itself; the caller (the
+worker agent) chooses them from the Step.
+
+Path mapping rules are validated (openjd-sessions 0.8.2): the constructor
+and `extend_path_mapping_rules` raise `SessionError`
+(`openjd.sessions._v1.SessionRuntimeError`) for a rule whose `source_path` is
+not absolute for its format, or whose path is longer than 32 KiB, with the
+message `Invalid path mapping rules: path mapping rule <i>: <reason>`. A
+rejected constructor creates no session directory; a rejected extension leaves
+the rules unchanged. The rule with the longest matching `source_path`
+applies, and between rules for the same location the one given last wins, so
+a rule added by `extend_path_mapping_rules` takes precedence over an existing
+one. (Before, the rules were sorted by `source_path` length and the first of
+equal-length rules won.)
+
 `caller_limits` takes the same
 [`CallerLimits`](./python-model-interface.md#modelprofile--modelextension--specificationrevision--callerlimits--validationcontext)
 a submitting service passes to `decode_job_template` and `create_job`.
