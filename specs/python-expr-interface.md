@@ -367,9 +367,13 @@ HostContext.with_rules([]).is_unresolved()  # False — uses real implementation
 # with_rules validates the rules (openjd-expr 0.13 PathMapper) and raises
 # ValueError for an invalid one, naming its position:
 #   "path mapping rule 1: source_path 'rel' must be an absolute POSIX path, starting with '/'"
-# apply_path_mapping uses the rule with the longest matching source_path;
-# between rules for the same location, the one given last wins. (Before
-# 0.13, the first matching rule in the order given won.)
+# apply_path_mapping uses the matching rule whose source_path has the most
+# path names (a POSIX root counts as none, a drive or a URI's
+# scheme://authority as one, a UNC share as two; empty components and "."
+# are ignored, so "/a//b/" and "/a/b" are one location). Between rules for
+# the same location, the one given last wins, and between a POSIX and a
+# WINDOWS rule with the same number of names, the WINDOWS rule wins.
+# (Before 0.13, the first matching rule in the order given won.)
 
 # Inspecting a profile
 profile.revision      # ExprRevision.V2026_02
@@ -647,7 +651,8 @@ matched, result = rule.apply(path="/other/path")
 
 # A rule the openjd-expr PathMapper rejects can be constructed, but apply()
 # raises ValueError: a source_path that is not absolute for its format, or a
-# source_path or destination_path longer than 32 KiB.
+# source_path or destination_path longer than 32 KiB. (A path argument longer
+# than 32 KiB is not an error: no rule matches it.)
 PathMappingRule(source_path_format=PathFormat.POSIX, source_path="rel", destination_path="/d").apply(path="rel")
 # ValueError: source_path 'rel' must be an absolute POSIX path, starting with '/'
 

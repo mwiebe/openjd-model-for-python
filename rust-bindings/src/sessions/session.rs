@@ -119,7 +119,20 @@ struct StateSnapshot {
     environments_entered: Vec<String>,
     /// ENV_PARAMS values of each entered Environment that has them.
     environment_parameters: HashMap<String, EnvironmentParameterValues>,
+    /// The FAILED status reported for an action refused before it started,
+    /// with the session's action fingerprint at that point. The Rust
+    /// session never records a refused action, so a later refresh (from
+    /// `cleanup` or a `cancel_action` between actions) keeps this status
+    /// for as long as the session has run no other action.
+    refused_status: Option<(ActionFingerprint, ActionStatus)>,
 }
+
+/// What [`action_fingerprint`] returns.
+type ActionFingerprint = Option<(
+    openjd_sessions::action::ActionState,
+    Option<std::time::SystemTime>,
+    Option<std::time::SystemTime>,
+)>;
 
 /// Lock a mutex, recovering the guard even if a previous holder panicked.
 ///
@@ -163,13 +176,7 @@ fn failed_action_status(message: &str) -> ActionStatus {
 
 /// What identifies the session's latest action status: it changes whenever
 /// an action starts or ends.
-fn action_fingerprint(
-    session: &Session,
-) -> Option<(
-    openjd_sessions::action::ActionState,
-    Option<std::time::SystemTime>,
-    Option<std::time::SystemTime>,
-)> {
+fn action_fingerprint(session: &Session) -> ActionFingerprint {
     session
         .action_status()
         .map(|s| (s.state, s.started_at, s.ended_at))
@@ -309,7 +316,21 @@ impl PySession {
     ) {
         let mut snap = lock_recover(snapshot);
         snap.state = session.state();
-        snap.action_status = status_override.or_else(|| session.action_status());
+        let fingerprint = action_fingerprint(session);
+        snap.action_status = match status_override {
+            Some(status) => {
+                snap.refused_status = Some((fingerprint, status.clone()));
+                Some(status)
+            }
+            None => match snap.refused_status.take() {
+                // No action has run since the refusal: keep its status.
+                Some((refused_at, status)) if refused_at == fingerprint => {
+                    snap.refused_status = Some((refused_at, status.clone()));
+                    Some(status)
+                }
+                _ => session.action_status(),
+            },
+        };
         snap.environments_entered = session.environments_entered().to_vec();
         snap.environment_parameters = session
             .environments_entered()
@@ -385,6 +406,7 @@ impl PySession {
             action_status: None,
             environments_entered: vec![],
             environment_parameters: HashMap::new(),
+            refused_status: None,
         }));
         let snapshot_for_cb = snapshot.clone();
         let callback = Box::new(move |_session_id: &str, status: &ActionStatus| {
@@ -476,8 +498,16 @@ impl PySession {
 
     /// Extend the session's path mapping rules with additional rules.
     ///
-    /// Rules are stored sorted by source-path length (longest first) so that
-    /// the most specific rule matches first during FormatString resolution.
+    /// The rules keep their order. The matching rule whose `source_path` has
+    /// the most path names applies, and between rules for the same location
+    /// the one given last wins, so an added rule takes precedence over an
+    /// existing one.
+    ///
+    /// Raises `SessionError` (`Invalid path mapping rules: path mapping rule
+    /// <i>: ...`, counting the existing rules first) and leaves the rules
+    /// unchanged when an added rule is invalid: a `source_path` that is not
+    /// absolute for its format, or a `source_path` or `destination_path`
+    /// longer than 32 KiB.
     ///
     /// Consumers (notably the Deadline Cloud worker agent's Job Attachments
     /// download action) call this after an action assigns additional path

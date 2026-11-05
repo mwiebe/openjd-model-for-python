@@ -742,6 +742,27 @@ class TestHostContextWithRules:
         assert hash(a) != hash(HostContext.with_rules([self._rule("/b")]))
         assert hash(a) != hash(HostContext.with_rules([]))
 
+    @pytest.mark.parametrize(
+        "a, b",
+        [
+            ((PathFormat.POSIX, "/s"), (PathFormat.POSIX, "/t")),
+            # "//srv/share" is absolute for both formats (a UNC share for WINDOWS).
+            ((PathFormat.POSIX, "//srv/share"), (PathFormat.WINDOWS, "//srv/share")),
+        ],
+        ids=["source_path", "source_path_format"],
+    )
+    def test_eq_and_hash_read_every_field(
+        self, a: tuple[PathFormat, str], b: tuple[PathFormat, str]
+    ) -> None:
+        def ctx(fmt: PathFormat, src: str) -> HostContext:
+            return HostContext.with_rules(
+                [PathMappingRule(source_path_format=fmt, source_path=src, destination_path="/d")]
+            )
+
+        assert ctx(*a) == ctx(*a) and hash(ctx(*a)) == hash(ctx(*a))
+        assert ctx(*a) != ctx(*b)
+        assert hash(ctx(*a)) != hash(ctx(*b))
+
     def test_repr_counts_the_rules(self) -> None:
         hc = HostContext.with_rules([self._rule("/a"), self._rule("/b")])
         assert repr(hc) == "HostContext.with_rules(<2 rule(s)>)"

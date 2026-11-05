@@ -197,14 +197,29 @@ worker agent) chooses them from the Step.
 Path mapping rules are validated (openjd-sessions 0.8.2): the constructor
 and `extend_path_mapping_rules` raise `SessionError`
 (`openjd.sessions._v1.SessionRuntimeError`) for a rule whose `source_path` is
-not absolute for its format, or whose path is longer than 32 KiB, with the
-message `Invalid path mapping rules: path mapping rule <i>: <reason>`. A
-rejected constructor creates no session directory; a rejected extension leaves
-the rules unchanged. The rule with the longest matching `source_path`
-applies, and between rules for the same location the one given last wins, so
-a rule added by `extend_path_mapping_rules` takes precedence over an existing
-one. (Before, the rules were sorted by `source_path` length and the first of
-equal-length rules won.)
+not absolute for its format, or whose `source_path` or `destination_path` is
+longer than 32 KiB, with the message
+`Invalid path mapping rules: path mapping rule <i>: <reason>`. For
+`extend_path_mapping_rules`, `<i>` counts the existing rules first, so the
+first added rule is `len(existing)`. A rejected constructor creates no
+session directory; a rejected extension leaves the rules unchanged. The
+matching rule whose `source_path` has the most path names applies (see
+`PathMappingRule` in the expr interface); between rules for the same
+location the one given last wins, so a rule added by
+`extend_path_mapping_rules` takes precedence over an existing one. (Before,
+the rules were sorted by `source_path` length and the first of equal-length
+rules won.)
+
+The pure-Python `openjd.sessions` Session (v0) is unchanged, but it passes
+its rules to `openjd.expr.HostContext.with_rules` to evaluate EXPR
+expressions, so two of these changes reach it through the dependency:
+
+- A v0 Session that holds a rule openjd-expr rejects (v0 accepts a relative
+  `PurePosixPath`, for example) now fails every action that evaluates an
+  EXPR expression, with the `path mapping rule <i>: ...` reason in the
+  message, whether or not the expression calls `apply_path_mapping`.
+- With two rules for the same location, v0 maps PATH parameter values with
+  the first and EXPR `apply_path_mapping()` now uses the last.
 
 `caller_limits` takes the same
 [`CallerLimits`](./python-model-interface.md#modelprofile--modelextension--specificationrevision--callerlimits--validationcontext)
