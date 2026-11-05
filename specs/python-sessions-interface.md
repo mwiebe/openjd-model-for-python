@@ -187,7 +187,11 @@ status in place. The same holds for `exit_environment` (an unknown
 identifier), `run_task` and `run_subprocess` (for example a symbol table that
 cannot be built, such as a PATH value longer than 32 KiB, or a session that
 is not `READY`). The `FAILED` status stays until the session runs another
-action, including after `cleanup()` or a `cancel_action()` between actions. `EnvironmentParameterValues` is re-exported from
+action, including after `cleanup()` or a `cancel_action()` between actions.
+An action that ran and failed (an `onEnter`, `onExit` or task command that
+exits non-zero) keeps the session's own status, with its exit code. An enter that fails because one of the
+Environment's `variables` cannot be resolved ends `FAILED`, but openjd-rs
+leaves the Environment entered, so it must still be exited. `EnvironmentParameterValues` is re-exported from
 `openjd.sessions._v1`.
 
 A Job Environment that `Step.enters_environment` does not name is never

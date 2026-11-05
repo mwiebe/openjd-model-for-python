@@ -655,6 +655,23 @@ class TestInvalidRules:
             "destination_path is 40000 bytes long, more than the limit of 32768 bytes"
         )
 
+    def test_apply_rejects_an_overlong_source(self) -> None:
+        rule = PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="/" * 40000, destination_path="/d"
+        )
+        with pytest.raises(ValueError) as exc:
+            rule.apply(path="/s/a")
+        assert str(exc.value) == (
+            "source_path is 40000 bytes long, more than the limit of 32768 bytes"
+        )
+
+    def test_an_overlong_path_matches_no_rule(self) -> None:
+        rule = PathMappingRule(
+            source_path_format=PathFormat.POSIX, source_path="/s", destination_path="/d"
+        )
+        path = "/s/" + "a" * 40000
+        assert rule.apply(path=path) == (False, path)
+
     def test_host_context_names_the_rule(self) -> None:
         good = PathMappingRule(
             source_path_format=PathFormat.POSIX, source_path="/s", destination_path="/d"

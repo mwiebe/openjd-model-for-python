@@ -715,7 +715,8 @@ step.environment_parameters # Optional[list[EnvironmentParameterValues]] — one
 step.environment_parameters_for(environment, document=None)  # Optional[EnvironmentParameterValues]
 step.enters_environment(environment, document=None)          # bool; True for any name when
                                                              #   environments is None
-step.same_environments(other)        # bool — §3.2.2 first condition
+step.same_environments(other)        # bool — same Job Environments (How Jobs Are Run,
+                                     #   Environment Parameters: Session sharing)
 step.environment_values_equal(other) # bool — §3.2.2 value equality
 ```
 

@@ -236,12 +236,12 @@ fn run_action<F>(
             // the action FAILED and drop out of RUNNING so the poller
             // delivers a terminal callback instead of hanging.
             {
+                // Kept like a refusal: the Rust session records nothing.
+                let failed = failed_action_status(&format!("failed to start action runtime: {e}"));
                 let mut snap = lock_recover(&snapshot);
                 snap.state = SessionState::Ready;
-                snap.action_status = Some(failed_action_status(&format!(
-                    "failed to start action runtime: {e}"
-                )));
-                snap.refused_status = None;
+                snap.action_status = Some(failed.clone());
+                snap.refused_status = Some((action_fingerprint(&session), failed));
             }
             *lock_recover(&session_arc) = Some(session);
             return;
@@ -284,13 +284,18 @@ fn run_action<F>(
             // would leave the Python poller waiting forever. Force a
             // terminal FAILED status and drop out of RUNNING, mirroring the
             // runtime-build-failure branch above.
-            let mut snap = lock_recover(&snapshot);
-            snap.state = SessionState::Ready;
-            snap.action_status = Some(failed_action_status(&format!(
+            // Kept like a refusal, so a later refresh does not show the
+            // session's own status (stale, or the panicked action's
+            // RUNNING) in its place.
+            let failed = failed_action_status(&format!(
                 "action panicked during execution: {}",
                 panic_detail(payload.as_ref())
-            )));
-            snap.refused_status = None;
+            ));
+            let fingerprint = guard.as_ref().and_then(action_fingerprint);
+            let mut snap = lock_recover(&snapshot);
+            snap.state = SessionState::Ready;
+            snap.action_status = Some(failed.clone());
+            snap.refused_status = Some((fingerprint, failed));
         }
     }
 }
