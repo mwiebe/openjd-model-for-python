@@ -183,7 +183,11 @@ raises `SessionError` before anything runs. Any other refusal before the
 action starts (a values table that cannot be bound, a duplicate identifier,
 a second wrap Environment, a session not `READY`) ends the action `FAILED`
 with the error as `fail_message`, rather than leaving the previous action's
-status in place. `EnvironmentParameterValues` is re-exported from
+status in place. The same holds for `exit_environment` (an unknown
+identifier), `run_task` and `run_subprocess` (for example a symbol table that
+cannot be built, such as a PATH value longer than 32 KiB, or a session that
+is not `READY`). The `FAILED` status stays until the session runs another
+action, including after `cleanup()` or a `cancel_action()` between actions. `EnvironmentParameterValues` is re-exported from
 `openjd.sessions._v1`.
 
 A Job Environment that `Step.enters_environment` does not name is never
@@ -199,7 +203,8 @@ and `extend_path_mapping_rules` raise `SessionError`
 (`openjd.sessions._v1.SessionRuntimeError`) for a rule whose `source_path` is
 not absolute for its format, or whose `source_path` or `destination_path` is
 longer than 32 KiB, with the message
-`Invalid path mapping rules: path mapping rule <i>: <reason>`. For
+`Invalid path mapping rules: path mapping rule <i>: <reason>`, and for rules
+that together pass the path mapper's size limit (30 MiB). For
 `extend_path_mapping_rules`, `<i>` counts the existing rules first, so the
 first added rule is `len(existing)`. A rejected constructor creates no
 session directory; a rejected extension leaves the rules unchanged. The
@@ -212,7 +217,9 @@ rules won.)
 
 The pure-Python `openjd.sessions` Session (v0) is unchanged, but it passes
 its rules to `openjd.expr.HostContext.with_rules` to evaluate EXPR
-expressions, so two of these changes reach it through the dependency:
+expressions, so changes in openjd-expr reach it through the dependency.
+These two are confirmed (others, such as the 50,000-run cap on range
+expressions, may reach it the same way):
 
 - A v0 Session that holds a rule openjd-expr rejects (v0 accepts a relative
   `PurePosixPath`, for example) now fails every action that evaluates an

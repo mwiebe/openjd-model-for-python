@@ -291,8 +291,12 @@ impl PyEnvironmentParameterValues {
 
 // ── StepDisabledEnvironments ──
 
-/// The Environments an ``enableIf`` on the Environment disabled for one
-/// Step, for display.
+/// The Environments disabled for one Step, for display: those their own
+/// ``enableIf`` disabled, and, for a Job Environment, those an earlier
+/// Environment of its ``exclusiveGroup`` superseded (Template Schemas §4
+/// item 7). openjd-rs does not record which of the two applied. A
+/// ``BY_DEFAULT`` Environment the Step declined with a disabled
+/// ``environment:`` entry is not listed.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
     module = "openjd.model._v1.job",
@@ -377,7 +381,9 @@ impl PyCreatedJob {
         self.inner.warnings.iter().map(|w| w.to_string()).collect()
     }
 
-    /// Per Step of ``job``, index for index.
+    /// Per Step of ``job``, index for index, the Environments disabled for
+    /// that Step: by their ``enableIf``, or superseded within their
+    /// ``exclusiveGroup``.
     #[getter]
     fn disabled_environments(&self) -> Vec<PyStepDisabledEnvironments> {
         self.inner

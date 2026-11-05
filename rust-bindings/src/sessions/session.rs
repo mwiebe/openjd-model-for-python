@@ -176,6 +176,24 @@ fn failed_action_status(message: &str) -> ActionStatus {
 
 /// What identifies the session's latest action status: it changes whenever
 /// an action starts or ends.
+/// The message to report as a FAILED status for an action that `result`
+/// shows was refused before it started: an error, with the session's action
+/// fingerprint still `before` (InvalidState, MultipleWrapEnvironments,
+/// InvalidEnvironmentParameters, DuplicateEnvironment, an unknown
+/// Environment identifier, a symbol table that cannot be built, ...). The
+/// session's own status is then still the previous action's. `None` when
+/// the action ran, whether it succeeded or failed.
+fn refusal<T>(
+    session: &Session,
+    before: &ActionFingerprint,
+    result: Result<T, openjd_sessions::error::SessionError>,
+) -> Option<String> {
+    match result {
+        Err(e) if action_fingerprint(session) == *before => Some(e.to_string()),
+        _ => None,
+    }
+}
+
 fn action_fingerprint(session: &Session) -> ActionFingerprint {
     session
         .action_status()
@@ -223,6 +241,7 @@ fn run_action<F>(
                 snap.action_status = Some(failed_action_status(&format!(
                     "failed to start action runtime: {e}"
                 )));
+                snap.refused_status = None;
             }
             *lock_recover(&session_arc) = Some(session);
             return;
@@ -271,6 +290,7 @@ fn run_action<F>(
                 "action panicked during execution: {}",
                 panic_detail(payload.as_ref())
             )));
+            snap.refused_status = None;
         }
     }
 }
@@ -506,8 +526,9 @@ impl PySession {
     /// Raises `SessionError` (`Invalid path mapping rules: path mapping rule
     /// <i>: ...`, counting the existing rules first) and leaves the rules
     /// unchanged when an added rule is invalid: a `source_path` that is not
-    /// absolute for its format, or a `source_path` or `destination_path`
-    /// longer than 32 KiB.
+    /// absolute for its format, a `source_path` or `destination_path`
+    /// longer than 32 KiB, or rules that together pass the path mapper's
+    /// size limit (30 MiB).
     ///
     /// Consumers (notably the Deadline Cloud worker agent's Job Attachments
     /// download action) call this after an action assigns additional path
@@ -617,14 +638,7 @@ impl PySession {
                     Some(&env_id),
                     env_ref,
                 ));
-                match result {
-                    // Refused before any action ran (InvalidState,
-                    // MultipleWrapEnvironments, InvalidEnvironmentParameters,
-                    // DuplicateEnvironment, ...): the session's status is
-                    // still the previous action's.
-                    Err(e) if action_fingerprint(session) == before => Some(e.to_string()),
-                    _ => None,
-                }
+                refusal(session, &before, result)
             });
         });
 
@@ -661,13 +675,14 @@ impl PySession {
         std::thread::spawn(move || {
             run_action(session, session_arc, snapshot, move |rt, session| {
                 let env_ref = os_env_vars.as_ref();
-                let _ = rt.block_on(session.exit_environment(
+                let before = action_fingerprint(session);
+                let result = rt.block_on(session.exit_environment(
                     &identifier,
                     resolved.as_ref(),
                     keep_session_running,
                     env_ref,
                 ));
-                None
+                refusal(session, &before, result)
             });
         });
 
@@ -715,14 +730,15 @@ impl PySession {
             run_action(session, session_arc, snapshot, move |rt, session| {
                 let env_ref = os_env_vars.as_ref();
                 let task_ref = task_params.as_ref();
-                let _ = rt.block_on(session.run_task(
+                let before = action_fingerprint(session);
+                let result = rt.block_on(session.run_task(
                     &step_name,
                     &script,
                     task_ref,
                     resolved.as_ref(),
                     env_ref,
                 ));
-                None
+                refusal(session, &before, result)
             });
         });
 
@@ -761,7 +777,8 @@ impl PySession {
                 let env_ref = os_env_vars.as_ref();
                 let args_ref = args.as_deref();
                 let banner_ref = log_banner_message.as_deref();
-                let _ = rt.block_on(session.run_subprocess(
+                let before = action_fingerprint(session);
+                let result = rt.block_on(session.run_subprocess(
                     &command,
                     args_ref,
                     duration,
@@ -769,7 +786,7 @@ impl PySession {
                     use_session_env_vars,
                     banner_ref,
                 ));
-                None
+                refusal(session, &before, result)
             });
         });
 

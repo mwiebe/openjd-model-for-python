@@ -172,15 +172,20 @@ class TestTemplateEnvironmentFields:
         assert env.activation == EnvironmentActivation.BY_DEFAULT
         assert env.exclusive_group is None
 
-    def test_constructor_and_pickle(self) -> None:
-        env = TemplateEnvironment(
-            name="X", activation=EnvironmentActivation.ON_REQUEST, exclusive_group="G"
-        )
-        assert env.activation == EnvironmentActivation.ON_REQUEST
+    @pytest.mark.parametrize("member", ["ALWAYS", "BY_DEFAULT", "ON_REQUEST"])
+    def test_constructor_and_pickle(self, member: str) -> None:
+        activation = getattr(EnvironmentActivation, member)
+        env = TemplateEnvironment(name="X", activation=activation, exclusive_group="G")
+        assert env.activation == activation
         assert env.exclusive_group == "G"
+        assert env.__reduce__()[1][1] == {
+            "name": "X",
+            "activation": activation,
+            "exclusive_group": "G",
+        }
         copy = pickle.loads(pickle.dumps(env))
         assert copy.name == "X"
-        assert copy.activation == EnvironmentActivation.ON_REQUEST
+        assert copy.activation == activation
         assert copy.exclusive_group == "G"
 
     def test_absent_activation_stays_absent_through_pickle(self) -> None:
@@ -530,7 +535,15 @@ class TestAttributeValues:
         assert isinstance(copy.all_of, FormatString)
         assert copy.all_of.raw() == "{{Env.Param.X}}"
         copy = pickle.loads(pickle.dumps(listed))
+        assert isinstance(copy.anyOf, list)
         assert [v.raw() for v in copy.anyOf] == ["a", "b"]
+        any_expr = TemplateAttributeRequirement(
+            name=FormatString("attr.custom.x"), any_of=FormatString("{{Param.Archs}}")
+        )
+        copy = pickle.loads(pickle.dumps(any_expr))
+        assert isinstance(copy.any_of, FormatString)
+        assert copy.any_of.raw() == "{{Param.Archs}}"
+        assert copy.all_of is None
 
     @pytest.mark.parametrize("value", ["a", 3, [FormatString("a"), "b"]])
     def test_constructor_rejects_other_types(self, value: Any) -> None:
