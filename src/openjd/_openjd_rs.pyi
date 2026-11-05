@@ -486,7 +486,9 @@ class CreatedJob:
     @property
     def disabled_environments(self) -> builtins.list[StepDisabledEnvironments]:
         r"""
-        Per Step of ``job``, index for index.
+        Per Step of ``job``, index for index, the Environments disabled for
+        that Step: by their ``enableIf``, or superseded within their
+        ``exclusiveGroup``.
         """
 
     def __repr__(self) -> builtins.str: ...
@@ -2391,8 +2393,9 @@ class Session:
         Raises `SessionError` (`Invalid path mapping rules: path mapping rule
         <i>: ...`, counting the existing rules first) and leaves the rules
         unchanged when an added rule is invalid: a `source_path` that is not
-        absolute for its format, or a `source_path` or `destination_path`
-        longer than 32 KiB.
+        absolute for its format, a `source_path` or `destination_path`
+        longer than 32 KiB, or rules that together pass the path mapper's
+        size limit (30 MiB).
 
         Consumers (notably the Deadline Cloud worker agent's Job Attachments
         download action) call this after an action assigns additional path
@@ -2663,8 +2666,12 @@ class StepDependencyNode:
 @typing.final
 class StepDisabledEnvironments:
     r"""
-    The Environments an ``enableIf`` on the Environment disabled for one
-    Step, for display.
+    The Environments disabled for one Step, for display: those their own
+    ``enableIf`` disabled, and, for a Job Environment, those an earlier
+    Environment of its ``exclusiveGroup`` superseded (Template Schemas §4
+    item 7). openjd-rs does not record which of the two applied. A
+    ``BY_DEFAULT`` Environment the Step declined with a disabled
+    ``environment:`` entry is not listed.
     """
 
     @property
@@ -3363,8 +3370,10 @@ class TemplateStepDependency:
     @property
     def environment(self) -> typing.Optional[builtins.str]:
         r"""
-        ``ENV_PARAMS``: the Environment an ``environment:`` entry requests,
-        or ``None`` for a Step entry.
+        ``ENV_PARAMS``: the Environment an ``environment:`` entry names, or
+        ``None`` for a Step entry. An enabled entry requests it; a disabled
+        one declines a ``BY_DEFAULT`` Environment. The entry's ``enableIf``
+        and ``parameters`` are not exposed.
         """
 
     @property

@@ -1464,8 +1464,10 @@ impl PyStepDependency {
         self.depends_on()
     }
 
-    /// ``ENV_PARAMS``: the Environment an ``environment:`` entry requests,
-    /// or ``None`` for a Step entry.
+    /// ``ENV_PARAMS``: the Environment an ``environment:`` entry names, or
+    /// ``None`` for a Step entry. An enabled entry requests it; a disabled
+    /// one declines a ``BY_DEFAULT`` Environment. The entry's ``enableIf``
+    /// and ``parameters`` are not exposed.
     #[getter]
     fn environment(&self) -> Option<&str> {
         self.inner.environment()

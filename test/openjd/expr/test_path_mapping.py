@@ -680,9 +680,9 @@ class TestInvalidRules:
 
 
 class TestRulePrecedence:
-    """openjd-expr 0.13: the rule with the longest matching ``source_path``
-    applies; between rules for the same location, the one given last wins.
-    Before, the first matching rule in the order given won."""
+    """openjd-expr 0.13: the matching rule whose ``source_path`` has the most
+    path names applies; between rules for the same location, the one given
+    last wins. Before, the first matching rule in the order given won."""
 
     @staticmethod
     def _map(rules: list, path: str) -> str:
@@ -705,7 +705,7 @@ class TestRulePrecedence:
         ]
         assert self._map(rules, "/s/x/f") == expected
 
-    def test_longest_source_wins_whatever_the_order(self) -> None:
+    def test_most_path_names_wins_whatever_the_order(self) -> None:
         short = PathMappingRule(
             source_path_format=PathFormat.POSIX, source_path="/s", destination_path="/a"
         )
@@ -714,6 +714,30 @@ class TestRulePrecedence:
         )
         for rules in ([short, long], [long, short]):
             assert self._map(rules, "/s/x/f") == "/c/f"
+
+    def test_path_names_not_string_length(self) -> None:
+        # "/s//x" and "/s/x" are the same location (two names), so the last
+        # given wins; a longer string with fewer names loses.
+        same = [
+            PathMappingRule(
+                source_path_format=PathFormat.POSIX, source_path="/s//x", destination_path="/a"
+            ),
+            PathMappingRule(
+                source_path_format=PathFormat.POSIX, source_path="/s/x", destination_path="/b"
+            ),
+        ]
+        assert self._map(same, "/s/x/f") == "/b/f"
+        fewer_names = [
+            PathMappingRule(
+                source_path_format=PathFormat.POSIX,
+                source_path="/s////////////",
+                destination_path="/long",
+            ),
+            PathMappingRule(
+                source_path_format=PathFormat.POSIX, source_path="/s/x", destination_path="/deep"
+            ),
+        ]
+        assert self._map(fewer_names, "/s/x/f") == "/deep/f"
 
 
 class TestHostContextWithRules:

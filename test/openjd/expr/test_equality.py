@@ -148,7 +148,7 @@ class TestHostContextEquality:
 
     def test_with_rules_order_significant(self) -> None:
         # Rule order *does* matter for path-mapping resolution
-        # (longest-source-first is the documented contract), so
+        # (between rules for the same location the last one wins), so
         # equality treats the list as ordered, not as a set.
         a = HostContext.with_rules([_rule("/a", "/A"), _rule("/b", "/B")])
         b = HostContext.with_rules([_rule("/b", "/B"), _rule("/a", "/A")])
