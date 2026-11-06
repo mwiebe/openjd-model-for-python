@@ -538,7 +538,29 @@ class TestValidationContext:
             "max_eval_memory_bytes=None, max_eval_operations=None))"
         )
 
-    def test_create_job_with_environment_templates_uses_the_callers_context(self) -> None:
+    def test_create_job_with_environment_templates_applies_the_callers_limits(self) -> None:
+        jt = _job_template(
+            {
+                "specificationVersion": "jobtemplate-2023-09",
+                "extensions": _EXTS,
+                "name": "Limits",
+                "steps": [{"name": "S", "script": _echo("sixteen-chars-xx")}],
+            }
+        )
+        ctx = ValidationContext(jt.profile, caller_limits=CallerLimits(max_resolved_arg_len=5))
+        with pytest.raises(ModelValidationError) as exc:
+            create_job_with_environment_templates(
+                job_template=jt, job_parameter_values={}, validation_context=ctx
+            )
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "steps[0] -> script -> actions -> onRun -> args[0]:\n"
+            "\tis 16 characters, exceeding the maximum of 5."
+        )
+        # Without the limit the same Job is created.
+        create_job_with_environment_templates(job_template=jt, job_parameter_values={})
+
+    def test_create_job_with_environment_templates_uses_the_callers_profile(self) -> None:
         jt = _job_template()
         with pytest.raises(ModelValidationError) as exc:
             create_job_with_environment_templates(
@@ -793,12 +815,29 @@ class TestDiscardedHostRequirements:
             },
             supported_extensions=_FB1,
         )
-        return create_job_with_environment_templates(job_template=jt, job_parameter_values={})
+        att = _discard_env("Att", "Size")
+        # Its attribute is written with allOf, the other form §3.3 discards.
+        att["hostRequirements"]["attributes"][0] = {
+            "name": "attr.custom.att",
+            "allOf": "{{ ['v'] if Env.Param.Size > 0 else None }}",
+        }
+        et = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "extensions": _FB1,
+                "environment": att,
+            },
+            supported_extensions=_FB1,
+        )
+        return create_job_with_environment_templates(
+            job_template=jt, job_parameter_values={}, environment_templates=[et]
+        )
 
     def test_per_step_own_first_then_each_environment_in_job_order_amounts_first(
         self,
     ) -> None:
         created = self._created()
+        att = EnvironmentRef(document=Document.environment_template(0), environment="Att")
         lic = EnvironmentRef(document=Document.job_template(), environment="Lic")
         gpu = EnvironmentRef(document=Document.job_template(), environment="Gpu")
         amount, attribute = HostRequirementKind.AMOUNT, HostRequirementKind.ATTRIBUTE
@@ -809,12 +848,16 @@ class TestDiscardedHostRequirements:
             [
                 (None, amount, "amount.custom.own"),
                 (None, attribute, "attr.custom.a"),
+                (att, amount, "amount.custom.att"),
+                (att, attribute, "attr.custom.att"),
                 (lic, amount, "amount.custom.lic"),
                 (lic, attribute, "attr.custom.lic"),
                 (gpu, amount, "amount.custom.gpu"),
                 (gpu, attribute, "attr.custom.gpu"),
             ],
             [
+                (att, amount, "amount.custom.att"),
+                (att, attribute, "attr.custom.att"),
                 (gpu, amount, "amount.custom.gpu"),
                 (gpu, attribute, "attr.custom.gpu"),
             ],
@@ -829,7 +872,7 @@ class TestDiscardedHostRequirements:
         assert [a.name for a in t.host_requirements.attributes or []] == ["attr.custom.lic"]
 
     def test_repr_and_equality(self) -> None:
-        own, _, lic = self._created().discarded_host_requirements[0][:3]
+        own, _, att, _, lic = self._created().discarded_host_requirements[0][:5]
         assert repr(own) == (
             "DiscardedHostRequirement(environment=None, kind=HostRequirementKind.AMOUNT, "
             'name="amount.custom.own")'
@@ -838,6 +881,11 @@ class TestDiscardedHostRequirements:
             "DiscardedHostRequirement(environment=EnvironmentRef("
             'document=Document.job_template(), environment="Lic"), '
             'kind=HostRequirementKind.AMOUNT, name="amount.custom.lic")'
+        )
+        assert repr(att) == (
+            "DiscardedHostRequirement(environment=EnvironmentRef("
+            'document=Document.environment_template(0), environment="Att"), '
+            'kind=HostRequirementKind.AMOUNT, name="amount.custom.att")'
         )
         assert isinstance(own, DiscardedHostRequirement)
         assert own == self._created().discarded_host_requirements[0][0]
