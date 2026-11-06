@@ -68,7 +68,7 @@ canonical location.
 |---|---|
 | `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `create_job_with_environment_templates`, `check_environment_templates`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `evaluate_let_bindings`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), the Rust pyclass enums `SpecificationRevision` and `TemplateSpecificationVersion` (re-exported from `openjd._openjd_rs`; behave like `str`-Enums with lowercase variant names — see their dedicated sections below), and the capability-validation helpers (`validate_amount_capability_name`, `validate_attribute_capability_name`, `standard_amount_capability_names`, `standard_attribute_capability_names`, `standard_attribute_capabilities`). **Explicitly NOT exposed at v1**: the v0 names `ParameterValue`, `ParameterValueType`, `ValueReferenceConstants`, `CancelationMethodTerminate`, `CancelationMethodNotifyThenTerminate`, `CompatibilityError`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`, `FormatStringError`, `RevisionExtensions`, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`). Use the canonical locations: `openjd.model._v1.types` (parameter types/values, `JobParameterValue`/`TaskParameterValue`, `JobParameterType`/`TaskParameterType`); `openjd.model._v1.template` / `openjd.model._v1.job` (structural pyclasses, `EmbeddedFile`, `StepDependencyEdge`); `openjd.model._v1.errors` (`DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`); and `openjd.expr` (expression-layer types). For revision/extensions information, use `ModelProfile.from_strings(revision, extensions)` directly — `RevisionExtensions` was a v0 wrapper that no longer has a v1 counterpart. The `openjd.model._v1.v2023_09` submodule is also gone — it was a v0-shaped per-revision compat shim with no Rust-API counterpart; structural pyclasses live in their canonical submodules (`_v1.template`, `_v1.job`, `_v1.types`, `_v1.errors`) and revision is a property of types, not a namespace. |
 | `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the 12 typed job-parameter-definition variants (`JobStringParameterDefinition`, `JobIntParameterDefinition`, `JobFloatParameterDefinition`, `JobPathParameterDefinition`, `JobBoolParameterDefinition`, `JobRangeExprParameterDefinition`, `JobListStringParameterDefinition`, `JobListPathParameterDefinition`, `JobListIntParameterDefinition`, `JobListFloatParameterDefinition`, `JobListBoolParameterDefinition`, `JobListListIntParameterDefinition`), the typed task-parameter-definition variants, the `*UserInterface` pyclasses, and the ENV_PARAMS enum `EnvironmentActivation`. |
-| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, the job-time `EmbeddedFile`, and the ENV_PARAMS types `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`. |
+| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, the job-time `EmbeddedFile`, and the ENV_PARAMS types `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`, `DiscardedHostRequirement`, `HostRequirementKind`. |
 | `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `JobParameterValue`, `TaskParameterType`, `TaskParameterValue`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision`, `TemplateSpecificationVersion`, `CallerLimits`, `ValidationContext`. |
 | `openjd.model._v1.errors` | Exception classes raised by decode/create paths: `DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`. |
 
@@ -384,7 +384,8 @@ discarded has `host_requirements` `None`, the same as one that declares none.
 from openjd.model._v1.job import HostRequirementKind
 created.discarded_host_requirements[0]
 # [DiscardedHostRequirement(environment=None, kind=HostRequirementKind.ATTRIBUTE, name="attr.custom.a"),
-#  DiscardedHostRequirement(environment="Lic", kind=HostRequirementKind.AMOUNT, name="amount.custom.seats")]
+#  DiscardedHostRequirement(environment=EnvironmentRef(document=Document.job_template(), environment="Lic"),
+#                           kind=HostRequirementKind.AMOUNT, name="amount.custom.seats")]
 ```
 
 PATH and LIST[PATH] Environment parameter values are used as given (Template
@@ -744,7 +745,7 @@ step.environment_values_equal(other) # bool — §3.2.2 value equality
 
 `document` defaults to `Document.job_template()`.
 
-### ENV_PARAMS job types: `Document` / `EnvironmentRef` / `EnvironmentParameterValues` / `CreatedJob` / `StepDisabledEnvironments`
+### ENV_PARAMS job types: `Document` / `EnvironmentRef` / `EnvironmentParameterValues` / `CreatedJob` / `StepDisabledEnvironments` / `DiscardedHostRequirement` / `HostRequirementKind`
 
 All live in `openjd.model._v1.job` and are frozen.
 
@@ -767,7 +768,15 @@ epv.to_json_str() / EnvironmentParameterValues.from_json_str(text)
 StepDisabledEnvironments.environments       # list[EnvironmentRef] its enableIf disabled or
                                             #   an earlier one of its exclusiveGroup superseded
 StepDisabledEnvironments.step_environments  # list[str] Step Environments its enableIf disabled
+
+DiscardedHostRequirement.environment  # Optional[EnvironmentRef]; None for the Step's own
+DiscardedHostRequirement.kind         # HostRequirementKind.AMOUNT | HostRequirementKind.ATTRIBUTE
+DiscardedHostRequirement.name         # str, the resolved capability name
+HostRequirementKind.AMOUNT.name       # "AMOUNT"; eq, hash, pickle
 ```
+
+`DiscardedHostRequirement` is equal when environment, kind and name are equal;
+it is neither hashable nor pickleable, as in openjd-rs.
 
 `EnvironmentParameterValues` is equal when document, environment, and the
 transport table are equal; pickles through `to_json_str`. `Document` and
@@ -1925,6 +1934,8 @@ original.
 | ``TaskChunksDefinition`` | constructor arguments (three fields) |
 | ``SpecificationRevision`` | variant name (``v2023_09``) |
 | ``TemplateSpecificationVersion`` | variant name (``JOBTEMPLATE_v2023_09``, ``ENVIRONMENT_v2023_09``) |
+| ``EnvironmentActivation`` | variant name (``ALWAYS``, ``BY_DEFAULT``, ``ON_REQUEST``) |
+| ``HostRequirementKind`` | variant name (``AMOUNT``, ``ATTRIBUTE``) |
 | ``DecodeValidationError``, ``ModelValidationError``, ``UnsupportedSchema`` | standard exception pickle, under their canonical ``openjd.model._v1`` module path |
 
 ``SpecificationRevision`` and ``TemplateSpecificationVersion`` are Rust
