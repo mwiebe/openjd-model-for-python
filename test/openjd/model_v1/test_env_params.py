@@ -37,11 +37,13 @@ from openjd.model._v1 import (
 from openjd.model._v1.errors import DecodeValidationError, ModelValidationError
 from openjd.model._v1.job import (
     CreatedJob,
+    DiscardedHostRequirement,
     Document,
     EnvironmentParameterValues,
     EnvironmentRef,
+    HostRequirementKind,
 )
-from openjd.model._v1.types import ModelExtension, ModelProfile, ValidationContext
+from openjd.model._v1.types import CallerLimits, ModelExtension, ModelProfile, ValidationContext
 
 _EXTS = ["ENV_PARAMS", "EXPR"]
 _ALL_EXTS = ["TASK_CHUNKING", "REDACTED_ENV_VARS", "FEATURE_BUNDLE_1", "EXPR", "WRAP_ACTIONS"] + [
@@ -494,65 +496,278 @@ class TestValueTypes:
 
 
 class TestValidationContext:
-    def test_submission_path_policy(self) -> None:
-        ctx = ValidationContext(ModelProfile(extensions=[ModelExtension.ENV_PARAMS]))
-        assert ctx.allow_uri_path_values is False
-        assert ctx.submission_path_format in (PathFormat.POSIX, PathFormat.WINDOWS)
-        windows = ctx.with_submission_path_format(PathFormat.WINDOWS).with_allow_uri_path_values(
-            True
-        )
-        assert windows.submission_path_format == PathFormat.WINDOWS
-        assert windows.allow_uri_path_values is True
-        assert windows != ctx
-        assert pickle.loads(pickle.dumps(windows)) == windows
-        assert (
-            ValidationContext(
-                ctx.profile, submission_path_format=PathFormat.WINDOWS, allow_uri_path_values=True
-            )
-            == windows
+    """openjd-rs a8f9f233 removed the ENV_PARAMS path policy from ValidationContext."""
+
+    @pytest.mark.parametrize(
+        "keyword, value",
+        [("submission_path_format", PathFormat.WINDOWS), ("allow_uri_path_values", True)],
+    )
+    def test_removed_keyword_is_a_type_error(self, keyword: str, value: Any) -> None:
+        profile = ModelProfile(extensions=[ModelExtension.ENV_PARAMS])
+        with pytest.raises(TypeError) as exc:
+            ValidationContext(profile, **{keyword: value})
+        assert str(exc.value) == (
+            f"ValidationContext.__new__() got an unexpected keyword argument '{keyword}'"
         )
 
-    def _uri_template(self) -> Any:
-        return _job_template(
-            {
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "submission_path_format",
+            "allow_uri_path_values",
+            "with_submission_path_format",
+            "with_allow_uri_path_values",
+        ],
+    )
+    def test_removed_attribute(self, name: str) -> None:
+        ctx = ValidationContext(ModelProfile(extensions=[ModelExtension.ENV_PARAMS]))
+        assert not hasattr(ctx, name)
+
+    def test_profile_and_limits_still_round_trip(self) -> None:
+        limits = CallerLimits(max_step_count=3)
+        ctx = ValidationContext(
+            ModelProfile(extensions=[ModelExtension.ENV_PARAMS]), caller_limits=limits
+        )
+        assert pickle.loads(pickle.dumps(ctx)) == ctx
+        assert ctx != ValidationContext(ModelProfile(extensions=[ModelExtension.ENV_PARAMS]))
+
+
+# Values of every form, written literally in an ``environment:`` entry. Spec
+# af53020, Template Schemas §4.5 item 3: a PATH value is used as given, with no
+# absolute, empty, path-format or URI check.
+_AS_GIVEN = [
+    "rel/dir",
+    "relative\\dir",
+    "C:dir",
+    "\\dir",
+    "\\\\server\\share",
+    "C:\\proj",
+    "C:/proj",
+    "/abs",
+    "",
+    "s3://bucket/key",
+]
+
+
+def _as_given_template(entry: dict[str, Any], lets: list[str] | None = None) -> Any:
+    step: dict[str, Any] = {
+        "name": "S",
+        "dependencies": [{"environment": "Mnt", "parameters": entry}],
+        "script": _echo("S"),
+    }
+    if lets is not None:
+        step["let"] = lets
+    return _job_template(
+        {
+            "specificationVersion": "jobtemplate-2023-09",
+            "extensions": _EXTS,
+            "name": "AsGiven",
+            "parameterDefinitions": [
+                {"name": "Dir", "type": "PATH", "default": "/unused"},
+                {"name": "Mounts", "type": "LIST[PATH]", "default": ["/unused"]},
+            ],
+            "jobEnvironments": [
+                {
+                    "name": "Mnt",
+                    "activation": "ON_REQUEST",
+                    "envParameterDefinitions": [
+                        {"name": "Dir", "type": "PATH", "default": "/unused"},
+                        {"name": "Mounts", "type": "LIST[PATH]", "default": ["/unused"]},
+                    ],
+                    "variables": {"MNT_DIR": "{{Env.RawParam.Dir}}"},
+                }
+            ],
+            "steps": [step],
+        }
+    )
+
+
+def _mnt_values(jt: Any, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    job = create_job(job_template=jt, job_parameter_values=params or {})
+    mnt = job.steps[0].environment_parameters_for("Mnt")
+    assert mnt is not None
+    return {v["name"]: v["value"] for v in _values(mnt)}
+
+
+class TestPathValuesAsGiven:
+    @pytest.mark.parametrize("value", _AS_GIVEN)
+    def test_literal_value_is_stored_unchanged(self, value: str) -> None:
+        jt = _as_given_template({"Dir": value, "Mounts": [value, "/m"]})
+        assert _mnt_values(jt) == {"Dir": value, "Mounts": [value, "/m"]}
+
+    @pytest.mark.parametrize("value", [v for v in _AS_GIVEN if "://" not in v])
+    def test_single_expression_keeps_its_text(self, value: str) -> None:
+        # Job Parameters still refuse URIs (preprocess_job_parameters), so the
+        # URI form is covered by the literal test only.
+        jt = _as_given_template({"Dir": "{{RawParam.Dir}}", "Mounts": "{{RawParam.Mounts}}"})
+        got = _mnt_values(jt, {"Dir": value, "Mounts": [value, "C:\\x"]})
+        assert got == {"Dir": value, "Mounts": [value, "C:\\x"]}
+
+    @pytest.mark.parametrize(
+        "value, joined",
+        [
+            ("C:\\proj", "C:\\proj/x"),
+            ("\\\\server\\share", "\\\\server\\share/x"),
+            ("rel", "rel/x"),
+            ("/abs/", "/abs/x"),
+        ],
+    )
+    def test_path_operations_use_posix_semantics(self, value: str, joined: str) -> None:
+        jt = _as_given_template({"Dir": "{{path(RawParam.Dir) / 'x'}}"})
+        assert _mnt_values(jt, {"Dir": value})["Dir"] == joined
+
+    def test_a_step_let_binding_uses_posix_semantics(self) -> None:
+        jt = _as_given_template(
+            {"Dir": "{{joined}}"}, lets=["joined = path(RawParam.Dir) / 'y' / 'z'"]
+        )
+        assert _mnt_values(jt, {"Dir": "C:\\proj"})["Dir"] == "C:\\proj/y/z"
+
+    def test_create_job_with_environment_templates_agrees(self) -> None:
+        jt = _as_given_template({"Dir": "C:dir", "Mounts": ["rel", "\\\\s\\h"]})
+        created = create_job_with_environment_templates(job_template=jt, job_parameter_values={})
+        mnt = created.job.steps[0].environment_parameters_for("Mnt")
+        assert mnt is not None
+        assert {v["name"]: v["value"] for v in _values(mnt)} == {
+            "Dir": "C:dir",
+            "Mounts": ["rel", "\\\\s\\h"],
+        }
+
+    @staticmethod
+    def _min_length_template(entry: str) -> dict[str, Any]:
+        return {
+            "specificationVersion": "jobtemplate-2023-09",
+            "extensions": _EXTS,
+            "name": "C",
+            "parameterDefinitions": [{"name": "Dir", "type": "PATH", "default": "/unused"}],
+            "jobEnvironments": [
+                {
+                    "name": "Mnt",
+                    "activation": "ON_REQUEST",
+                    "envParameterDefinitions": [{"name": "Dir", "type": "PATH", "minLength": 3}],
+                    "variables": {"MNT_DIR": "{{Env.RawParam.Dir}}"},
+                }
+            ],
+            "steps": [
+                {
+                    "name": "S",
+                    "dependencies": [{"environment": "Mnt", "parameters": {"Dir": entry}}],
+                    "script": _echo("S"),
+                }
+            ],
+        }
+
+    def test_a_literal_still_meets_its_constraints(self) -> None:
+        with pytest.raises(ModelValidationError) as exc:
+            _job_template(self._min_length_template("a"))
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "steps[0] -> dependencies[0] -> parameters -> Dir:\n"
+            "\tParameter 'Dir': value length 1 is less than minimum 3"
+        )
+
+    def test_a_resolved_value_still_meets_its_constraints(self) -> None:
+        jt = _job_template(self._min_length_template("{{RawParam.Dir}}"))
+        with pytest.raises(ModelValidationError) as exc:
+            create_job(job_template=jt, job_parameter_values={"Dir": "a"})
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "steps[0] -> dependencies[0] -> parameters -> Dir:\n"
+            "\tParameter 'Dir': value length 1 is less than minimum 3"
+        )
+
+
+_FB1 = ["ENV_PARAMS", "EXPR", "FEATURE_BUNDLE_1"]
+
+
+class TestDiscardedHostRequirements:
+    """CreatedJob.discarded_host_requirements (Template Schemas §3.3)."""
+
+    def _created(self, seats: int | None) -> CreatedJob:
+        lic_entry: dict[str, Any] = {"environment": "Lic"}
+        if seats is not None:
+            lic_entry["parameters"] = {"Seats": seats}
+        jt = decode_job_template(
+            template={
                 "specificationVersion": "jobtemplate-2023-09",
-                "extensions": _EXTS,
-                "name": "Uri",
+                "extensions": _FB1,
+                "name": "Discard",
+                "parameterDefinitions": [{"name": "G", "type": "STRING", "default": ""}],
                 "jobEnvironments": [
                     {
-                        "name": "Mnt",
-                        "activation": "ON_REQUEST",
-                        "envParameterDefinitions": [{"name": "Dir", "type": "PATH"}],
-                        "variables": {"MNT_DIR": "{{Env.RawParam.Dir}}"},
+                        "name": "Lic",
+                        "envParameterDefinitions": [{"name": "Seats", "type": "INT", "default": 0}],
+                        "hostRequirements": {
+                            "amounts": [
+                                {
+                                    "name": "amount.custom.seats",
+                                    "min": "{{ Env.Param.Seats if Env.Param.Seats > 0 else None }}",
+                                }
+                            ]
+                        },
+                        "variables": {"SEATS": "{{Env.Param.Seats}}"},
                     }
                 ],
                 "steps": [
                     {
-                        "name": "A",
-                        "dependencies": [
-                            {"environment": "Mnt", "parameters": {"Dir": "s3://bucket/key"}}
-                        ],
-                        "script": _echo("A"),
+                        "name": "S",
+                        "dependencies": [lic_entry],
+                        "hostRequirements": {
+                            "amounts": [{"name": "amount.custom.kept", "max": 2}],
+                            "attributes": [
+                                {
+                                    "name": "attr.custom.a",
+                                    "anyOf": "{{ [Param.G] if Param.G != '' else None }}",
+                                }
+                            ],
+                        },
+                        "script": _echo("S"),
                     }
                 ],
-            }
+            },
+            supported_extensions=_FB1,
         )
+        return create_job_with_environment_templates(job_template=jt, job_parameter_values={})
 
-    def test_uri_path_values_follow_the_context(self) -> None:
-        jt = self._uri_template()
-        with pytest.raises(ModelValidationError) as exc:
-            create_job(job_template=jt, job_parameter_values={})
-        assert str(exc.value) == (
-            "1 validation error for JobTemplate\n"
-            "steps[0] -> dependencies[0] -> parameters -> Dir:\n"
-            "\tis a URI ('s3://bucket/key'), and URI path values are not permitted for this "
-            "submission."
+    def test_the_steps_own_first_then_each_environments(self) -> None:
+        (step,) = self._created(None).discarded_host_requirements
+        assert [(d.environment, d.kind, d.name) for d in step] == [
+            (None, HostRequirementKind.ATTRIBUTE, "attr.custom.a"),
+            (
+                EnvironmentRef(document=Document.job_template(), environment="Lic"),
+                HostRequirementKind.AMOUNT,
+                "amount.custom.seats",
+            ),
+        ]
+        assert repr(step[0]) == (
+            "DiscardedHostRequirement(environment=None, kind=HostRequirementKind.ATTRIBUTE, "
+            'name="attr.custom.a")'
         )
-        ctx = ValidationContext(jt.profile, allow_uri_path_values=True)
-        step = create_job(job_template=jt, job_parameter_values={}, validation_context=ctx).steps[0]
-        mnt = step.environment_parameters_for("Mnt")
-        assert mnt is not None
-        assert _values(mnt) == [{"name": "Dir", "type": "path", "value": "s3://bucket/key"}]
+        assert repr(step[1]) == (
+            'DiscardedHostRequirement(environment="Lic", kind=HostRequirementKind.AMOUNT, '
+            'name="amount.custom.seats")'
+        )
+        assert isinstance(step[0], DiscardedHostRequirement)
+        assert step[0] == self._created(None).discarded_host_requirements[0][0]
+        assert step[0] != step[1]
+
+    def test_a_resolved_requirement_is_kept(self) -> None:
+        created = self._created(3)
+        assert [d.name for d in created.discarded_host_requirements[0]] == ["attr.custom.a"]
+
+    def test_kind(self) -> None:
+        assert [k.name for k in (HostRequirementKind.AMOUNT, HostRequirementKind.ATTRIBUTE)] == [
+            "AMOUNT",
+            "ATTRIBUTE",
+        ]
+        assert repr(HostRequirementKind.ATTRIBUTE) == "HostRequirementKind.ATTRIBUTE"
+        for k in (HostRequirementKind.AMOUNT, HostRequirementKind.ATTRIBUTE):
+            assert pickle.loads(pickle.dumps(k)) == k
+        assert HostRequirementKind.AMOUNT != HostRequirementKind.ATTRIBUTE
+
+    def test_a_step_without_any_has_an_empty_list(self) -> None:
+        jt = _job_template()
+        created = create_job_with_environment_templates(job_template=jt, job_parameter_values={})
+        assert created.discarded_host_requirements == [[] for _ in created.job.steps]
 
 
 class TestLegacyPathUnchanged:
@@ -635,6 +850,26 @@ class TestConformanceCopies:
         with pytest.raises(ModelValidationError) as exc:
             self._create(self._load("3.2.1--external-required-missing.invalid.test.yaml"))
         assert str(exc.value) == _CONDA_REQUIRED_MISSING
+
+    @pytest.mark.parametrize(
+        "name, expected",
+        [
+            (
+                "4.5--list-path-mixed-formats.test.yaml",
+                {"Dirs": ["/mnt/a", "D:\\b", "\\\\server\\share\\c", "rel/d"]},
+            ),
+            ("4.5--path-relative-windows-drive.test.yaml", {"Dir": "C:dir"}),
+            ("4.5--relative-literal-path-default.test.yaml", {"Dir": "relative/dir"}),
+            ("4.5--relative-path-value.test.yaml", {"Dir": "relative/dir"}),
+        ],
+    )
+    def test_path_value_used_as_given(self, name: str, expected: dict[str, Any]) -> None:
+        created = self._create(self._load(name))
+        mnt = created.job.steps[0].environment_parameters_for(
+            "Mnt", Document.environment_template(0)
+        )
+        assert mnt is not None
+        assert {v["name"]: v["value"] for v in _values(mnt)} == expected
 
 
 @pytest.mark.skipif(_SUITE is None, reason="openjd-specifications ENV_PARAMS suite not found")

@@ -337,6 +337,127 @@ impl PyStepDisabledEnvironments {
     }
 }
 
+// ── DiscardedHostRequirement ──
+
+/// The kind of a discarded ``hostRequirements`` entry (Template Schemas
+/// §3.3): an ``amounts`` entry or an ``attributes`` entry.
+#[cfg_attr(
+    feature = "stub-gen",
+    gen_stub_pyclass_enum(module = "openjd._openjd_rs")
+)]
+#[pyclass(
+    module = "openjd.model._v1.job",
+    name = "HostRequirementKind",
+    eq,
+    eq_int,
+    frozen,
+    hash,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+pub(crate) enum PyHostRequirementKind {
+    AMOUNT = 0,
+    ATTRIBUTE = 1,
+}
+
+impl From<openjd_model::HostRequirementKind> for PyHostRequirementKind {
+    fn from(v: openjd_model::HostRequirementKind) -> Self {
+        match v {
+            openjd_model::HostRequirementKind::Amount => Self::AMOUNT,
+            openjd_model::HostRequirementKind::Attribute => Self::ATTRIBUTE,
+        }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyHostRequirementKind {
+    /// Variant name as a string (``"AMOUNT"`` or ``"ATTRIBUTE"``).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::AMOUNT => "AMOUNT",
+            Self::ATTRIBUTE => "ATTRIBUTE",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("HostRequirementKind.{}", self.name())
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(
+        Bound<'py, PyAny>,
+        (Bound<'py, pyo3::types::PyType>, &'static str),
+    )> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
+    }
+}
+
+/// A host requirement that resolved to nothing for a Step and was
+/// discarded (``ENV_PARAMS``, Template Schemas §3.3): an amount whose
+/// ``min`` and ``max`` both resolved to ``null``, or an attribute whose
+/// ``anyOf`` and ``allOf``, each written as one expression, resolved to
+/// ``null``. For display.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(
+    module = "openjd.model._v1.job",
+    name = "DiscardedHostRequirement",
+    frozen,
+    eq,
+    from_py_object
+)]
+#[derive(Clone, PartialEq)]
+pub(crate) struct PyDiscardedHostRequirement {
+    pub(crate) inner: openjd_model::DiscardedHostRequirement,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyDiscardedHostRequirement {
+    /// The Environment whose ``hostRequirements`` held it, or ``None`` for
+    /// the Step's own.
+    #[getter]
+    fn environment(&self) -> Option<PyEnvironmentRef> {
+        self.inner
+            .environment
+            .as_ref()
+            .map(|e| PyEnvironmentRef { inner: e.clone() })
+    }
+
+    /// Whether it was an amount or an attribute requirement.
+    #[getter]
+    fn kind(&self) -> PyHostRequirementKind {
+        self.inner.kind.into()
+    }
+
+    /// Its resolved capability name.
+    #[getter]
+    fn name(&self) -> String {
+        self.inner.name.clone()
+    }
+
+    fn __repr__(&self) -> String {
+        let env = match &self.inner.environment {
+            Some(e) => format!("{:?}", e.environment),
+            None => "None".to_string(),
+        };
+        format!(
+            "DiscardedHostRequirement(environment={env}, kind={}, name={:?})",
+            PyHostRequirementKind::from(self.inner.kind).__repr__(),
+            self.inner.name
+        )
+    }
+}
+
 // ── CreatedJob ──
 
 /// The result of ``create_job_with_environment_templates``.
@@ -390,6 +511,24 @@ impl PyCreatedJob {
             .disabled_environments
             .iter()
             .map(|d| PyStepDisabledEnvironments { inner: d.clone() })
+            .collect()
+    }
+
+    /// Per Step of ``job``, index for index, the host requirements that
+    /// resolved to nothing for that Step and were discarded (``ENV_PARAMS``,
+    /// Template Schemas §3.3): the Step's own first, then each entered
+    /// Environment's, in Job order, each in written order with amounts
+    /// first. Empty for a Step with none.
+    #[getter]
+    fn discarded_host_requirements(&self) -> Vec<Vec<PyDiscardedHostRequirement>> {
+        self.inner
+            .discarded_host_requirements
+            .iter()
+            .map(|step| {
+                step.iter()
+                    .map(|d| PyDiscardedHostRequirement { inner: d.clone() })
+                    .collect()
+            })
             .collect()
     }
 
