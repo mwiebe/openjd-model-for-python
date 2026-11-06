@@ -523,6 +523,35 @@ class TestValidationContext:
         ctx = ValidationContext(ModelProfile(extensions=[ModelExtension.ENV_PARAMS]))
         assert not hasattr(ctx, name)
 
+    def test_repr(self) -> None:
+        ctx = ValidationContext(
+            ModelProfile(extensions=[ModelExtension.ENV_PARAMS]),
+            caller_limits=CallerLimits(max_step_count=3),
+        )
+        # CallerLimits' repr prints Rust's Option spelling (Some(3)); that is
+        # older than this change.
+        assert repr(ctx) == (
+            "ValidationContext(profile=ModelProfile(revision=V2023_09, extensions=[ENV_PARAMS]), "
+            "caller_limits=CallerLimits(max_step_count=Some(3), max_env_count=None, "
+            "max_task_count=None, max_step_script_size=None, max_environment_size=None, "
+            "max_template_size=None, max_resolved_arg_len=None, max_resolved_data_len=None, "
+            "max_eval_memory_bytes=None, max_eval_operations=None))"
+        )
+
+    def test_create_job_with_environment_templates_uses_the_callers_context(self) -> None:
+        jt = _job_template()
+        with pytest.raises(ModelValidationError) as exc:
+            create_job_with_environment_templates(
+                job_template=jt,
+                job_parameter_values={},
+                validation_context=ValidationContext(ModelProfile(extensions=[])),
+            )
+        assert str(exc.value) == (
+            "create_job requires a context enabling every extension the template declares: "
+            "missing ENV_PARAMS, EXPR. An application that does not support an extension "
+            "should reject the template at decode via its supported-extensions list."
+        )
+
     def test_profile_and_limits_still_round_trip(self) -> None:
         limits = CallerLimits(max_step_count=3)
         ctx = ValidationContext(
@@ -603,6 +632,22 @@ class TestPathValuesAsGiven:
         got = _mnt_values(jt, {"Dir": value, "Mounts": [value, "C:\\x"]})
         assert got == {"Dir": value, "Mounts": [value, "C:\\x"]}
 
+    def test_a_uri_job_parameter_is_still_refused(self) -> None:
+        # The Job Parameter rule (preprocess_job_parameters) is unchanged.
+        jt = _as_given_template({"Dir": "{{RawParam.Dir}}"})
+        with pytest.raises(DecodeValidationError) as exc:
+            create_job_with_environment_templates(
+                job_template=jt, job_parameter_values={"Dir": "s3://bucket/key"}
+            )
+        assert str(exc.value) == (
+            "Parameter 'Dir': URI path values are not permitted. Got 's3://bucket/key'"
+        )
+
+    def test_single_expression_list_with_backslash_elements(self) -> None:
+        jt = _as_given_template({"Mounts": "{{RawParam.Mounts}}"})
+        got = _mnt_values(jt, {"Mounts": ["C:\\a\\b", "rel\\x", "", "\\\\s\\h"]})
+        assert got["Mounts"] == ["C:\\a\\b", "rel\\x", "", "\\\\s\\h"]
+
     @pytest.mark.parametrize(
         "value, joined",
         [
@@ -679,90 +724,143 @@ class TestPathValuesAsGiven:
 _FB1 = ["ENV_PARAMS", "EXPR", "FEATURE_BUNDLE_1"]
 
 
+def _discard_env(name: str, param: str) -> dict[str, Any]:
+    """A BY_DEFAULT Job Environment whose attribute and amount resolve to
+    null unless its parameter is supplied."""
+    low = name.lower()
+    return {
+        "name": name,
+        "envParameterDefinitions": [{"name": param, "type": "INT", "default": 0}],
+        "hostRequirements": {
+            "attributes": [
+                {
+                    "name": f"attr.custom.{low}",
+                    "anyOf": f"{{{{ ['v'] if Env.Param.{param} > 0 else None }}}}",
+                }
+            ],
+            "amounts": [
+                {
+                    "name": f"amount.custom.{low}",
+                    "min": f"{{{{ Env.Param.{param} if Env.Param.{param} > 0 else None }}}}",
+                }
+            ],
+        },
+        "variables": {f"{name.upper()}_N": f"{{{{Env.Param.{param}}}}}"},
+    }
+
+
 class TestDiscardedHostRequirements:
     """CreatedJob.discarded_host_requirements (Template Schemas §3.3)."""
 
-    def _created(self, seats: int | None) -> CreatedJob:
-        lic_entry: dict[str, Any] = {"environment": "Lic"}
-        if seats is not None:
-            lic_entry["parameters"] = {"Seats": seats}
+    @staticmethod
+    def _created() -> CreatedJob:
         jt = decode_job_template(
             template={
                 "specificationVersion": "jobtemplate-2023-09",
                 "extensions": _FB1,
                 "name": "Discard",
                 "parameterDefinitions": [{"name": "G", "type": "STRING", "default": ""}],
-                "jobEnvironments": [
-                    {
-                        "name": "Lic",
-                        "envParameterDefinitions": [{"name": "Seats", "type": "INT", "default": 0}],
-                        "hostRequirements": {
-                            "amounts": [
-                                {
-                                    "name": "amount.custom.seats",
-                                    "min": "{{ Env.Param.Seats if Env.Param.Seats > 0 else None }}",
-                                }
-                            ]
-                        },
-                        "variables": {"SEATS": "{{Env.Param.Seats}}"},
-                    }
-                ],
+                "jobEnvironments": [_discard_env("Lic", "Seats"), _discard_env("Gpu", "Count")],
                 "steps": [
                     {
+                        # Supplies nothing: its own two requirements and both
+                        # Environments' are discarded.
                         "name": "S",
-                        "dependencies": [lic_entry],
                         "hostRequirements": {
-                            "amounts": [{"name": "amount.custom.kept", "max": 2}],
                             "attributes": [
                                 {
                                     "name": "attr.custom.a",
                                     "anyOf": "{{ [Param.G] if Param.G != '' else None }}",
                                 }
                             ],
+                            "amounts": [
+                                {"name": "amount.custom.kept", "max": 2},
+                                {
+                                    "name": "amount.custom.own",
+                                    "max": "{{ 1 if Param.G != '' else None }}",
+                                },
+                            ],
                         },
                         "script": _echo("S"),
-                    }
+                    },
+                    {
+                        # Supplies Seats, so only Gpu's are discarded.
+                        "name": "T",
+                        "dependencies": [{"environment": "Lic", "parameters": {"Seats": 3}}],
+                        "script": _echo("T"),
+                    },
                 ],
             },
             supported_extensions=_FB1,
         )
         return create_job_with_environment_templates(job_template=jt, job_parameter_values={})
 
-    def test_the_steps_own_first_then_each_environments(self) -> None:
-        (step,) = self._created(None).discarded_host_requirements
-        assert [(d.environment, d.kind, d.name) for d in step] == [
-            (None, HostRequirementKind.ATTRIBUTE, "attr.custom.a"),
-            (
-                EnvironmentRef(document=Document.job_template(), environment="Lic"),
-                HostRequirementKind.AMOUNT,
-                "amount.custom.seats",
-            ),
+    def test_per_step_own_first_then_each_environment_in_job_order_amounts_first(
+        self,
+    ) -> None:
+        created = self._created()
+        lic = EnvironmentRef(document=Document.job_template(), environment="Lic")
+        gpu = EnvironmentRef(document=Document.job_template(), environment="Gpu")
+        amount, attribute = HostRequirementKind.AMOUNT, HostRequirementKind.ATTRIBUTE
+        assert [
+            [(d.environment, d.kind, d.name) for d in step]
+            for step in created.discarded_host_requirements
+        ] == [
+            [
+                (None, amount, "amount.custom.own"),
+                (None, attribute, "attr.custom.a"),
+                (lic, amount, "amount.custom.lic"),
+                (lic, attribute, "attr.custom.lic"),
+                (gpu, amount, "amount.custom.gpu"),
+                (gpu, attribute, "attr.custom.gpu"),
+            ],
+            [
+                (gpu, amount, "amount.custom.gpu"),
+                (gpu, attribute, "attr.custom.gpu"),
+            ],
         ]
-        assert repr(step[0]) == (
-            "DiscardedHostRequirement(environment=None, kind=HostRequirementKind.ATTRIBUTE, "
-            'name="attr.custom.a")'
-        )
-        assert repr(step[1]) == (
-            'DiscardedHostRequirement(environment="Lic", kind=HostRequirementKind.AMOUNT, '
-            'name="amount.custom.seats")'
-        )
-        assert isinstance(step[0], DiscardedHostRequirement)
-        assert step[0] == self._created(None).discarded_host_requirements[0][0]
-        assert step[0] != step[1]
 
-    def test_a_resolved_requirement_is_kept(self) -> None:
-        created = self._created(3)
-        assert [d.name for d in created.discarded_host_requirements[0]] == ["attr.custom.a"]
+    def test_a_resolved_requirement_is_kept_on_the_step(self) -> None:
+        t = self._created().job.steps[1]
+        assert t.host_requirements is not None
+        assert [(a.name, a.min, a.max) for a in t.host_requirements.amounts or []] == [
+            ("amount.custom.lic", 3.0, None)
+        ]
+        assert [a.name for a in t.host_requirements.attributes or []] == ["attr.custom.lic"]
+
+    def test_repr_and_equality(self) -> None:
+        own, _, lic = self._created().discarded_host_requirements[0][:3]
+        assert repr(own) == (
+            "DiscardedHostRequirement(environment=None, kind=HostRequirementKind.AMOUNT, "
+            'name="amount.custom.own")'
+        )
+        assert repr(lic) == (
+            "DiscardedHostRequirement(environment=EnvironmentRef("
+            'document=Document.job_template(), environment="Lic"), '
+            'kind=HostRequirementKind.AMOUNT, name="amount.custom.lic")'
+        )
+        assert isinstance(own, DiscardedHostRequirement)
+        assert own == self._created().discarded_host_requirements[0][0]
+        assert own != lic
 
     def test_kind(self) -> None:
-        assert [k.name for k in (HostRequirementKind.AMOUNT, HostRequirementKind.ATTRIBUTE)] == [
-            "AMOUNT",
-            "ATTRIBUTE",
-        ]
-        assert repr(HostRequirementKind.ATTRIBUTE) == "HostRequirementKind.ATTRIBUTE"
-        for k in (HostRequirementKind.AMOUNT, HostRequirementKind.ATTRIBUTE):
-            assert pickle.loads(pickle.dumps(k)) == k
-        assert HostRequirementKind.AMOUNT != HostRequirementKind.ATTRIBUTE
+        amount, attribute = HostRequirementKind.AMOUNT, HostRequirementKind.ATTRIBUTE
+        assert (amount.name, attribute.name) == ("AMOUNT", "ATTRIBUTE")
+        assert (repr(amount), repr(attribute)) == (
+            "HostRequirementKind.AMOUNT",
+            "HostRequirementKind.ATTRIBUTE",
+        )
+        assert (amount == 0, attribute == 1) == (True, True)
+        assert len({amount, attribute, HostRequirementKind.AMOUNT}) == 2
+        assert hash(amount) == hash(HostRequirementKind.AMOUNT)
+        for k in (amount, attribute):
+            assert pickle.loads(pickle.dumps(k)) is k or pickle.loads(pickle.dumps(k)) == k
+        assert amount != attribute
+
+    def test_exported_from_the_job_module(self) -> None:
+        import openjd.model._v1.job as job_module
+
+        assert {"DiscardedHostRequirement", "HostRequirementKind"} <= set(job_module.__all__)
 
     def test_a_step_without_any_has_an_empty_list(self) -> None:
         jt = _job_template()

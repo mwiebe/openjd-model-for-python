@@ -447,7 +447,7 @@ impl PyDiscardedHostRequirement {
 
     fn __repr__(&self) -> String {
         let env = match &self.inner.environment {
-            Some(e) => format!("{:?}", e.environment),
+            Some(e) => PyEnvironmentRef { inner: e.clone() }.__repr__(),
             None => "None".to_string(),
         };
         format!(
