@@ -180,8 +180,10 @@ session keeps them for the Environment's `onExit`. Enter only the Job
 Environments `Step.enters_environment` names, each with its own
 `Environment.resolved_symtab`. A PATH value is stored as the Job gives it,
 of any form (Template Schemas §4.5 item 3): a relative path, `C:dir`, a UNC
-path or a URI is bound unchanged as `Env.RawParam`, and as `Env.Param` it is
-mapped only when a rule matches it. A `parameters` naming another Environment
+path or a URI is bound unchanged as `Env.RawParam` on every host. As
+`Env.Param` it is mapped when a rule matches it; a value no rule matches is
+bound as a host-format `path` of the same text, so on a Windows host its `/`
+separators become `\` (a URI keeps them). A `parameters` naming another Environment
 raises `SessionError` before anything runs. Any other refusal before the
 action starts (a values table that cannot be bound, a duplicate identifier,
 a second wrap Environment, a session not `READY`) ends the action `FAILED`
