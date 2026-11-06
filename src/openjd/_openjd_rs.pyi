@@ -21,6 +21,7 @@ __all__ = [
     "ChunkIntTaskParameterDefinition",
     "ChunksDefinition",
     "CreatedJob",
+    "DiscardedHostRequirement",
     "Document",
     "DocumentType",
     "EmbeddedFile",
@@ -44,6 +45,7 @@ __all__ = [
     "FormatString",
     "HiddenOnlyUserInterface",
     "HostContext",
+    "HostRequirementKind",
     "HostRequirements",
     "IntRange",
     "IntTaskParameter",
@@ -491,6 +493,48 @@ class CreatedJob:
         ``exclusiveGroup``.
         """
 
+    @property
+    def discarded_host_requirements(self) -> builtins.list[builtins.list[DiscardedHostRequirement]]:
+        r"""
+        Per Step of ``job``, index for index, the host requirements that
+        resolved to nothing for that Step and were discarded (``ENV_PARAMS``,
+        Template Schemas §3.3): the Step's own first, then each entered
+        Environment's, in Job order, each in written order with amounts
+        first. Empty for a Step with none.
+        """
+
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class DiscardedHostRequirement:
+    r"""
+    A host requirement that resolved to nothing for a Step and was
+    discarded (``ENV_PARAMS``, Template Schemas §3.3): an amount whose
+    ``min`` and ``max`` both resolved to ``null``, or an attribute whose
+    ``anyOf`` and ``allOf``, each written as one expression, resolved to
+    ``null``. For display.
+    """
+
+    @property
+    def environment(self) -> typing.Optional[EnvironmentRef]:
+        r"""
+        The Environment whose ``hostRequirements`` held it, or ``None`` for
+        the Step's own.
+        """
+
+    @property
+    def kind(self) -> HostRequirementKind:
+        r"""
+        Whether it was an amount or an attribute requirement.
+        """
+
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        Its resolved capability name.
+        """
+
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -2536,8 +2580,8 @@ class Step:
         combine the Step's own with those of the Environments its Sessions
         enter (Template Schemas §3.3.3). ``None`` if none are declared, or,
         in a document that lists ENV_PARAMS, if every one resolved to
-        nothing and was discarded (§3.3); the bindings do not expose which
-        were discarded (openjd-rs ``CreatedJob::discarded_host_requirements``).
+        nothing and was discarded (§3.3); ``CreatedJob.discarded_host_requirements``
+        of ``create_job_with_environment_templates`` lists which.
         Returns the resolved
         :class:`HostRequirements` from
         :mod:`openjd.model._v1.job` (distinct from the
@@ -3444,41 +3488,11 @@ class ValidationContext:
     def profile(self) -> ModelProfile: ...
     @property
     def caller_limits(self) -> CallerLimits: ...
-    @property
-    def submission_path_format(self) -> PathFormat:
-        r"""
-        ENV_PARAMS: the path format Environment parameter PATH values must
-        be absolute in. Default: the host format.
-        """
-
-    @property
-    def allow_uri_path_values(self) -> builtins.bool:
-        r"""
-        ENV_PARAMS: whether a URI is accepted as an Environment parameter
-        PATH value. Default ``False``.
-        """
-
     def __new__(
-        cls,
-        profile: ModelProfile,
-        *,
-        caller_limits: typing.Optional[CallerLimits] = None,
-        submission_path_format: typing.Optional[PathFormat] = None,
-        allow_uri_path_values: builtins.bool = False,
+        cls, profile: ModelProfile, *, caller_limits: typing.Optional[CallerLimits] = None
     ) -> ValidationContext:
         r"""
-        Build a context from a profile, with optional caller limits and
-        the ENV_PARAMS submission path policy.
-        """
-
-    def with_submission_path_format(self, path_format: PathFormat) -> ValidationContext:
-        r"""
-        A copy with ``submission_path_format`` set.
-        """
-
-    def with_allow_uri_path_values(self, allow: builtins.bool) -> ValidationContext:
-        r"""
-        A copy with ``allow_uri_path_values`` set.
+        Build a context from a profile, with optional caller limits.
         """
 
     def __repr__(self) -> builtins.str: ...
@@ -3695,6 +3709,28 @@ class ExprRevision(enum.Enum):
         Spec-form revision string, e.g. `"2026-02"`.
         """
 
+    def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
+        r"""
+        Pickle support — round-trips through the variant name.
+        """
+
+@typing.final
+class HostRequirementKind(enum.Enum):
+    r"""
+    The kind of a discarded ``hostRequirements`` entry (Template Schemas
+    §3.3): an ``amounts`` entry or an ``attributes`` entry.
+    """
+
+    AMOUNT = ...
+    ATTRIBUTE = ...
+
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        Variant name as a string (``"AMOUNT"`` or ``"ATTRIBUTE"``).
+        """
+
+    def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
         r"""
         Pickle support — round-trips through the variant name.

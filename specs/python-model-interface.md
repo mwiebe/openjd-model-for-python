@@ -313,6 +313,7 @@ created.job                     # Job: attached Environments first, then jobEnvi
 created.environment_documents   # list[Document], index for index with job.job_environments
 created.warnings                # list[str], each "<path>: <message>"
 created.disabled_environments   # list[StepDisabledEnvironments], one per Step
+created.discarded_host_requirements  # list[list[DiscardedHostRequirement]], one per Step
 
 step = created.job.steps[0]
 step.environments               # Optional[list[EnvironmentRef]]; None = every Job Environment
@@ -370,15 +371,32 @@ supersede a Job Environment. `disabled_environments` lists the superseded
 Environments with those their `enableIf` disabled; openjd-rs does not record
 which reason applied, so the bindings cannot tell them apart either.
 
-openjd-rs `CreatedJob::discarded_host_requirements` (the ENV_PARAMS host
-requirements of each Step that resolved to `null` and were discarded,
-Template Schemas §3.3) is not bound; openjd-rs keeps it for display. A Step
-whose requirements were all discarded has `host_requirements` `None`, the
-same as one that declares none.
+`created.discarded_host_requirements` is a `list[list[DiscardedHostRequirement]]`,
+one list per Step: the ENV_PARAMS host requirements that resolved to `null`
+and were discarded (Template Schemas §3.3), the Step's own first, then each
+entered Environment's, in Job order, each in written order with amounts first.
+It is for display. Each item has `environment` (`EnvironmentRef`, or `None` for
+the Step's own), `kind` (`HostRequirementKind.AMOUNT` or `.ATTRIBUTE`) and
+`name` (the resolved capability name). A Step whose requirements were all
+discarded has `host_requirements` `None`, the same as one that declares none.
 
-PATH Environment parameter values are checked against
-`ValidationContext.submission_path_format` and
-`ValidationContext.allow_uri_path_values` (see [Profile](#profile)).
+```python
+from openjd.model._v1.job import HostRequirementKind
+created.discarded_host_requirements[0]
+# [DiscardedHostRequirement(environment=None, kind=HostRequirementKind.ATTRIBUTE, name="attr.custom.a"),
+#  DiscardedHostRequirement(environment="Lic", kind=HostRequirementKind.AMOUNT, name="amount.custom.seats")]
+```
+
+PATH and LIST[PATH] Environment parameter values are used as given (Template
+Schemas §4.5 item 3). Job creation does not check that a value is absolute,
+non-empty or in any path format, and does not refuse a URI: `rel/dir`,
+`C:dir`, `\dir`, `\\server\share`, `""` and `s3://b/k` are all stored
+unchanged, subject only to the parameter's own constraints. Every Environment
+parameter value, and every Step `let` binding it reads, is evaluated with
+POSIX semantics (Expression Language §1.2.1), so a value written as a single
+`"{{RawParam.Dir}}"` keeps its text, and `{{path(RawParam.Dir) / 'x'}}` joins
+with `/`. The Session maps the stored value with its own rules when it binds
+`Env.Param.*`; `Env.RawParam.*` gets it unchanged.
 
 #### `preprocess_job_parameters`
 
@@ -1608,12 +1626,11 @@ expression engine.
 `ModelExtension.ENV_PARAMS` exists on the Rust path only (the one member
 with no counterpart in the pure-Python `ExtensionName`).
 
-`ValidationContext(profile, *, caller_limits=None, submission_path_format=None,
-allow_uri_path_values=False)` also carries the ENV_PARAMS submission path
-policy, read only by job creation of Environment parameter values:
-`submission_path_format` (`PathFormat`, default the host format) and
-`allow_uri_path_values` (`bool`). `with_submission_path_format(fmt)` and
-`with_allow_uri_path_values(allow)` return copies.
+`ValidationContext(profile, *, caller_limits=None)` takes no path settings.
+The `submission_path_format` and `allow_uri_path_values` keyword arguments,
+properties and `with_*` builders were removed with openjd-rs a8f9f233, because
+Environment parameter PATH values are no longer checked against a path format
+(see `create_job_with_environment_templates` above). Passing either keyword raises `TypeError`.
 
 ```python
 from openjd.model._v1 import (

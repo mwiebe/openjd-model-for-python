@@ -46,9 +46,11 @@ from openjd._openjd_rs import (
     ChunkIntTaskParameter,
     # ENV_PARAMS (RFC 0010, draft; Rust path only)
     CreatedJob,
+    DiscardedHostRequirement,
     Document,
     EnvironmentParameterValues,
     EnvironmentRef,
+    HostRequirementKind,
     StepDisabledEnvironments,
 )
 
@@ -59,6 +61,7 @@ __all__ = (
     "CancelationMode",
     "ChunkIntTaskParameter",
     "CreatedJob",
+    "DiscardedHostRequirement",
     "Document",
     "EmbeddedFile",
     "Environment",
@@ -67,6 +70,7 @@ __all__ = (
     "EnvironmentRef",
     "EnvironmentScript",
     "FloatTaskParameter",
+    "HostRequirementKind",
     "HostRequirements",
     "IntTaskParameter",
     "Job",
