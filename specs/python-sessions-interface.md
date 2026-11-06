@@ -183,7 +183,10 @@ of any form (Template Schemas §4.5 item 3): a relative path, `C:dir`, a UNC
 path or a URI is bound unchanged as `Env.RawParam` on every host. As
 `Env.Param` it is mapped when a rule matches it; a value no rule matches is
 bound as a host-format `path` of the same text, so on a Windows host its `/`
-separators become `\` (a URI keeps them). A `parameters` naming another Environment
+separators become `\` (a URI keeps them). openjd-rs a8f9f233 joins an empty
+`Env.Param` value as a root: `{{Env.Param.Dir / 'k'}}` with `Dir: ""` gives
+`/k` (`\k` on Windows), where pathlib gives `k`; at job creation
+`path('') / 'k'` gives `./k`. A `parameters` naming another Environment
 raises `SessionError` before anything runs. Any other refusal before the
 action starts (a values table that cannot be bound, a duplicate identifier,
 a second wrap Environment, a session not `READY`) ends the action `FAILED`

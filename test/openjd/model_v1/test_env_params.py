@@ -654,6 +654,34 @@ class TestPathValuesAsGiven:
         got = _mnt_values(jt, {"Dir": value, "Mounts": [value, "C:\\x"]})
         assert got == {"Dir": value, "Mounts": [value, "C:\\x"]}
 
+    def test_a_uri_from_a_string_job_parameter_keeps_its_text(self) -> None:
+        jt = _job_template(
+            {
+                "specificationVersion": "jobtemplate-2023-09",
+                "extensions": _EXTS,
+                "name": "Uri",
+                "parameterDefinitions": [{"name": "S", "type": "STRING"}],
+                "jobEnvironments": [
+                    {
+                        "name": "Mnt",
+                        "activation": "ON_REQUEST",
+                        "envParameterDefinitions": [{"name": "Dir", "type": "PATH"}],
+                        "variables": {"MNT_DIR": "{{Env.RawParam.Dir}}"},
+                    }
+                ],
+                "steps": [
+                    {
+                        "name": "S",
+                        "dependencies": [
+                            {"environment": "Mnt", "parameters": {"Dir": "{{Param.S}}"}}
+                        ],
+                        "script": _echo("S"),
+                    }
+                ],
+            }
+        )
+        assert _mnt_values(jt, {"S": "s3://bucket/key"}) == {"Dir": "s3://bucket/key"}
+
     def test_a_uri_job_parameter_is_still_refused(self) -> None:
         # The Job Parameter rule (preprocess_job_parameters) is unchanged.
         jt = _as_given_template({"Dir": "{{RawParam.Dir}}"})
@@ -689,14 +717,15 @@ class TestPathValuesAsGiven:
         )
         assert _mnt_values(jt, {"Dir": "C:\\proj"})["Dir"] == "C:\\proj/y/z"
 
-    def test_create_job_with_environment_templates_agrees(self) -> None:
-        jt = _as_given_template({"Dir": "C:dir", "Mounts": ["rel", "\\\\s\\h"]})
+    @pytest.mark.parametrize("value", _AS_GIVEN)
+    def test_create_job_with_environment_templates_agrees(self, value: str) -> None:
+        jt = _as_given_template({"Dir": value, "Mounts": [value, "\\\\s\\h"]})
         created = create_job_with_environment_templates(job_template=jt, job_parameter_values={})
         mnt = created.job.steps[0].environment_parameters_for("Mnt")
         assert mnt is not None
         assert {v["name"]: v["value"] for v in _values(mnt)} == {
-            "Dir": "C:dir",
-            "Mounts": ["rel", "\\\\s\\h"],
+            "Dir": value,
+            "Mounts": [value, "\\\\s\\h"],
         }
 
     @staticmethod
@@ -750,6 +779,9 @@ def _discard_env(name: str, param: str) -> dict[str, Any]:
     """A BY_DEFAULT Job Environment whose attribute and amount resolve to
     null unless its parameter is supplied."""
     low = name.lower()
+    # One name keeps upper-case letters, so a binding that changed its case
+    # would be seen.
+    amount_name = "amount.custom.Lic" if name == "Lic" else f"amount.custom.{low}"
     return {
         "name": name,
         "envParameterDefinitions": [{"name": param, "type": "INT", "default": 0}],
@@ -762,7 +794,7 @@ def _discard_env(name: str, param: str) -> dict[str, Any]:
             ],
             "amounts": [
                 {
-                    "name": f"amount.custom.{low}",
+                    "name": amount_name,
                     "min": f"{{{{ Env.Param.{param} if Env.Param.{param} > 0 else None }}}}",
                 }
             ],
@@ -850,7 +882,7 @@ class TestDiscardedHostRequirements:
                 (None, attribute, "attr.custom.a"),
                 (att, amount, "amount.custom.att"),
                 (att, attribute, "attr.custom.att"),
-                (lic, amount, "amount.custom.lic"),
+                (lic, amount, "amount.custom.Lic"),
                 (lic, attribute, "attr.custom.lic"),
                 (gpu, amount, "amount.custom.gpu"),
                 (gpu, attribute, "attr.custom.gpu"),
@@ -867,7 +899,7 @@ class TestDiscardedHostRequirements:
         t = self._created().job.steps[1]
         assert t.host_requirements is not None
         assert [(a.name, a.min, a.max) for a in t.host_requirements.amounts or []] == [
-            ("amount.custom.lic", 3.0, None)
+            ("amount.custom.Lic", 3.0, None)
         ]
         assert [a.name for a in t.host_requirements.attributes or []] == ["attr.custom.lic"]
 
@@ -880,7 +912,7 @@ class TestDiscardedHostRequirements:
         assert repr(lic) == (
             "DiscardedHostRequirement(environment=EnvironmentRef("
             'document=Document.job_template(), environment="Lic"), '
-            'kind=HostRequirementKind.AMOUNT, name="amount.custom.lic")'
+            'kind=HostRequirementKind.AMOUNT, name="amount.custom.Lic")'
         )
         assert repr(att) == (
             "DiscardedHostRequirement(environment=EnvironmentRef("
