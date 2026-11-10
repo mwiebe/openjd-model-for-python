@@ -30,7 +30,9 @@ __all__ = [
     "EnvironmentActivation",
     "EnvironmentParameterValues",
     "EnvironmentRef",
+    "EnvironmentScope",
     "EnvironmentScript",
+    "EnvironmentStatus",
     "EnvironmentTemplate",
     "EvalResult",
     "ExprExtension",
@@ -74,6 +76,7 @@ __all__ = [
     "ListSimpleUserInterface",
     "ModelExtension",
     "ModelProfile",
+    "OptionalEntryNotFound",
     "ParsedExpression",
     "PathFormat",
     "PathMappingRule",
@@ -97,6 +100,8 @@ __all__ = [
     "StepDependencyGraph",
     "StepDependencyNode",
     "StepDisabledEnvironments",
+    "StepEnvironmentStatus",
+    "StepEnvironmentStatuses",
     "StepParameterSpace",
     "StepParameterSpaceDefinition",
     "StepParameterSpaceIterator",
@@ -490,7 +495,16 @@ class CreatedJob:
         r"""
         Per Step of ``job``, index for index, the Environments disabled for
         that Step: by their ``enableIf``, or superseded within their
-        ``exclusiveGroup``.
+        ``exclusiveGroup``. ``environment_statuses`` says which.
+        """
+
+    @property
+    def environment_statuses(self) -> builtins.list[StepEnvironmentStatuses]:
+        r"""
+        Per Step of ``job``, index for index, every Environment the Step
+        considered, in the Job's Environment order, with whether its Sessions
+        enter it or which decision left it out, and the Step's
+        ``required: false`` entries that named no Environment.
         """
 
     @property
@@ -2048,6 +2062,29 @@ class ModelProfile:
         """
 
 @typing.final
+class OptionalEntryNotFound:
+    r"""
+    An enabled ``environment:`` entry with ``required: false`` that resolved
+    to no Environment (Template Schemas §3.2.1 item 2), so it has no effect.
+    """
+
+    @property
+    def dependency_index(self) -> builtins.int:
+        r"""
+        The entry's 0-based position in the Step's ``dependencies`` list.
+        """
+
+    @property
+    def environment(self) -> builtins.str:
+        r"""
+        The Environment name the entry gives.
+        """
+
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class ParsedExpression:
     @property
     def accessed_symbols(self) -> builtins.set[builtins.str]: ...
@@ -2719,7 +2756,8 @@ class StepDisabledEnvironments:
     The Environments disabled for one Step, for display: those their own
     ``enableIf`` disabled, and, for a Job Environment, those an earlier
     Environment of its ``exclusiveGroup`` superseded (Template Schemas §4
-    item 7). openjd-rs does not record which of the two applied. A
+    item 7). It is the ``DISABLED`` and ``SUPERSEDED`` items of the Step's
+    ``StepEnvironmentStatuses``, which says which of the two applied. A
     ``BY_DEFAULT`` Environment the Step declined with a disabled
     ``environment:`` entry is not listed.
     """
@@ -2736,6 +2774,75 @@ class StepDisabledEnvironments:
         The Step's own ``stepEnvironments``, by name.
         """
 
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class StepEnvironmentStatus:
+    r"""
+    One Environment a Step's Sessions considered, and whether they enter it.
+    """
+
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        The Environment's ``name``.
+        """
+
+    @property
+    def document(self) -> Document:
+        r"""
+        The document that declares it: an Environment Template for an
+        attached one, else the Job Template.
+        """
+
+    @property
+    def scope(self) -> EnvironmentScope:
+        r"""
+        Its part of the Job's Environment order. ``ATTACHED`` exactly when
+        ``document`` is an Environment Template.
+        """
+
+    @property
+    def status(self) -> EnvironmentStatus:
+        r"""
+        Whether the Step's Sessions enter it, or why not.
+        """
+
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class StepEnvironmentStatuses:
+    r"""
+    Every Environment one Step considered, with whether its Sessions enter
+    it, and its optional entries that named nothing.
+
+    A Step considers every ``ALWAYS`` and ``BY_DEFAULT`` Environment, every
+    ``ON_REQUEST`` one an enabled ``environment:`` entry of the Step
+    requests, and each of its Step Environments. An ``ON_REQUEST``
+    Environment the Step does not request is not listed.
+    """
+
+    @property
+    def environments(self) -> builtins.list[StepEnvironmentStatus]:
+        r"""
+        The considered Environments in the Job's Environment order: attached
+        ones in attachment order, then the Job Template's
+        ``jobEnvironments``, then the Step's ``stepEnvironments``. The
+        ``ENTERED`` ones, in this order, are the Environments the Step's
+        Sessions enter.
+        """
+
+    @property
+    def not_found(self) -> builtins.list[OptionalEntryNotFound]:
+        r"""
+        The Step's enabled ``required: false`` entries that named no
+        Environment, in ``dependencies`` order. Each also produced a
+        ``CreatedJob.warnings`` entry.
+        """
+
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -3671,6 +3778,79 @@ class EnvironmentActivation(enum.Enum):
         r"""
         The value as a template writes it (`"ALWAYS"`, `"BY_DEFAULT"` or
         `"ON_REQUEST"`); the same as `name`.
+        """
+
+    def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
+        r"""
+        Pickle support — round-trips through the variant name.
+        """
+
+@typing.final
+class EnvironmentScope(enum.Enum):
+    r"""
+    Where an Environment of a Job comes from: the three parts of the Job's
+    Environment order (Template Schemas §1.1 item 7).
+    """
+
+    ATTACHED = ...
+    r"""
+    An attached Environment Template's ``environment``.
+    """
+    JOB = ...
+    r"""
+    A ``jobEnvironments`` entry of the Job Template.
+    """
+    STEP = ...
+    r"""
+    A ``stepEnvironments`` entry of the Step.
+    """
+
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        Variant name as a string (``"ATTACHED"``, ``"JOB"`` or ``"STEP"``).
+        """
+
+    def __repr__(self) -> builtins.str: ...
+    def __reduce__(self) -> tuple[typing.Any, tuple[type, builtins.str]]:
+        r"""
+        Pickle support — round-trips through the variant name.
+        """
+
+@typing.final
+class EnvironmentStatus(enum.Enum):
+    r"""
+    Whether one Step's Sessions enter an Environment they considered, and if
+    not, which decision of Template Schemas §7.4.1 left it out.
+    """
+
+    ENTERED = ...
+    r"""
+    The Step's Sessions enter it.
+    """
+    DECLINED = ...
+    r"""
+    A ``BY_DEFAULT`` Environment that a disabled ``environment:`` entry
+    of the Step declines (§3.2 item 3.2). Its ``enableIf`` is not
+    evaluated for the Step.
+    """
+    DISABLED = ...
+    r"""
+    Its own ``enableIf`` (§4 item 6) is false for the Step.
+    """
+    SUPERSEDED = ...
+    r"""
+    An earlier Environment of its ``exclusiveGroup`` remains in the
+    Step's set (§4 item 7). Its ``enableIf`` is not evaluated for the
+    Step.
+    """
+
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        Variant name as a string (``"ENTERED"``, ``"DECLINED"``,
+        ``"DISABLED"`` or ``"SUPERSEDED"``).
         """
 
     def __repr__(self) -> builtins.str: ...

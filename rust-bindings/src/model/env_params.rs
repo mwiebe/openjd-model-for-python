@@ -6,8 +6,9 @@
 //!
 //! Wraps `openjd_model::job::{Document, EnvironmentRef,
 //! EnvironmentParameterValues}`, `openjd_model::{CreatedJob,
-//! StepDisabledEnvironments, create_job_with_environment_templates,
-//! check_environment_templates}`.
+//! StepDisabledEnvironments, StepEnvironmentStatuses, StepEnvironmentStatus,
+//! EnvironmentStatus, EnvironmentScope, OptionalEntryNotFound,
+//! create_job_with_environment_templates, check_environment_templates}`.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple, PyType};
@@ -294,7 +295,8 @@ impl PyEnvironmentParameterValues {
 /// The Environments disabled for one Step, for display: those their own
 /// ``enableIf`` disabled, and, for a Job Environment, those an earlier
 /// Environment of its ``exclusiveGroup`` superseded (Template Schemas §4
-/// item 7). openjd-rs does not record which of the two applied. A
+/// item 7). It is the ``DISABLED`` and ``SUPERSEDED`` items of the Step's
+/// ``StepEnvironmentStatuses``, which says which of the two applied. A
 /// ``BY_DEFAULT`` Environment the Step declined with a disabled
 /// ``environment:`` entry is not listed.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
@@ -458,6 +460,312 @@ impl PyDiscardedHostRequirement {
     }
 }
 
+// ── Environment statuses ──
+
+/// Whether one Step's Sessions enter an Environment they considered, and if
+/// not, which decision of Template Schemas §7.4.1 left it out.
+#[cfg_attr(
+    feature = "stub-gen",
+    gen_stub_pyclass_enum(module = "openjd._openjd_rs")
+)]
+#[pyclass(
+    module = "openjd.model._v1.job",
+    name = "EnvironmentStatus",
+    eq,
+    eq_int,
+    frozen,
+    hash,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+pub(crate) enum PyEnvironmentStatus {
+    /// The Step's Sessions enter it.
+    ENTERED = 0,
+    /// A ``BY_DEFAULT`` Environment that a disabled ``environment:`` entry
+    /// of the Step declines (§3.2 item 3.2). Its ``enableIf`` is not
+    /// evaluated for the Step.
+    DECLINED = 1,
+    /// Its own ``enableIf`` (§4 item 6) is false for the Step.
+    DISABLED = 2,
+    /// An earlier Environment of its ``exclusiveGroup`` remains in the
+    /// Step's set (§4 item 7). Its ``enableIf`` is not evaluated for the
+    /// Step.
+    SUPERSEDED = 3,
+}
+
+impl From<openjd_model::EnvironmentStatus> for PyEnvironmentStatus {
+    fn from(v: openjd_model::EnvironmentStatus) -> Self {
+        match v {
+            openjd_model::EnvironmentStatus::Entered => Self::ENTERED,
+            openjd_model::EnvironmentStatus::Declined => Self::DECLINED,
+            openjd_model::EnvironmentStatus::Disabled => Self::DISABLED,
+            openjd_model::EnvironmentStatus::Superseded => Self::SUPERSEDED,
+        }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyEnvironmentStatus {
+    /// Variant name as a string (``"ENTERED"``, ``"DECLINED"``,
+    /// ``"DISABLED"`` or ``"SUPERSEDED"``).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::ENTERED => "ENTERED",
+            Self::DECLINED => "DECLINED",
+            Self::DISABLED => "DISABLED",
+            Self::SUPERSEDED => "SUPERSEDED",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("EnvironmentStatus.{}", self.name())
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(
+        Bound<'py, PyAny>,
+        (Bound<'py, pyo3::types::PyType>, &'static str),
+    )> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
+    }
+}
+
+/// Where an Environment of a Job comes from: the three parts of the Job's
+/// Environment order (Template Schemas §1.1 item 7).
+#[cfg_attr(
+    feature = "stub-gen",
+    gen_stub_pyclass_enum(module = "openjd._openjd_rs")
+)]
+#[pyclass(
+    module = "openjd.model._v1.job",
+    name = "EnvironmentScope",
+    eq,
+    eq_int,
+    frozen,
+    hash,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+pub(crate) enum PyEnvironmentScope {
+    /// An attached Environment Template's ``environment``.
+    ATTACHED = 0,
+    /// A ``jobEnvironments`` entry of the Job Template.
+    JOB = 1,
+    /// A ``stepEnvironments`` entry of the Step.
+    STEP = 2,
+}
+
+impl From<openjd_model::EnvironmentScope> for PyEnvironmentScope {
+    fn from(v: openjd_model::EnvironmentScope) -> Self {
+        match v {
+            openjd_model::EnvironmentScope::Attached => Self::ATTACHED,
+            openjd_model::EnvironmentScope::Job => Self::JOB,
+            openjd_model::EnvironmentScope::Step => Self::STEP,
+        }
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyEnvironmentScope {
+    /// Variant name as a string (``"ATTACHED"``, ``"JOB"`` or ``"STEP"``).
+    #[getter]
+    fn name(&self) -> &'static str {
+        match self {
+            Self::ATTACHED => "ATTACHED",
+            Self::JOB => "JOB",
+            Self::STEP => "STEP",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("EnvironmentScope.{}", self.name())
+    }
+
+    /// Pickle support — round-trips through the variant name.
+    #[allow(clippy::type_complexity)] // pickle reducer tuple shape is by design
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(
+        Bound<'py, PyAny>,
+        (Bound<'py, pyo3::types::PyType>, &'static str),
+    )> {
+        let helper = py
+            .import("openjd._openjd_rs")?
+            .getattr("_reconstruct_enum")?;
+        Ok((helper, (py.get_type::<Self>(), self.name())))
+    }
+}
+
+/// One Environment a Step's Sessions considered, and whether they enter it.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(
+    module = "openjd.model._v1.job",
+    name = "StepEnvironmentStatus",
+    frozen,
+    eq,
+    hash,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct PyStepEnvironmentStatus {
+    pub(crate) inner: openjd_model::StepEnvironmentStatus,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyStepEnvironmentStatus {
+    /// The Environment's ``name``.
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    /// The document that declares it: an Environment Template for an
+    /// attached one, else the Job Template.
+    #[getter]
+    fn document(&self) -> PyDocument {
+        PyDocument {
+            inner: self.inner.document.clone(),
+        }
+    }
+
+    /// Its part of the Job's Environment order. ``ATTACHED`` exactly when
+    /// ``document`` is an Environment Template.
+    #[getter]
+    fn scope(&self) -> PyEnvironmentScope {
+        self.inner.scope.into()
+    }
+
+    /// Whether the Step's Sessions enter it, or why not.
+    #[getter]
+    fn status(&self) -> PyEnvironmentStatus {
+        self.inner.status.into()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "StepEnvironmentStatus(name={:?}, document={}, scope={}, status={})",
+            self.inner.name,
+            PyDocument {
+                inner: self.inner.document.clone()
+            }
+            .__repr__(),
+            PyEnvironmentScope::from(self.inner.scope).__repr__(),
+            PyEnvironmentStatus::from(self.inner.status).__repr__(),
+        )
+    }
+}
+
+/// An enabled ``environment:`` entry with ``required: false`` that resolved
+/// to no Environment (Template Schemas §3.2.1 item 2), so it has no effect.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(
+    module = "openjd.model._v1.job",
+    name = "OptionalEntryNotFound",
+    frozen,
+    eq,
+    hash,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct PyOptionalEntryNotFound {
+    pub(crate) inner: openjd_model::OptionalEntryNotFound,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyOptionalEntryNotFound {
+    /// The entry's 0-based position in the Step's ``dependencies`` list.
+    #[getter]
+    fn dependency_index(&self) -> usize {
+        self.inner.dependency_index
+    }
+
+    /// The Environment name the entry gives.
+    #[getter]
+    fn environment(&self) -> &str {
+        &self.inner.environment
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "OptionalEntryNotFound(dependency_index={}, environment={:?})",
+            self.inner.dependency_index, self.inner.environment
+        )
+    }
+}
+
+/// Every Environment one Step considered, with whether its Sessions enter
+/// it, and its optional entries that named nothing.
+///
+/// A Step considers every ``ALWAYS`` and ``BY_DEFAULT`` Environment, every
+/// ``ON_REQUEST`` one an enabled ``environment:`` entry of the Step
+/// requests, and each of its Step Environments. An ``ON_REQUEST``
+/// Environment the Step does not request is not listed.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(
+    module = "openjd.model._v1.job",
+    name = "StepEnvironmentStatuses",
+    frozen,
+    eq,
+    from_py_object
+)]
+#[derive(Clone, PartialEq)]
+pub(crate) struct PyStepEnvironmentStatuses {
+    pub(crate) inner: openjd_model::StepEnvironmentStatuses,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PyStepEnvironmentStatuses {
+    /// The considered Environments in the Job's Environment order: attached
+    /// ones in attachment order, then the Job Template's
+    /// ``jobEnvironments``, then the Step's ``stepEnvironments``. The
+    /// ``ENTERED`` ones, in this order, are the Environments the Step's
+    /// Sessions enter.
+    #[getter]
+    fn environments(&self) -> Vec<PyStepEnvironmentStatus> {
+        self.inner
+            .environments
+            .iter()
+            .map(|e| PyStepEnvironmentStatus { inner: e.clone() })
+            .collect()
+    }
+
+    /// The Step's enabled ``required: false`` entries that named no
+    /// Environment, in ``dependencies`` order. Each also produced a
+    /// ``CreatedJob.warnings`` entry.
+    #[getter]
+    fn not_found(&self) -> Vec<PyOptionalEntryNotFound> {
+        self.inner
+            .not_found
+            .iter()
+            .map(|n| PyOptionalEntryNotFound { inner: n.clone() })
+            .collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "StepEnvironmentStatuses(environments={}, not_found={})",
+            self.inner.environments.len(),
+            self.inner.not_found.len()
+        )
+    }
+}
+
 // ── CreatedJob ──
 
 /// The result of ``create_job_with_environment_templates``.
@@ -504,13 +812,26 @@ impl PyCreatedJob {
 
     /// Per Step of ``job``, index for index, the Environments disabled for
     /// that Step: by their ``enableIf``, or superseded within their
-    /// ``exclusiveGroup``.
+    /// ``exclusiveGroup``. ``environment_statuses`` says which.
     #[getter]
     fn disabled_environments(&self) -> Vec<PyStepDisabledEnvironments> {
         self.inner
             .disabled_environments
             .iter()
             .map(|d| PyStepDisabledEnvironments { inner: d.clone() })
+            .collect()
+    }
+
+    /// Per Step of ``job``, index for index, every Environment the Step
+    /// considered, in the Job's Environment order, with whether its Sessions
+    /// enter it or which decision left it out, and the Step's
+    /// ``required: false`` entries that named no Environment.
+    #[getter]
+    fn environment_statuses(&self) -> Vec<PyStepEnvironmentStatuses> {
+        self.inner
+            .environment_statuses
+            .iter()
+            .map(|s| PyStepEnvironmentStatuses { inner: s.clone() })
             .collect()
     }
 

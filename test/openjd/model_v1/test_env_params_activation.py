@@ -12,8 +12,8 @@ c0333380, spec 87be017).
   group a Step's Sessions would enter, only the first in the Job's Environment
   order is entered. The others are *superseded* for that Step. They are listed
   in ``CreatedJob.disabled_environments``, which does not say whether an
-  Environment was disabled by its ``enableIf`` or superseded: openjd-rs does not
-  record the difference.
+  Environment was disabled by its ``enableIf`` or superseded;
+  ``CreatedJob.environment_statuses`` does (``test_env_params_statuses.py``).
 - Job-creation errors are one ``ModelValidationError`` in §7.4.1 step order:
   ``for JobTemplate`` at Job-Template-relative paths with nothing attached, and
   ``for Submission`` with every path starting at its document otherwise, for
@@ -38,7 +38,7 @@ from openjd.model._v1 import (
     decode_environment_template,
     decode_job_template,
 )
-from openjd.model._v1.errors import ModelValidationError
+from openjd.model._v1.errors import DecodeValidationError, ModelValidationError
 from openjd.model._v1.job import CreatedJob, Document, EnvironmentRef
 from openjd.model._v1.template import (
     EnvironmentActivation,
@@ -574,6 +574,41 @@ class TestAttributeValues:
         )
         assert isinstance(req.any_of, list)
         assert [v.raw() for v in req.any_of] == ["a", "b"]
+
+    @pytest.mark.parametrize(
+        "form, count",
+        [
+            # The list form stops resolving at the 51st value (openjd-rs #486),
+            # so it does not give the count; the expression form does.
+            (["{{Param.Many}}"], "more than 50"),
+            ("{{Param.Many}}", "60"),
+        ],
+    )
+    def test_more_than_50_values_after_resolution(self, form: Any, count: str) -> None:
+        jt = _job_template(
+            [],
+            [
+                {
+                    "name": "S",
+                    "hostRequirements": {"attributes": [{"name": "attr.custom.a", "anyOf": form}]},
+                    "script": _ECHO,
+                }
+            ],
+            params=[
+                {
+                    "name": "Many",
+                    "type": "LIST[STRING]",
+                    "default": [f"v{i}" for i in range(60)],
+                }
+            ],
+        )
+        with pytest.raises(DecodeValidationError) as exc:
+            create_job(job_template=jt, job_parameter_values={})
+        assert str(exc.value) == (
+            "steps[0] -> hostRequirements -> attributes[0] -> anyOf: attribute 'attr.custom.a' "
+            f"of Step 'S' has {count} anyOf values after resolution, exceeding the maximum of 50 "
+            "(Template Schemas §3.3.2)"
+        )
 
 
 class TestRangeExprLengthCheck:

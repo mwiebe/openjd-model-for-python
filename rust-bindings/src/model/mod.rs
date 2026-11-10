@@ -34,7 +34,8 @@ pub(crate) use decode::{
 pub(crate) use env_params::{
     py_check_environment_templates, py_create_job_with_environment_templates, PyCreatedJob,
     PyDiscardedHostRequirement, PyDocument, PyEnvironmentParameterValues, PyEnvironmentRef,
-    PyHostRequirementKind, PyStepDisabledEnvironments,
+    PyEnvironmentScope, PyEnvironmentStatus, PyHostRequirementKind, PyOptionalEntryNotFound,
+    PyStepDisabledEnvironments, PyStepEnvironmentStatus, PyStepEnvironmentStatuses,
 };
 pub(crate) use errors::{PyDecodeValidationError, PyModelValidationError, PyUnsupportedSchema};
 pub(crate) use job::{

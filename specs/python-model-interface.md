@@ -68,7 +68,7 @@ canonical location.
 |---|---|
 | `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `create_job_with_environment_templates`, `check_environment_templates`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `evaluate_let_bindings`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), the Rust pyclass enums `SpecificationRevision` and `TemplateSpecificationVersion` (re-exported from `openjd._openjd_rs`; behave like `str`-Enums with lowercase variant names — see their dedicated sections below), and the capability-validation helpers (`validate_amount_capability_name`, `validate_attribute_capability_name`, `standard_amount_capability_names`, `standard_attribute_capability_names`, `standard_attribute_capabilities`). **Explicitly NOT exposed at v1**: the v0 names `ParameterValue`, `ParameterValueType`, `ValueReferenceConstants`, `CancelationMethodTerminate`, `CancelationMethodNotifyThenTerminate`, `CompatibilityError`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`, `FormatStringError`, `RevisionExtensions`, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`). Use the canonical locations: `openjd.model._v1.types` (parameter types/values, `JobParameterValue`/`TaskParameterValue`, `JobParameterType`/`TaskParameterType`); `openjd.model._v1.template` / `openjd.model._v1.job` (structural pyclasses, `EmbeddedFile`, `StepDependencyEdge`); `openjd.model._v1.errors` (`DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`); and `openjd.expr` (expression-layer types). For revision/extensions information, use `ModelProfile.from_strings(revision, extensions)` directly — `RevisionExtensions` was a v0 wrapper that no longer has a v1 counterpart. The `openjd.model._v1.v2023_09` submodule is also gone — it was a v0-shaped per-revision compat shim with no Rust-API counterpart; structural pyclasses live in their canonical submodules (`_v1.template`, `_v1.job`, `_v1.types`, `_v1.errors`) and revision is a property of types, not a namespace. |
 | `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the 12 typed job-parameter-definition variants (`JobStringParameterDefinition`, `JobIntParameterDefinition`, `JobFloatParameterDefinition`, `JobPathParameterDefinition`, `JobBoolParameterDefinition`, `JobRangeExprParameterDefinition`, `JobListStringParameterDefinition`, `JobListPathParameterDefinition`, `JobListIntParameterDefinition`, `JobListFloatParameterDefinition`, `JobListBoolParameterDefinition`, `JobListListIntParameterDefinition`), the typed task-parameter-definition variants, the `*UserInterface` pyclasses, and the ENV_PARAMS enum `EnvironmentActivation`. |
-| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, the job-time `EmbeddedFile`, and the ENV_PARAMS types `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`, `DiscardedHostRequirement`, `HostRequirementKind`. |
+| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, the job-time `EmbeddedFile`, and the ENV_PARAMS types `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`, `StepEnvironmentStatuses`, `StepEnvironmentStatus`, `EnvironmentStatus`, `EnvironmentScope`, `OptionalEntryNotFound`, `DiscardedHostRequirement`, `HostRequirementKind`. |
 | `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `JobParameterValue`, `TaskParameterType`, `TaskParameterValue`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision`, `TemplateSpecificationVersion`, `CallerLimits`, `ValidationContext`. |
 | `openjd.model._v1.errors` | Exception classes raised by decode/create paths: `DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`. |
 
@@ -313,6 +313,7 @@ created.job                     # Job: attached Environments first, then jobEnvi
 created.environment_documents   # list[Document], index for index with job.job_environments
 created.warnings                # list[str], each "<path>: <message>"
 created.disabled_environments   # list[StepDisabledEnvironments], one per Step
+created.environment_statuses    # list[StepEnvironmentStatuses], one per Step
 created.discarded_host_requirements  # list[list[DiscardedHostRequirement]], one per Step
 
 step = created.job.steps[0]
@@ -368,8 +369,63 @@ are superseded for the Step: they are not entered, have no
 `environment_parameters` entry, are not held to constraint 7, and their
 `enableIf` is not evaluated for that Step. An attached Environment can
 supersede a Job Environment. `disabled_environments` lists the superseded
-Environments with those their `enableIf` disabled; openjd-rs does not record
-which reason applied, so the bindings cannot tell them apart either.
+Environments with those their `enableIf` disabled; `environment_statuses`
+(below) says which reason applied.
+
+`created.environment_statuses` is a `list[StepEnvironmentStatuses]`, one per
+Step, index for index. Each lists, in the Job's Environment order (attached
+ones in attachment order, then `jobEnvironments`, then the Step's
+`stepEnvironments`), every Environment the Step *considered*: each `ALWAYS`
+and `BY_DEFAULT` Environment, each `ON_REQUEST` one an enabled `environment:`
+entry of the Step requests, and each of the Step's Step Environments. An
+`ON_REQUEST` Environment the Step does not request is not listed. Each item is
+a `StepEnvironmentStatus` with:
+
+- `name`, the Environment's name;
+- `document`, a `Document`: the attachment's for an attached Environment,
+  else `Document.job_template()`;
+- `scope`, an `EnvironmentScope`: `ATTACHED`, `JOB` or `STEP`. It is
+  `ATTACHED` exactly when `document` is an Environment Template;
+- `status`, an `EnvironmentStatus`, the §7.4.1 decision for the Step:
+  - `ENTERED`: the Step's Sessions enter it;
+  - `DECLINED`: a `BY_DEFAULT` Environment that a disabled `environment:`
+    entry of the Step declines (§3.2 item 3.2);
+  - `DISABLED`: its own `enableIf` is false for the Step;
+  - `SUPERSEDED`: an earlier Environment of its `exclusiveGroup` remains in
+    the Step's set.
+
+  A declined or superseded Environment's `enableIf` is not evaluated for the
+  Step, so its status is never `DISABLED`.
+
+`StepEnvironmentStatuses.not_found` lists the Step's enabled
+`required: false` `environment:` entries that named no Environment, as
+`OptionalEntryNotFound` items with `dependency_index` (the entry's 0-based
+position in the Step's `dependencies`) and `environment` (the name it gave),
+in `dependencies` order. Each also gives a `created.warnings` entry. A
+disabled entry that names nothing has no effect and is not listed.
+
+The `ENTERED` items are exactly the Environments `Step.enters_environment`
+accepts and the Step's `step_environments`; the `DISABLED` and `SUPERSEDED`
+items are `created.disabled_environments`. A Job Template without
+`ENV_PARAMS` can't decline, disable or supersede its own Environments, so they
+are all `ENTERED`; an attached Environment Template that lists `ENV_PARAMS`
+can still be `DECLINED`, `DISABLED` or `SUPERSEDED`. Only
+`create_job_with_environment_templates` returns the statuses; call it with no
+`environment_templates` for a Job without attachments.
+
+```python
+from openjd.model._v1.job import EnvironmentScope, EnvironmentStatus
+for step, statuses in zip(created.job.steps, created.environment_statuses):
+    for e in statuses.environments:
+        print(step.name, e.name, e.document, e.scope.name, e.status.name)
+    for n in statuses.not_found:
+        print(step.name, f"dependencies[{n.dependency_index}]", n.environment, "NOT_FOUND")
+# Render Conda queue ATTACHED ENTERED
+# Render Docker JobTemplate JOB SUPERSEDED
+# Render Lic JobTemplate JOB DECLINED
+# Render Scratch JobTemplate STEP DISABLED
+# Render dependencies[2] Extra NOT_FOUND
+```
 
 `created.discarded_host_requirements` is a `list[list[DiscardedHostRequirement]]`,
 one list per Step: the ENV_PARAMS host requirements that resolved to `null`
@@ -745,7 +801,7 @@ step.environment_values_equal(other) # bool — §3.2.2 value equality
 
 `document` defaults to `Document.job_template()`.
 
-### ENV_PARAMS job types: `Document` / `EnvironmentRef` / `EnvironmentParameterValues` / `CreatedJob` / `StepDisabledEnvironments` / `DiscardedHostRequirement` / `HostRequirementKind`
+### ENV_PARAMS job types: `Document` / `EnvironmentRef` / `EnvironmentParameterValues` / `CreatedJob` / `StepDisabledEnvironments` / `StepEnvironmentStatuses` / `StepEnvironmentStatus` / `EnvironmentStatus` / `EnvironmentScope` / `OptionalEntryNotFound` / `DiscardedHostRequirement` / `HostRequirementKind`
 
 All live in `openjd.model._v1.job` and are frozen.
 
@@ -769,6 +825,16 @@ StepDisabledEnvironments.environments       # list[EnvironmentRef] its enableIf 
                                             #   an earlier one of its exclusiveGroup superseded
 StepDisabledEnvironments.step_environments  # list[str] Step Environments its enableIf disabled
 
+StepEnvironmentStatuses.environments  # list[StepEnvironmentStatus], in the Job's Environment order
+StepEnvironmentStatuses.not_found     # list[OptionalEntryNotFound], in dependencies order
+StepEnvironmentStatus.name            # str
+StepEnvironmentStatus.document        # Document
+StepEnvironmentStatus.scope           # EnvironmentScope.ATTACHED | .JOB | .STEP
+StepEnvironmentStatus.status          # EnvironmentStatus.ENTERED | .DECLINED | .DISABLED | .SUPERSEDED
+OptionalEntryNotFound.dependency_index  # int, 0-based position in the Step's dependencies
+OptionalEntryNotFound.environment       # str, the name the entry gave
+EnvironmentStatus.SUPERSEDED.name     # "SUPERSEDED"; eq, hash, pickle (as EnvironmentScope)
+
 DiscardedHostRequirement.environment  # Optional[EnvironmentRef]; None for the Step's own
 DiscardedHostRequirement.kind         # HostRequirementKind.AMOUNT | HostRequirementKind.ATTRIBUTE
 DiscardedHostRequirement.name         # str, the resolved capability name
@@ -777,6 +843,11 @@ HostRequirementKind.AMOUNT.name       # "AMOUNT"; eq, hash, pickle
 
 `DiscardedHostRequirement` is equal when environment, kind and name are equal;
 it is neither hashable nor pickleable, as in openjd-rs.
+
+`StepEnvironmentStatus` and `OptionalEntryNotFound` are equal when every field
+is equal, and hashable; `StepEnvironmentStatuses` is equal when both lists
+are equal, and not hashable, as in openjd-rs. None of the three has a
+constructor or pickles: take them from `CreatedJob.environment_statuses`.
 
 `EnvironmentParameterValues` is equal when document, environment, and the
 transport table are equal; pickles through `to_json_str`. `Document` and
@@ -1260,11 +1331,11 @@ underlying `template::TaskParameterDefinition` enum 1:1:
 
 | Variant | Pyclass | `range` element type |
 |---|---|---|
-| `INT` | `IntTaskParameterDefinition` | `list[int]` or `FormatString` |
+| `INT` | `IntTaskParameterDefinition` | `list[int \| FormatString]` or `FormatString` |
 | `FLOAT` | `FloatTaskParameterDefinition` | `list[float \| FormatString]` or `FormatString` |
 | `STRING` | `StringTaskParameterDefinition` | `list[FormatString]` or `FormatString` |
 | `PATH` | `PathTaskParameterDefinition` | `list[FormatString]` or `FormatString` |
-| `CHUNK[INT]` | `ChunkIntTaskParameterDefinition` | `list[int]` or `FormatString` |
+| `CHUNK[INT]` | `ChunkIntTaskParameterDefinition` | `list[int \| FormatString]` or `FormatString` |
 
 Common attributes on every variant:
 
@@ -1284,6 +1355,14 @@ list-form vs format-string-form is dispatched by the binding: the
 `CHUNK[INT]` accept the list-form `[1, 2, 3]`; the others always carry
 `FormatString` elements (which may themselves be literal or
 interpolating).
+
+An `INT` or `CHUNK[INT]` list element is an `int`, for an integer or an
+integer string, or a `FormatString` such as `"{{Param.N}}"` (Template
+Schemas §3.4.1.1; openjd-rs #486, which job creation resolves to an integer).
+Template validation checks the expression of each format string element of an
+`INT`, `CHUNK[INT]` or `FLOAT` list, so an element that names an undefined
+variable raises `ModelValidationError` at `... -> range[k]`. Before #486 an
+`INT` element could not be a format string, and a `FLOAT` one was not checked.
 
 The `CHUNK[INT]` variant additionally exposes:
 
@@ -1936,6 +2015,8 @@ original.
 | ``TemplateSpecificationVersion`` | variant name (``JOBTEMPLATE_v2023_09``, ``ENVIRONMENT_v2023_09``) |
 | ``EnvironmentActivation`` | variant name (``ALWAYS``, ``BY_DEFAULT``, ``ON_REQUEST``) |
 | ``HostRequirementKind`` | variant name (``AMOUNT``, ``ATTRIBUTE``) |
+| ``EnvironmentStatus`` | variant name (``ENTERED``, ``DECLINED``, ``DISABLED``, ``SUPERSEDED``) |
+| ``EnvironmentScope`` | variant name (``ATTACHED``, ``JOB``, ``STEP``) |
 | ``DecodeValidationError``, ``ModelValidationError``, ``UnsupportedSchema`` | standard exception pickle, under their canonical ``openjd.model._v1`` module path |
 
 ``SpecificationRevision`` and ``TemplateSpecificationVersion`` are Rust

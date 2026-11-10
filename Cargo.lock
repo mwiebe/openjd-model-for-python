@@ -792,7 +792,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "openjd-expr"
 version = "0.13.0"
-source = "git+file:///home/markw/projects/rfc-env-params/openjd-rs-ep?rev=a8f9f233f062f51dd31282f89d33350d90ae2f09#a8f9f233f062f51dd31282f89d33350d90ae2f09"
+source = "git+file:///home/markw/projects/rfc-env-params/openjd-rs-ep?rev=f19a035efc2e9a778670a05d5c8a9c1cb0460266#f19a035efc2e9a778670a05d5c8a9c1cb0460266"
 dependencies = [
  "regex",
  "regex-syntax",
@@ -808,7 +808,7 @@ dependencies = [
 [[package]]
 name = "openjd-model"
 version = "0.14.0"
-source = "git+file:///home/markw/projects/rfc-env-params/openjd-rs-ep?rev=a8f9f233f062f51dd31282f89d33350d90ae2f09#a8f9f233f062f51dd31282f89d33350d90ae2f09"
+source = "git+file:///home/markw/projects/rfc-env-params/openjd-rs-ep?rev=f19a035efc2e9a778670a05d5c8a9c1cb0460266#f19a035efc2e9a778670a05d5c8a9c1cb0460266"
 dependencies = [
  "indexmap",
  "openjd-expr",
@@ -839,7 +839,7 @@ dependencies = [
 [[package]]
 name = "openjd-sessions"
 version = "0.8.2"
-source = "git+file:///home/markw/projects/rfc-env-params/openjd-rs-ep?rev=a8f9f233f062f51dd31282f89d33350d90ae2f09#a8f9f233f062f51dd31282f89d33350d90ae2f09"
+source = "git+file:///home/markw/projects/rfc-env-params/openjd-rs-ep?rev=f19a035efc2e9a778670a05d5c8a9c1cb0460266#f19a035efc2e9a778670a05d5c8a9c1cb0460266"
 dependencies = [
  "bitflags",
  "futures-util",

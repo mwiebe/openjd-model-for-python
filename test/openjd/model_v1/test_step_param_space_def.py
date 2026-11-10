@@ -7,7 +7,7 @@ returned by ``StepTemplate.parameter_space``.
 Mirror the runtime ``openjd_model::template::TaskParameterDefinition``
 enum 1:1:
 
-* ``IntTaskParameterDefinition`` — ``range: list[int] | FormatString``
+* ``IntTaskParameterDefinition`` — ``range: list[int | FormatString] | FormatString``
 * ``FloatTaskParameterDefinition`` — ``range: list[float | FormatString] | FormatString``
 * ``StringTaskParameterDefinition`` — ``range: list[FormatString] | FormatString``
 * ``PathTaskParameterDefinition`` — ``range: list[FormatString] | FormatString``
@@ -181,6 +181,26 @@ class TestIntTaskParameterDefinition:
         assert isinstance(d.range, FormatString)
         assert d.range.raw() == "1-10:2"
 
+    def test_list_with_format_string(self) -> None:
+        """An INT range list element may be a format string (Template
+        Schemas §3.4.1.1, openjd-rs #486); an integer string decodes as an
+        ``int``."""
+        step = _decode_step(
+            {
+                "taskParameterDefinitions": [
+                    {"name": "F", "type": "INT", "range": [1, "2", "{{Param.N}}"]},
+                ]
+            },
+            parameter_definitions=[{"name": "N", "type": "INT", "default": 7}],
+        )
+        d = step.parameter_space.task_parameter_definitions[0]
+        assert isinstance(d, IntTaskParameterDefinition)
+        first, second, third = d.range
+        assert (first, second) == (1, 2)
+        assert type(first) is int and type(second) is int
+        assert isinstance(third, FormatString)
+        assert third.raw() == "{{Param.N}}"
+
 
 class TestFloatTaskParameterDefinition:
     def test_list_of_literals(self) -> None:
@@ -201,6 +221,7 @@ class TestFloatTaskParameterDefinition:
         either literals (Python ``float``) or ``FormatString``s."""
         step = _decode_step(
             extensions=["EXPR"],
+            parameter_definitions=[{"name": "X", "type": "FLOAT", "default": 2.5}],
             parameter_space={
                 "taskParameterDefinitions": [
                     {
@@ -217,6 +238,28 @@ class TestFloatTaskParameterDefinition:
         assert isinstance(items[1], FormatString)
         assert items[1].raw() == "{{Param.X}}"
         assert items[2] == 3.5
+
+    @pytest.mark.parametrize("type_", ["FLOAT", "INT"])
+    def test_list_element_with_an_undefined_variable_is_rejected(self, type_: str) -> None:
+        """Template validation checks a range list element's format string
+        (openjd-rs #486): before, a FLOAT element that names an undefined
+        variable passed decoding, and an INT element could not be a format
+        string at all."""
+        with pytest.raises(ModelValidationError) as exc:
+            _decode_step(
+                {
+                    "taskParameterDefinitions": [
+                        {"name": "F", "type": type_, "range": [1, "{{Param.X}}"]}
+                    ]
+                }
+            )
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "steps[0] -> parameterSpace -> taskParameterDefinitions[0] -> range[1]:\n"
+            "\tFailed to parse interpolation expression at [0, 11]. Undefined variable: 'Param.X'.\n"
+            "  Param.X\n"
+            "  ~~~~~~^"
+        )
 
 
 class TestStringTaskParameterDefinition:
@@ -284,6 +327,28 @@ class TestChunkIntTaskParameterDefinition:
         assert chunks.default_task_count == 4
         assert chunks.target_runtime_seconds is None
         assert chunks.range_constraint == "CONTIGUOUS"
+
+    def test_list_with_format_string(self) -> None:
+        """A ``CHUNK[INT]`` range list shares the INT element type."""
+        step = _decode_step(
+            extensions=["TASK_CHUNKING"],
+            parameter_definitions=[{"name": "N", "type": "INT", "default": 7}],
+            parameter_space={
+                "taskParameterDefinitions": [
+                    {
+                        "name": "F",
+                        "type": "CHUNK[INT]",
+                        "range": [3, "{{Param.N}}"],
+                        "chunks": {"defaultTaskCount": 1, "rangeConstraint": "NONCONTIGUOUS"},
+                    }
+                ]
+            },
+        )
+        d = step.parameter_space.task_parameter_definitions[0]
+        assert isinstance(d, ChunkIntTaskParameterDefinition)
+        three, n = d.range
+        assert three == 3 and type(three) is int
+        assert isinstance(n, FormatString) and n.raw() == "{{Param.N}}"
 
     def test_chunks_with_target_runtime(self) -> None:
         """``targetRuntimeSeconds`` and a ``NONCONTIGUOUS`` constraint

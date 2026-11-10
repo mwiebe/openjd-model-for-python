@@ -157,6 +157,11 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyStepDisabledEnvironments>()?;
     m.add_class::<PyHostRequirementKind>()?;
     m.add_class::<PyDiscardedHostRequirement>()?;
+    m.add_class::<PyEnvironmentStatus>()?;
+    m.add_class::<PyEnvironmentScope>()?;
+    m.add_class::<PyStepEnvironmentStatus>()?;
+    m.add_class::<PyOptionalEntryNotFound>()?;
+    m.add_class::<PyStepEnvironmentStatuses>()?;
     m.add_class::<PyCreatedJob>()?;
     m.add_class::<PyCancelationMode>()?;
     m.add_class::<PyStepParameterSpaceIterator>()?;
