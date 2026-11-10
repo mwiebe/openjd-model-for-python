@@ -24,11 +24,14 @@ Plus ``ChunksDefinition`` for the chunks payload (mirrors
 See report finding #11 (`StepTemplate.parameter_space` exposure).
 """
 
+from __future__ import annotations
+
 import pytest
 
-from openjd.expr import FormatString
-from openjd.model._v1 import decode_job_template
-from openjd.model._v1.errors import ModelValidationError
+from openjd.expr import ExpressionError, FormatString
+from openjd.model._v1 import create_job, decode_job_template
+from openjd.model._v1.errors import DecodeValidationError, ModelValidationError
+from openjd.model._v1.job import StepParameterSpaceIterator
 from openjd.model._v1.template import (
     ChunkIntTaskParameterDefinition,
     ChunksDefinition,
@@ -260,6 +263,102 @@ class TestFloatTaskParameterDefinition:
             "  Param.X\n"
             "  ~~~~~~^"
         )
+
+
+def _resolve_range(type_: str, range_: list, extensions: list | None) -> list[str]:
+    """Create a Job whose one Step has the task parameter ``P`` with
+    ``range_`` and return the values its tasks get."""
+    template: dict = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "name": "J",
+        "parameterDefinitions": [
+            {"name": "N", "type": "INT", "default": 7},
+            {"name": "S", "type": "STRING", "default": " 4 "},
+        ],
+        "steps": [
+            {
+                "name": "S",
+                "parameterSpace": {
+                    "taskParameterDefinitions": [{"name": "P", "type": type_, "range": range_}]
+                },
+                "script": {"actions": {"onRun": {"command": "echo"}}},
+            }
+        ],
+    }
+    if extensions:
+        template["extensions"] = extensions
+    jt = decode_job_template(template=template, supported_extensions=["EXPR"])
+    job = create_job(job_template=jt, job_parameter_values={})
+    return [t["P"].value for t in StepParameterSpaceIterator(space=job.steps[0].parameter_space)]
+
+
+class TestNumericRangeListElements:
+    """How job creation resolves an INT or FLOAT range list element written as
+    a format string (openjd-rs #486). With EXPR each element is a list item of
+    the parameter's type (Expression Language §1.3.2): ``null`` skips it and a
+    list flattens into several elements, and a ``string`` is an error. Without
+    EXPR the element resolves to a string, which is parsed."""
+
+    @pytest.mark.parametrize(
+        "type_, range_, values",
+        [
+            ("INT", ["{{ [1,2] }}", "{{ null }}", 3], ["1", "2", "3"]),
+            ("INT", ["{{Param.N}}", "{{ null }}"], ["7"]),
+            ("FLOAT", ["{{ [1, 2.50] }}"], ["1.0", "2.50"]),
+            ("FLOAT", ["{{Param.N}}"], ["7"]),
+        ],
+    )
+    def test_with_expr_null_skips_and_a_list_flattens(
+        self, type_: str, range_: list, values: list[str]
+    ) -> None:
+        assert _resolve_range(type_, range_, ["EXPR"]) == values
+
+    @pytest.mark.parametrize(
+        "type_, target",
+        [("INT", "int | list[int] | nulltype"), ("FLOAT", "float | int | list[float] | nulltype")],
+    )
+    def test_with_expr_a_string_element_is_an_error(self, type_: str, target: str) -> None:
+        # Without EXPR the same template gives the parsed value.
+        assert _resolve_range(type_, ["{{Param.S}}"], None) == ["4"]
+        with pytest.raises(ExpressionError) as exc:
+            _resolve_range(type_, ["{{Param.S}}"], ["EXPR"])
+        assert str(exc.value) == (
+            f"Task parameter 'P' range[0]: Cannot coerce string to {target}\n"
+            "  Param.S\n"
+            "  ~~~~~~^"
+        )
+
+    def test_with_expr_a_string_literal_element_is_rejected_at_decode(self) -> None:
+        with pytest.raises(ModelValidationError) as exc:
+            _resolve_range("FLOAT", ["{{ 'abc' }}"], ["EXPR"])
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "steps[0] -> parameterSpace -> taskParameterDefinitions[0] -> range[0]:\n"
+            "\tFailed to parse interpolation expression at [0, 11]. Cannot coerce string to "
+            "float | int | list[float] | nulltype\n"
+            "  'abc'\n"
+            "  ^~~~~"
+        )
+
+    def test_with_expr_an_empty_result_is_an_error(self) -> None:
+        with pytest.raises(DecodeValidationError) as exc:
+            _resolve_range("FLOAT", ["{{null}}"], ["EXPR"])
+        assert str(exc.value) == "Task parameter 'P' range has no elements after resolution"
+
+    @pytest.mark.parametrize(
+        "type_, range_, message",
+        [
+            ("INT", ["{{Param.N}}", "{{ null }}"], "range[1]: value '' is not an integer"),
+            ("FLOAT", ["{{null}}"], "range[0]: value '' is not a number"),
+            ("FLOAT", ["{{ [1, 2.50] }}"], "range[0]: value '[1.0, 2.50]' is not a number"),
+        ],
+    )
+    def test_without_expr_the_string_is_parsed(
+        self, type_: str, range_: list, message: str
+    ) -> None:
+        with pytest.raises(ExpressionError) as exc:
+            _resolve_range(type_, range_, None)
+        assert str(exc.value) == f"Task parameter 'P' {message}"
 
 
 class TestStringTaskParameterDefinition:

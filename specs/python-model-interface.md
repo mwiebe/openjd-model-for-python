@@ -409,7 +409,8 @@ accepts and the Step's `step_environments`; the `DISABLED` and `SUPERSEDED`
 items are `created.disabled_environments`. A Job Template without
 `ENV_PARAMS` can't decline, disable or supersede its own Environments, so they
 are all `ENTERED`; an attached Environment Template that lists `ENV_PARAMS`
-can still be `DECLINED`, `DISABLED` or `SUPERSEDED`. Only
+can still be `DISABLED` or `SUPERSEDED` (not `DECLINED`, since only an
+`environment:` entry, which needs `ENV_PARAMS` in the Job Template, declines). Only
 `create_job_with_environment_templates` returns the statuses; call it with no
 `environment_templates` for a Job without attachments.
 
@@ -843,6 +844,10 @@ HostRequirementKind.AMOUNT.name       # "AMOUNT"; eq, hash, pickle
 
 `DiscardedHostRequirement` is equal when environment, kind and name are equal;
 it is neither hashable nor pickleable, as in openjd-rs.
+
+`EnvironmentStatus` and `EnvironmentScope`, like the other pyclass enums here,
+compare equal to their integer value (`EnvironmentStatus.ENTERED == 0`), but
+hash differently from it, so compare and key on members, not integers.
 
 `StepEnvironmentStatus` and `OptionalEntryNotFound` are equal when every field
 is equal, and hashable; `StepEnvironmentStatuses` is equal when both lists
@@ -1358,11 +1363,26 @@ interpolating).
 
 An `INT` or `CHUNK[INT]` list element is an `int`, for an integer or an
 integer string, or a `FormatString` such as `"{{Param.N}}"` (Template
-Schemas §3.4.1.1; openjd-rs #486, which job creation resolves to an integer).
-Template validation checks the expression of each format string element of an
-`INT`, `CHUNK[INT]` or `FLOAT` list, so an element that names an undefined
-variable raises `ModelValidationError` at `... -> range[k]`. Before #486 an
-`INT` element could not be a format string, and a `FLOAT` one was not checked.
+Schemas §3.4.1.1, openjd-rs #486). Template validation checks the expression
+of each format string element of an `INT`, `CHUNK[INT]` or `FLOAT` list, so an
+element that names an undefined variable raises `ModelValidationError` at
+`... -> range[k]`. Job creation resolves each format string element:
+
+- In a template that lists `EXPR`, an element is a list item of the
+  parameter's type (Expression Language §1.3.2; target `int? | list[int]`, or
+  `float? | int | list[float]` for `FLOAT`): `null` skips it, a list flattens
+  into several elements, and a `string` result is an error
+  (`ExpressionError: Task parameter 'P' range[0]: Cannot coerce string to ...`;
+  a string literal is already rejected at decode). A list that resolves to no
+  elements raises `DecodeValidationError` ("... range has no elements after
+  resolution").
+- Without `EXPR`, an element resolves to a string, which is trimmed and parsed
+  (`ExpressionError: ... range[k]: value '...' is not an integer` or
+  `... is not a number`).
+
+Before #486 an `INT` element could not be a format string, a `FLOAT` one was
+not checked at decode, and with `EXPR` a `FLOAT` element that resolved to a
+string such as `" 4 "` was parsed; it is now an error.
 
 The `CHUNK[INT]` variant additionally exposes:
 

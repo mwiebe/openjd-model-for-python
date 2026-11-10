@@ -135,6 +135,13 @@ def _check_invariants(created: CreatedJob) -> None:
             assert step.enters_environment(e.name, e.document) == (e.status == ENTERED)
         if step.environments is not None:
             assert step.environments == entered
+        # Every Job Environment the Step's Sessions enter is listed ENTERED,
+        # also when Step.environments is None (every Job Environment).
+        assert entered == [
+            EnvironmentRef(document=d, environment=env.name)
+            for env, d in zip(job.job_environments or [], created.environment_documents)
+            if step.enters_environment(env.name, d)
+        ]
         # Entered Step Environments are the Step's step_environments.
         assert [s.name for s in step.step_environments or []] == [
             e.name for e in step_items if e.status == ENTERED
@@ -194,8 +201,17 @@ class TestEnums:
         assert ENTERED != DECLINED and DISABLED != SUPERSEDED and JOB != STEP
 
     def test_module(self) -> None:
+        import openjd.model._v1.job as job_module
+
         assert EnvironmentStatus.__module__ == "openjd.model._v1.job"
         assert EnvironmentScope.__module__ == "openjd.model._v1.job"
+        assert {
+            "EnvironmentScope",
+            "EnvironmentStatus",
+            "OptionalEntryNotFound",
+            "StepEnvironmentStatus",
+            "StepEnvironmentStatuses",
+        } <= set(job_module.__all__)
 
 
 class TestJobEnvironments:
@@ -307,18 +323,20 @@ class TestJobEnvironments:
                         {"environment": "Nope", "required": False},
                         # A disabled entry that names nothing has no effect.
                         {"environment": "Gone", "required": False, "enableIf": False},
+                        {"environment": "Also", "required": False},
                     ],
                     "script": _ECHO,
                 }
             ],
         )
         created = _create(jt)
-        assert _not_found(created, 0) == [(1, "Nope")]
+        assert _not_found(created, 0) == [(1, "Nope"), (3, "Also")]
         assert _rows(created, 0) == [("Lic", _JOB, JOB, ENTERED)]
         assert created.warnings == [
-            "steps[0] -> dependencies[1] -> environment: names Environment 'Nope', which is not "
-            "a jobEnvironments entry of the Job Template, and no Environment Template is "
-            "attached. The entry has 'required: false', so it has no effect."
+            f"steps[0] -> dependencies[{i}] -> environment: names Environment '{name}', which "
+            "is not a jobEnvironments entry of the Job Template, and no Environment Template "
+            "is attached. The entry has 'required: false', so it has no effect."
+            for i, name in ((1, "Nope"), (3, "Also"))
         ]
 
     def test_a_step_without_environments(self) -> None:
@@ -401,8 +419,9 @@ class TestAttachedEnvironments:
                     "name": "S",
                     "dependencies": [
                         {"environment": "ByDefault", "enableIf": False},
-                        {"environment": "Requested"},
                         {"environment": "Missing", "required": False},
+                        {"environment": "Requested"},
+                        {"environment": "Lost", "required": False},
                     ],
                     "script": _ECHO,
                 },
@@ -432,7 +451,7 @@ class TestAttachedEnvironments:
             ("Off", off, ATTACHED, DISABLED),
             ("Job", _JOB, JOB, ENTERED),
         ]
-        assert _not_found(created, 0) == [(2, "Missing")]
+        assert _not_found(created, 0) == [(1, "Missing"), (3, "Lost")]
         assert created.environment_statuses[1].not_found == []
 
     @pytest.mark.parametrize(
@@ -543,9 +562,53 @@ class TestItemTypes:
         with pytest.raises(TypeError):
             hash(one.environment_statuses[0])
 
-    def test_statuses_differ_when_any_item_does(self) -> None:
-        jt = _job_template([_env("A"), _env("B")], [{"name": "S", "script": _ECHO}])
-        assert _create(jt).environment_statuses[0] != self._created().environment_statuses[0]
+    def test_items_differ_by_status_alone(self) -> None:
+        # Lic is entered by One and declined by Two: same name, document and
+        # scope.
+        jt = _job_template(
+            [_env("Lic")],
+            [
+                {"name": "One", "script": _ECHO},
+                {
+                    "name": "Two",
+                    "dependencies": [{"environment": "Lic", "enableIf": False}],
+                    "script": _ECHO,
+                },
+            ],
+        )
+        one, two = (s.environments[0] for s in _create(jt).environment_statuses)
+        assert (one.name, one.document, one.scope) == (two.name, two.document, two.scope)
+        assert one.status != two.status
+        assert one != two
+
+    @pytest.mark.parametrize("differ", ["environments", "not_found"])
+    def test_statuses_differ_when_either_list_does(self, differ: str) -> None:
+        def step(env_enabled: bool, missing: str) -> CreatedJob:
+            return _create(
+                _job_template(
+                    [_env("A", enableIf=env_enabled)],
+                    [
+                        {
+                            "name": "S",
+                            "dependencies": [{"environment": missing, "required": False}],
+                            "script": _ECHO,
+                        }
+                    ],
+                )
+            )
+
+        base = step(True, "X").environment_statuses[0]
+        other = (
+            step(False, "X") if differ == "environments" else step(True, "Y")
+        ).environment_statuses[0]
+        if differ == "environments":
+            assert base.not_found == other.not_found
+            assert base.environments != other.environments
+        else:
+            assert base.environments == other.environments
+            assert base.not_found != other.not_found
+        assert base != other
+        assert base == step(True, "X").environment_statuses[0]
 
     def test_frozen_and_not_constructible(self) -> None:
         item = self._created().environment_statuses[0].environments[0]

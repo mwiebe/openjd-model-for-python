@@ -159,6 +159,26 @@ class TestIsAbsolute:
             is True
         )
 
+    @pytest.mark.parametrize(
+        "expr, posix, windows",
+        [
+            ("path('') / 'k'", "k", "k"),
+            ("path('.') / 'k'", "k", "k"),
+            ("path('k') / ''", "k", "k"),
+            ("path('') / ''", ".", "."),
+            ("path('/a') / '.'", "/a", "\\a"),
+            ("path('a') / '.'", "a", "a"),
+        ],
+    )
+    def test_join_with_an_empty_operand_gives_the_other(
+        self, expr: str, posix: str, windows: str
+    ) -> None:
+        # openjd-rs #516: '' and '.' are the empty path, and a join onto it
+        # gives the other operand, as pathlib does. Before, path('') / 'k'
+        # was './k' and path('k') / '' was 'k/'.
+        assert evaluate_expression(expr, path_format=PathFormat.POSIX).item() == posix
+        assert evaluate_expression(expr, path_format=PathFormat.WINDOWS).item() == windows
+
     def test_empty_path(self) -> None:
         assert (
             evaluate_expression("path('').is_absolute()", path_format=PathFormat.POSIX).item()

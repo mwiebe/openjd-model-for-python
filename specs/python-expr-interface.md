@@ -34,7 +34,15 @@ evaluate_expression("sum(range(100))", operation_limit=50)  # raises ExpressionE
 
 # With path format
 evaluate_expression("path('/a/b').name", path_format=PathFormat.POSIX).item()  # "b"
+
+# A join onto the empty path ('' or '.') gives the other operand, as pathlib does
+evaluate_expression("path('') / 'k'", path_format=PathFormat.POSIX).item()  # "k"
+evaluate_expression("path('k') / ''", path_format=PathFormat.POSIX).item()  # "k"
 ```
+
+`/` treats `''` and `'.'` as the empty path: a join onto it, on either side,
+gives the other operand, and `path('') / ''` gives `'.'` (openjd-rs #516).
+Before #516, `path('') / 'k'` gave `'./k'` and `path('k') / ''` gave `'k/'`.
 
 ### `parse_expression`
 
