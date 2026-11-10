@@ -7,7 +7,7 @@
 //! Wraps `openjd_model::job::{Document, EnvironmentRef,
 //! EnvironmentParameterValues}`, `openjd_model::{CreatedJob,
 //! StepDisabledEnvironments, StepEnvironmentStatuses, StepEnvironmentStatus,
-//! EnvironmentStatus, EnvironmentScope, OptionalEntryNotFound,
+//! SupersedingEnvironment, EnvironmentStatus, EnvironmentScope, OptionalEntryNotFound,
 //! create_job_with_environment_templates, check_environment_templates}`.
 
 use pyo3::prelude::*;
@@ -655,9 +655,28 @@ impl PyStepEnvironmentStatus {
         self.inner.status.into()
     }
 
+    /// The Environment's ``exclusiveGroup``, whatever its ``status``;
+    /// ``None`` for one without, which includes every Step Environment.
+    #[getter]
+    fn exclusive_group(&self) -> Option<&str> {
+        self.inner.exclusive_group.as_deref()
+    }
+
+    /// For a ``SUPERSEDED`` one, the member of its ``exclusiveGroup`` the
+    /// Step's Sessions enter: the earliest in the Job's Environment order
+    /// that remains in the Step's set. ``None`` for every other ``status``.
+    #[getter]
+    fn superseded_by(&self) -> Option<PySupersedingEnvironment> {
+        self.inner
+            .superseded_by
+            .as_ref()
+            .map(|w| PySupersedingEnvironment { inner: w.clone() })
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "StepEnvironmentStatus(name={:?}, document={}, scope={}, status={})",
+            "StepEnvironmentStatus(name={:?}, document={}, scope={}, status={}, \
+             exclusive_group={}, superseded_by={})",
             self.inner.name,
             PyDocument {
                 inner: self.inner.document.clone()
@@ -665,6 +684,71 @@ impl PyStepEnvironmentStatus {
             .__repr__(),
             PyEnvironmentScope::from(self.inner.scope).__repr__(),
             PyEnvironmentStatus::from(self.inner.status).__repr__(),
+            self.inner
+                .exclusive_group
+                .as_ref()
+                .map_or_else(|| "None".to_string(), |g| format!("{g:?}")),
+            self.inner.superseded_by.as_ref().map_or_else(
+                || "None".to_string(),
+                |w| PySupersedingEnvironment { inner: w.clone() }.__repr__()
+            ),
+        )
+    }
+}
+
+/// The Environment that superseded another for a Step
+/// (``StepEnvironmentStatus.superseded_by``): an attached or Job
+/// Environment. ``name`` and ``document`` identify it among the Job's
+/// Environments, also when an attached Environment and a Job Environment
+/// share a name; ``scope`` follows from ``document`` and is given so the
+/// winner's own status item can be matched on the same three fields.
+#[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
+#[pyclass(
+    module = "openjd.model._v1.job",
+    name = "SupersedingEnvironment",
+    frozen,
+    eq,
+    hash,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct PySupersedingEnvironment {
+    pub(crate) inner: openjd_model::SupersedingEnvironment,
+}
+
+#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
+#[pymethods]
+impl PySupersedingEnvironment {
+    /// The Environment's ``name``.
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    /// The document that declares it, as in
+    /// ``StepEnvironmentStatus.document``.
+    #[getter]
+    fn document(&self) -> PyDocument {
+        PyDocument {
+            inner: self.inner.document.clone(),
+        }
+    }
+
+    /// Its part of the Job's Environment order: ``ATTACHED`` or ``JOB``.
+    #[getter]
+    fn scope(&self) -> PyEnvironmentScope {
+        self.inner.scope.into()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SupersedingEnvironment(name={:?}, document={}, scope={})",
+            self.inner.name,
+            PyDocument {
+                inner: self.inner.document.clone()
+            }
+            .__repr__(),
+            PyEnvironmentScope::from(self.inner.scope).__repr__(),
         )
     }
 }

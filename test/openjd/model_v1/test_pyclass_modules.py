@@ -142,6 +142,7 @@ EXPECTED_MODULES: dict[str, str] = {
     "StepDisabledEnvironments": "openjd.model._v1.job",
     "StepEnvironmentStatus": "openjd.model._v1.job",
     "StepEnvironmentStatuses": "openjd.model._v1.job",
+    "SupersedingEnvironment": "openjd.model._v1.job",
     "StepParameterSpace": "openjd.model._v1.job",
     "StepParameterSpaceIterator": "openjd.model._v1.job",
     "StepScript": "openjd.model._v1.job",

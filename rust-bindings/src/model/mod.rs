@@ -36,6 +36,7 @@ pub(crate) use env_params::{
     PyDiscardedHostRequirement, PyDocument, PyEnvironmentParameterValues, PyEnvironmentRef,
     PyEnvironmentScope, PyEnvironmentStatus, PyHostRequirementKind, PyOptionalEntryNotFound,
     PyStepDisabledEnvironments, PyStepEnvironmentStatus, PyStepEnvironmentStatuses,
+    PySupersedingEnvironment,
 };
 pub(crate) use errors::{PyDecodeValidationError, PyModelValidationError, PyUnsupportedSchema};
 pub(crate) use job::{

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Per-Step Environment statuses through the Rust-backed ``openjd.model._v1``
-(openjd-rs-ep f19a035e, spec eaa5d1d).
+(openjd-rs-ep 67a7aedd, spec eaa5d1d).
 
 ``CreatedJob.environment_statuses`` has one ``StepEnvironmentStatuses`` per
 Step: every Environment the Step considered, in the Job's Environment order
@@ -13,7 +13,9 @@ Environment a disabled ``environment:`` entry declines), ``DISABLED`` (its
 ``enableIf`` is false for the Step) or ``SUPERSEDED`` (an earlier member of its
 ``exclusiveGroup`` is entered; its ``enableIf`` is not evaluated). The Step's
 enabled ``required: false`` entries that named no Environment are in
-``not_found``.
+``not_found``. Each item also carries its ``exclusive_group``, and a
+``SUPERSEDED`` one ``superseded_by``, the ``SupersedingEnvironment`` (name,
+document, scope) of the group member the Step entered instead.
 
 Every test checks the same invariants against the older views of a created
 Job (``_check_invariants``).
@@ -43,6 +45,7 @@ from openjd.model._v1.job import (
     OptionalEntryNotFound,
     StepEnvironmentStatus,
     StepEnvironmentStatuses,
+    SupersedingEnvironment,
 )
 
 _EXTS = ["ENV_PARAMS", "EXPR"]
@@ -116,10 +119,25 @@ def _check_invariants(created: CreatedJob) -> None:
         job.steps, created.environment_statuses, created.disabled_environments
     ):
         items = statuses.environments
-        for e in items:
+        for k, e in enumerate(items):
             assert (e.scope == ATTACHED) == (not e.document.is_job_template)
             if e.scope == ATTACHED:
                 assert e.document in attached_docs
+            # A Step Environment has no group; superseded_by is set exactly
+            # for a SUPERSEDED item and names the first ENTERED member of its
+            # group before it.
+            if e.scope == STEP:
+                assert e.exclusive_group is None
+            assert (e.superseded_by is not None) == (e.status == SUPERSEDED)
+            if e.superseded_by is not None:
+                assert e.exclusive_group is not None
+                first = next(
+                    w
+                    for w in items[:k]
+                    if w.status == ENTERED and w.exclusive_group == e.exclusive_group
+                )
+                w = e.superseded_by
+                assert (w.name, w.document, w.scope) == (first.name, first.document, first.scope)
         job_items = [e for e in items if e.scope != STEP]
         step_items = [e for e in items if e.scope == STEP]
         # Scopes come in the Job's Environment order.
@@ -217,7 +235,9 @@ class TestEnums:
             "OptionalEntryNotFound",
             "StepEnvironmentStatus",
             "StepEnvironmentStatuses",
+            "SupersedingEnvironment",
         } <= set(job_module.__all__)
+        assert SupersedingEnvironment.__module__ == "openjd.model._v1.job"
 
 
 class TestJobEnvironments:
@@ -526,9 +546,12 @@ class TestItemTypes:
         assert item.document == _JOB
         assert item.scope == JOB
         assert item.status == DISABLED
+        assert item.exclusive_group is None
+        assert item.superseded_by is None
         assert repr(item) == (
             'StepEnvironmentStatus(name="B", document=Document.job_template(), '
-            "scope=EnvironmentScope.JOB, status=EnvironmentStatus.DISABLED)"
+            "scope=EnvironmentScope.JOB, status=EnvironmentStatus.DISABLED, "
+            "exclusive_group=None, superseded_by=None)"
         )
 
     def test_not_found_attributes_and_repr(self) -> None:
@@ -620,6 +643,163 @@ class TestItemTypes:
         item = self._created().environment_statuses[0].environments[0]
         with pytest.raises(AttributeError):
             item.name = "X"  # type: ignore[misc]
-        for cls in (StepEnvironmentStatus, StepEnvironmentStatuses, OptionalEntryNotFound):
+        for cls in (
+            StepEnvironmentStatus,
+            StepEnvironmentStatuses,
+            OptionalEntryNotFound,
+            SupersedingEnvironment,
+        ):
             with pytest.raises(TypeError):
                 cls()
+
+
+def _groups(created: CreatedJob, step: int) -> list[tuple[str, Optional[str], Optional[tuple]]]:
+    """``(name, exclusive_group, (winner name, document, scope) or None)`` per item."""
+    return [
+        (
+            e.name,
+            e.exclusive_group,
+            (
+                None
+                if e.superseded_by is None
+                else (e.superseded_by.name, e.superseded_by.document, e.superseded_by.scope)
+            ),
+        )
+        for e in created.environment_statuses[step].environments
+    ]
+
+
+class TestExclusiveGroupAndSupersededBy:
+    """``StepEnvironmentStatus.exclusive_group`` and ``.superseded_by``."""
+
+    def test_groups_within_the_job_template(self) -> None:
+        # Two interleaved groups and an ungrouped Environment. S enters the
+        # first of each; T turns A1 off, so A2 wins G and A3 names A2.
+        toggle = {
+            "envParameterDefinitions": [{"name": "On", "type": "INT", "default": 1}],
+            "enableIf": "Env.Param.On == 1",
+        }
+        jt = _job_template(
+            [
+                _env("A1", exclusiveGroup="G", **toggle),
+                _env("B1", exclusiveGroup="H"),
+                _env("U"),
+                _env("A2", exclusiveGroup="G"),
+                _env("B2", exclusiveGroup="H"),
+                _env("A3", exclusiveGroup="G"),
+            ],
+            [
+                {"name": "S", "script": _ECHO},
+                {
+                    "name": "T",
+                    "dependencies": [{"environment": "A1", "parameters": {"On": 0}}],
+                    "script": _ECHO,
+                },
+            ],
+        )
+        created = _create(jt)
+        assert _groups(created, 0) == [
+            ("A1", "G", None),
+            ("B1", "H", None),
+            ("U", None, None),
+            ("A2", "G", ("A1", _JOB, JOB)),
+            ("B2", "H", ("B1", _JOB, JOB)),
+            ("A3", "G", ("A1", _JOB, JOB)),
+        ]
+        assert [r[3] for r in _rows(created, 1)] == [
+            DISABLED,
+            ENTERED,
+            ENTERED,
+            ENTERED,
+            SUPERSEDED,
+            SUPERSEDED,
+        ]
+        assert _groups(created, 1) == [
+            ("A1", "G", None),
+            ("B1", "H", None),
+            ("U", None, None),
+            ("A2", "G", None),
+            ("B2", "H", ("B1", _JOB, JOB)),
+            ("A3", "G", ("A2", _JOB, JOB)),
+        ]
+
+    def test_group_spanning_an_attachment_and_a_job_environment(self) -> None:
+        # The attachment shares the Job Environment's name: superseded_by
+        # tells them apart by document and scope.
+        jt = _job_template(
+            [_env("Conda", exclusiveGroup="Soft"), _env("Pip", exclusiveGroup="Soft")],
+            [{"name": "S", "script": _ECHO}],
+        )
+        created = _create(jt, [(_env_template("Conda", exclusiveGroup="Soft"), "queue")])
+        winner = created.environment_statuses[0].environments[0]
+        assert (winner.name, winner.document, winner.scope) == ("Conda", _QUEUE, ATTACHED)
+        assert _groups(created, 0) == [
+            ("Conda", "Soft", None),
+            ("Conda", "Soft", ("Conda", _QUEUE, ATTACHED)),
+            ("Pip", "Soft", ("Conda", _QUEUE, ATTACHED)),
+        ]
+        loser = created.environment_statuses[0].environments[1]
+        assert loser.document == _JOB and loser.superseded_by is not None
+        assert loser.superseded_by.document == winner.document
+
+    def test_a_disabled_first_member_supersedes_nothing(self) -> None:
+        jt = _job_template(
+            [_env("G1", exclusiveGroup="G", enableIf=False), _env("G2", exclusiveGroup="G")],
+            [{"name": "S", "script": _ECHO}],
+        )
+        created = _create(jt)
+        assert _rows(created, 0) == [("G1", _JOB, JOB, DISABLED), ("G2", _JOB, JOB, ENTERED)]
+        assert _groups(created, 0) == [("G1", "G", None), ("G2", "G", None)]
+
+    def test_ungrouped_items_have_none(self) -> None:
+        jt = _job_template(
+            [_env("A"), _env("Off", enableIf=False)],
+            [
+                {
+                    "name": "S",
+                    "stepEnvironments": [_env("L")],
+                    "script": _ECHO,
+                }
+            ],
+        )
+        created = _create(jt, [_env_template("Q")])
+        for e in created.environment_statuses[0].environments:
+            assert e.exclusive_group is None and e.superseded_by is None
+
+    def test_superseding_environment_type(self) -> None:
+        jt = _job_template(
+            [_env("A", exclusiveGroup="G"), _env("B", exclusiveGroup="G")],
+            [{"name": "S", "script": _ECHO}],
+        )
+        one, two = _create(jt), _create(jt)
+        item = one.environment_statuses[0].environments[1]
+        w = item.superseded_by
+        assert isinstance(w, SupersedingEnvironment)
+        assert (w.name, w.document, w.scope) == ("A", _JOB, JOB)
+        assert repr(w) == (
+            'SupersedingEnvironment(name="A", document=Document.job_template(), '
+            "scope=EnvironmentScope.JOB)"
+        )
+        assert repr(item) == (
+            'StepEnvironmentStatus(name="B", document=Document.job_template(), '
+            "scope=EnvironmentScope.JOB, status=EnvironmentStatus.SUPERSEDED, "
+            'exclusive_group="G", superseded_by=SupersedingEnvironment(name="A", '
+            "document=Document.job_template(), scope=EnvironmentScope.JOB))"
+        )
+        w2 = two.environment_statuses[0].environments[1].superseded_by
+        assert w == w2 and hash(w) == hash(w2)
+        assert item == two.environment_statuses[0].environments[1]
+        with pytest.raises(AttributeError):
+            w.name = "X"  # type: ignore[misc]
+        # Items that differ only in superseded_by or exclusive_group differ.
+        other = _job_template(
+            [_env("C", exclusiveGroup="G"), _env("B", exclusiveGroup="G")],
+            [{"name": "S", "script": _ECHO}],
+        )
+        assert _create(other).environment_statuses[0].environments[1] != item
+        regrouped = _job_template(
+            [_env("A", exclusiveGroup="H"), _env("B", exclusiveGroup="G")],
+            [{"name": "S", "script": _ECHO}],
+        )
+        b = _create(regrouped).environment_statuses[0].environments[1]
+        assert b.status == ENTERED and b != item

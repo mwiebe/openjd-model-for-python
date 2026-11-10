@@ -57,6 +57,7 @@ from openjd._openjd_rs import (
     StepDisabledEnvironments,
     StepEnvironmentStatus,
     StepEnvironmentStatuses,
+    SupersedingEnvironment,
 )
 
 __all__ = (
@@ -97,5 +98,6 @@ __all__ = (
     "StepParameterSpaceIterator",
     "StepScript",
     "StringTaskParameter",
+    "SupersedingEnvironment",
     "TaskChunksDefinition",
 )

@@ -160,6 +160,7 @@ fn openjd_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEnvironmentStatus>()?;
     m.add_class::<PyEnvironmentScope>()?;
     m.add_class::<PyStepEnvironmentStatus>()?;
+    m.add_class::<PySupersedingEnvironment>()?;
     m.add_class::<PyOptionalEntryNotFound>()?;
     m.add_class::<PyStepEnvironmentStatuses>()?;
     m.add_class::<PyCreatedJob>()?;

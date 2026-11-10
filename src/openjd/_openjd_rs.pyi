@@ -110,6 +110,7 @@ __all__ = [
     "StringTaskParameter",
     "StringTaskParameterDefinition",
     "StringUserInterface",
+    "SupersedingEnvironment",
     "SymbolTable",
     "TaskChunksDefinition",
     "TaskParameterType",
@@ -2808,6 +2809,21 @@ class StepEnvironmentStatus:
         Whether the Step's Sessions enter it, or why not.
         """
 
+    @property
+    def exclusive_group(self) -> typing.Optional[builtins.str]:
+        r"""
+        The Environment's ``exclusiveGroup``, whatever its ``status``;
+        ``None`` for one without, which includes every Step Environment.
+        """
+
+    @property
+    def superseded_by(self) -> typing.Optional[SupersedingEnvironment]:
+        r"""
+        For a ``SUPERSEDED`` one, the member of its ``exclusiveGroup`` the
+        Step's Sessions enter: the earliest in the Job's Environment order
+        that remains in the Step's set. ``None`` for every other ``status``.
+        """
+
     def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
     def __hash__(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
@@ -3084,6 +3100,40 @@ class StringUserInterface:
     def group_label(self) -> typing.Optional[builtins.str]: ...
     @property
     def groupLabel(self) -> typing.Optional[builtins.str]: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class SupersedingEnvironment:
+    r"""
+    The Environment that superseded another for a Step
+    (``StepEnvironmentStatus.superseded_by``): an attached or Job
+    Environment. ``name`` and ``document`` identify it among the Job's
+    Environments, also when an attached Environment and a Job Environment
+    share a name; ``scope`` follows from ``document`` and is given so the
+    winner's own status item can be matched on the same three fields.
+    """
+
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        The Environment's ``name``.
+        """
+
+    @property
+    def document(self) -> Document:
+        r"""
+        The document that declares it, as in
+        ``StepEnvironmentStatus.document``.
+        """
+
+    @property
+    def scope(self) -> EnvironmentScope:
+        r"""
+        Its part of the Job's Environment order: ``ATTACHED`` or ``JOB``.
+        """
+
+    def __eq__(self, other: builtins.object, /) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final

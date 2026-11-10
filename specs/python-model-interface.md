@@ -68,7 +68,7 @@ canonical location.
 |---|---|
 | `openjd.model._v1` (top level) | Entry-point functions (`decode_job_template`, `decode_job_template_str`, `decode_environment_template`, `decode_environment_template_str`, `create_job`, `create_job_with_environment_templates`, `check_environment_templates`, `preprocess_job_parameters`, `merge_job_parameter_definitions`, `evaluate_let_bindings`), the `CallerLimits` and `ModelProfile` cross-cutting types, `DocumentType` (also in `.types`), the Rust pyclass enums `SpecificationRevision` and `TemplateSpecificationVersion` (re-exported from `openjd._openjd_rs`; behave like `str`-Enums with lowercase variant names — see their dedicated sections below), and the capability-validation helpers (`validate_amount_capability_name`, `validate_attribute_capability_name`, `standard_amount_capability_names`, `standard_attribute_capability_names`, `standard_attribute_capabilities`). **Explicitly NOT exposed at v1**: the v0 names `ParameterValue`, `ParameterValueType`, `ValueReferenceConstants`, `CancelationMethodTerminate`, `CancelationMethodNotifyThenTerminate`, `CompatibilityError`, `CommandString`, `ArgString`, `EmbeddedFileText`, `EmbeddedFiles`, `StepDependencyGraphNode`, `StepDependencyGraphStepToStepEdge`, `FormatStringError`, `RevisionExtensions`, and the legacy `openjd.expr` re-exports (`SymbolTable`, `FormatString`, `RangeExpr`, `ExpressionError`). Use the canonical locations: `openjd.model._v1.types` (parameter types/values, `JobParameterValue`/`TaskParameterValue`, `JobParameterType`/`TaskParameterType`); `openjd.model._v1.template` / `openjd.model._v1.job` (structural pyclasses, `EmbeddedFile`, `StepDependencyEdge`); `openjd.model._v1.errors` (`DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`); and `openjd.expr` (expression-layer types). For revision/extensions information, use `ModelProfile.from_strings(revision, extensions)` directly — `RevisionExtensions` was a v0 wrapper that no longer has a v1 counterpart. The `openjd.model._v1.v2023_09` submodule is also gone — it was a v0-shaped per-revision compat shim with no Rust-API counterpart; structural pyclasses live in their canonical submodules (`_v1.template`, `_v1.job`, `_v1.types`, `_v1.errors`) and revision is a property of types, not a namespace. |
 | `openjd.model._v1.template` | Template-time pyclasses returned by `decode_*_template`: `JobTemplate`, `EnvironmentTemplate`, `StepTemplate`, `Action`, `EmbeddedFile`, the 12 typed job-parameter-definition variants (`JobStringParameterDefinition`, `JobIntParameterDefinition`, `JobFloatParameterDefinition`, `JobPathParameterDefinition`, `JobBoolParameterDefinition`, `JobRangeExprParameterDefinition`, `JobListStringParameterDefinition`, `JobListPathParameterDefinition`, `JobListIntParameterDefinition`, `JobListFloatParameterDefinition`, `JobListBoolParameterDefinition`, `JobListListIntParameterDefinition`), the typed task-parameter-definition variants, the `*UserInterface` pyclasses, and the ENV_PARAMS enum `EnvironmentActivation`. |
-| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, the job-time `EmbeddedFile`, and the ENV_PARAMS types `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`, `StepEnvironmentStatuses`, `StepEnvironmentStatus`, `EnvironmentStatus`, `EnvironmentScope`, `OptionalEntryNotFound`, `DiscardedHostRequirement`, `HostRequirementKind`. |
+| `openjd.model._v1.job` | Job-time pyclasses returned by `create_job`: `Job`, `Step`, `StepScript`, `StepActions`, `Action`, `Environment`, `StepParameterSpace`, `StepParameterSpaceIterator`, `StepDependencyGraph`, the typed task-parameter pyclasses, the job-time `EmbeddedFile`, and the ENV_PARAMS types `Document`, `EnvironmentRef`, `EnvironmentParameterValues`, `CreatedJob`, `StepDisabledEnvironments`, `StepEnvironmentStatuses`, `StepEnvironmentStatus`, `SupersedingEnvironment`, `EnvironmentStatus`, `EnvironmentScope`, `OptionalEntryNotFound`, `DiscardedHostRequirement`, `HostRequirementKind`. |
 | `openjd.model._v1.types` | Cross-cutting types: `JobParameterType`, `JobParameterValue`, `TaskParameterType`, `TaskParameterValue`, `DocumentType`, `ModelProfile`, `ModelExtension`, `SpecificationRevision`, `TemplateSpecificationVersion`, `CallerLimits`, `ValidationContext`. |
 | `openjd.model._v1.errors` | Exception classes raised by decode/create paths: `DecodeValidationError`, `ModelValidationError`, `UnsupportedSchema`. |
 
@@ -396,6 +396,15 @@ a `StepEnvironmentStatus` with:
 
   A declined or superseded Environment's `enableIf` is not evaluated for the
   Step, so its status is never `DISABLED`.
+- `exclusive_group`, the Environment's `exclusiveGroup` (`str`), whatever its
+  status; `None` for one without, and for every Step Environment;
+- `superseded_by`, set exactly when `status` is `SUPERSEDED`: a
+  `SupersedingEnvironment` naming the member of the group the Step's Sessions
+  enter instead, the earliest one in the Job's Environment order that remains
+  in the Step's set. Its `name`, `document` and `scope` equal those of that
+  member's own `ENTERED` item in the same list, so an attached Environment and
+  a Job Environment of the same name are told apart. `None` otherwise; a group
+  whose first member is `DISABLED` is won by the next, with nothing superseded.
 
 `StepEnvironmentStatuses.not_found` lists the Step's enabled
 `required: false` `environment:` entries that named no Environment, as
@@ -802,7 +811,7 @@ step.environment_values_equal(other) # bool — §3.2.2 value equality
 
 `document` defaults to `Document.job_template()`.
 
-### ENV_PARAMS job types: `Document` / `EnvironmentRef` / `EnvironmentParameterValues` / `CreatedJob` / `StepDisabledEnvironments` / `StepEnvironmentStatuses` / `StepEnvironmentStatus` / `EnvironmentStatus` / `EnvironmentScope` / `OptionalEntryNotFound` / `DiscardedHostRequirement` / `HostRequirementKind`
+### ENV_PARAMS job types: `Document` / `EnvironmentRef` / `EnvironmentParameterValues` / `CreatedJob` / `StepDisabledEnvironments` / `StepEnvironmentStatuses` / `StepEnvironmentStatus` / `SupersedingEnvironment` / `EnvironmentStatus` / `EnvironmentScope` / `OptionalEntryNotFound` / `DiscardedHostRequirement` / `HostRequirementKind`
 
 All live in `openjd.model._v1.job` and are frozen.
 
@@ -832,6 +841,9 @@ StepEnvironmentStatus.name            # str
 StepEnvironmentStatus.document        # Document
 StepEnvironmentStatus.scope           # EnvironmentScope.ATTACHED | .JOB | .STEP
 StepEnvironmentStatus.status          # EnvironmentStatus.ENTERED | .DECLINED | .DISABLED | .SUPERSEDED
+StepEnvironmentStatus.exclusive_group # Optional[str], the Environment's exclusiveGroup
+StepEnvironmentStatus.superseded_by   # Optional[SupersedingEnvironment]; set exactly for SUPERSEDED
+SupersedingEnvironment.name / .document / .scope  # the group member entered instead (ATTACHED or JOB)
 OptionalEntryNotFound.dependency_index  # int, 0-based position in the Step's dependencies
 OptionalEntryNotFound.environment       # str, the name the entry gave
 EnvironmentStatus.SUPERSEDED.name     # "SUPERSEDED"; eq, hash, pickle (as EnvironmentScope)
@@ -849,9 +861,9 @@ it is neither hashable nor pickleable, as in openjd-rs.
 compare equal to their integer value (`EnvironmentStatus.ENTERED == 0`), but
 hash differently from it, so compare and key on members, not integers.
 
-`StepEnvironmentStatus` and `OptionalEntryNotFound` are equal when every field
-is equal, and hashable; `StepEnvironmentStatuses` is equal when both lists
-are equal, and not hashable, as in openjd-rs. None of the three has a
+`StepEnvironmentStatus`, `SupersedingEnvironment` and `OptionalEntryNotFound`
+are equal when every field is equal, and hashable; `StepEnvironmentStatuses` is equal when both lists
+are equal, and not hashable, as in openjd-rs. None of the four has a
 constructor or pickles: take them from `CreatedJob.environment_statuses`.
 
 `EnvironmentParameterValues` is equal when document, environment, and the
