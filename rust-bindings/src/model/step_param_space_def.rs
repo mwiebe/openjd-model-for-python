@@ -10,11 +10,11 @@
 //!
 //! Five typed pyclasses mirror the `TaskParameterDefinition` variants:
 //!
-//! * `IntTaskParameterDefinition` — `range: list[int] | FormatString`
+//! * `IntTaskParameterDefinition` — `range: list[int | FormatString] | FormatString`
 //! * `FloatTaskParameterDefinition` — `range: list[float | FormatString] | FormatString`
 //! * `StringTaskParameterDefinition` — `range: list[FormatString] | FormatString`
 //! * `PathTaskParameterDefinition` — `range: list[FormatString] | FormatString`
-//! * `ChunkIntTaskParameterDefinition` — `range`, plus `chunks: ChunksDefinition`
+//! * `ChunkIntTaskParameterDefinition` — `range` as for INT, plus `chunks: ChunksDefinition`
 //!
 //! Plus `ChunksDefinition` for the chunks payload (mirrors
 //! `template::ChunksDefinition`).

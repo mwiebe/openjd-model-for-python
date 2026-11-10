@@ -306,6 +306,11 @@ class TestNumericRangeListElements:
             ("INT", ["{{Param.N}}", "{{ null }}"], ["7"]),
             ("FLOAT", ["{{ [1, 2.50] }}"], ["1.0", "2.50"]),
             ("FLOAT", ["{{Param.N}}"], ["7"]),
+            # A string that is exactly a number coerces.
+            ("INT", ["{{'4'}}"], ["4"]),
+            ("FLOAT", ["{{'4.5'}}"], ["4.5"]),
+            # Text around an expression resolves to a string, which is parsed.
+            ("INT", ["{{ Param.N }}0"], ["70"]),
         ],
     )
     def test_with_expr_null_skips_and_a_list_flattens(
@@ -327,6 +332,11 @@ class TestNumericRangeListElements:
             "  Param.S\n"
             "  ~~~~~~^"
         )
+
+    def test_with_expr_a_mixed_element_is_parsed(self) -> None:
+        with pytest.raises(ExpressionError) as exc:
+            _resolve_range("INT", ["x{{Param.N}}"], ["EXPR"])
+        assert str(exc.value) == "Task parameter 'P' range[0]: value 'x7' is not an integer"
 
     def test_with_expr_a_string_literal_element_is_rejected_at_decode(self) -> None:
         with pytest.raises(ModelValidationError) as exc:

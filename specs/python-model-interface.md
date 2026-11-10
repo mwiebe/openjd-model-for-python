@@ -1368,14 +1368,17 @@ of each format string element of an `INT`, `CHUNK[INT]` or `FLOAT` list, so an
 element that names an undefined variable raises `ModelValidationError` at
 `... -> range[k]`. Job creation resolves each format string element:
 
-- In a template that lists `EXPR`, an element is a list item of the
-  parameter's type (Expression Language §1.3.2; target `int? | list[int]`, or
-  `float? | int | list[float]` for `FLOAT`): `null` skips it, a list flattens
-  into several elements, and a `string` result is an error
-  (`ExpressionError: Task parameter 'P' range[0]: Cannot coerce string to ...`;
-  a string literal is already rejected at decode). A list that resolves to no
-  elements raises `DecodeValidationError` ("... range has no elements after
-  resolution").
+- In a template that lists `EXPR`, an element that is a single `{{ }}`
+  expression is evaluated as a list item of the parameter's type (Expression
+  Language §1.3.2; target `int? | list[int]`, or `float? | int | list[float]`
+  for `FLOAT`): `null` skips it and a list flattens into several elements. A
+  `string` result is coerced as Expression Language §1.2.3 allows, so a string
+  that is exactly a number (`"4"`) is accepted and any other string (`" 4 "`)
+  is an error (`ExpressionError: Task parameter 'P' range[0]: Cannot coerce
+  string to ...`). A list that resolves to no elements raises
+  `DecodeValidationError` ("... range has no elements after resolution"). An
+  element that mixes text and expressions (`"{{Param.N}}0"`) resolves to a
+  string, which is parsed as without `EXPR`.
 - Without `EXPR`, an element resolves to a string, which is trimmed and parsed
   (`ExpressionError: ... range[k]: value '...' is not an integer` or
   `... is not a number`).

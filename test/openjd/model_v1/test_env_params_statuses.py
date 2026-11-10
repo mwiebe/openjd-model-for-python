@@ -193,6 +193,12 @@ class TestEnums:
         assert restored == member and restored is member
         assert hash(restored) == hash(member)
 
+    def test_integer_values(self) -> None:
+        # Members compare equal to their integer value (eq_int).
+        assert (ENTERED, DECLINED, DISABLED, SUPERSEDED) == (0, 1, 2, 3)
+        assert (ATTACHED, JOB, STEP) == (0, 1, 2)
+        assert ENTERED != 1
+
     def test_members_are_distinct(self) -> None:
         statuses = [ENTERED, DECLINED, DISABLED, SUPERSEDED]
         scopes = [ATTACHED, JOB, STEP]
