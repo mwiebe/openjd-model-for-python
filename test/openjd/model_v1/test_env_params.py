@@ -533,8 +533,9 @@ class TestValidationContext:
         assert repr(ctx) == (
             "ValidationContext(profile=ModelProfile(revision=V2023_09, extensions=[ENV_PARAMS]), "
             "caller_limits=CallerLimits(max_step_count=Some(3), max_env_count=None, "
-            "max_task_count=None, max_step_script_size=None, max_environment_size=None, "
-            "max_template_size=None, max_resolved_arg_len=None, max_resolved_data_len=None, "
+            "max_step_environment_entries=None, max_task_count=None, max_step_script_size=None, "
+            "max_environment_size=None, max_template_size=None, max_resolved_arg_len=None, "
+            "max_resolved_data_len=None, "
             "max_eval_memory_bytes=None, max_eval_operations=None))"
         )
 
@@ -598,6 +599,79 @@ _AS_GIVEN = [
     "",
     "s3://bucket/key",
 ]
+
+
+def _entries_template(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Two Steps, ``A`` and ``C`` with no dependencies and ``B`` with ``entries``."""
+    run = _echo("x")
+    return {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": _EXTS,
+        "name": "Entries",
+        "steps": [
+            {"name": "A", "script": run},
+            {"name": "C", "script": run},
+            {"name": "B", "dependencies": entries, "script": run},
+        ],
+    }
+
+
+def _optional(n: int) -> list[dict[str, Any]]:
+    return [{"environment": f"Env{i}", "required": False} for i in range(n)]
+
+
+class TestMaxStepEnvironmentEntries:
+    """``CallerLimits.max_step_environment_entries`` reaches template validation."""
+
+    @staticmethod
+    def _decode(entries: list[dict[str, Any]], limit: int | None) -> Any:
+        return decode_job_template(
+            template=_entries_template(entries),
+            supported_extensions=_EXTS,
+            caller_limits=CallerLimits(max_step_environment_entries=limit),
+        )
+
+    def test_at_the_limit_is_accepted(self) -> None:
+        jt = self._decode(_optional(3), 3)
+        assert len(jt.steps[2].dependencies) == 3
+
+    def test_one_over_is_rejected_at_the_dependencies_path(self) -> None:
+        with pytest.raises(ModelValidationError) as excinfo:
+            self._decode(_optional(4), 3)
+        assert str(excinfo.value).endswith(
+            "steps[2] -> dependencies:\n"
+            "\texceeds caller limit of 3 'environment' entries (4 entries)."
+        )
+
+    def test_none_imposes_no_limit(self) -> None:
+        jt = self._decode(_optional(100), None)
+        assert len(jt.steps[2].dependencies) == 100
+
+    def test_step_entries_are_not_counted(self) -> None:
+        entries = [{"dependsOn": "A"}, {"step": "C"}, *_optional(1)]
+        jt = self._decode(entries, 1)
+        assert len(jt.steps[2].dependencies) == 3
+
+    def test_disabled_entries_are_counted(self) -> None:
+        """An entry disabled by a literal ``false`` or by an expression counts."""
+        entries = [
+            *_optional(1),
+            {"environment": "Off", "required": False, "enableIf": False},
+            {"environment": "Expr", "required": False, "enableIf": "1 == 2"},
+        ]
+        with pytest.raises(ModelValidationError) as excinfo:
+            self._decode(entries, 2)
+        assert str(excinfo.value).endswith(
+            "steps[2] -> dependencies:\n"
+            "\texceeds caller limit of 2 'environment' entries (3 entries)."
+        )
+
+    def test_default_caller_limits_impose_no_limit(self) -> None:
+        jt = decode_job_template(
+            template=_entries_template(_optional(100)), supported_extensions=_EXTS
+        )
+        deps = jt.steps[2].dependencies
+        assert deps is not None and len(deps) == 100
 
 
 def _as_given_template(entry: dict[str, Any], lets: list[str] | None = None) -> Any:

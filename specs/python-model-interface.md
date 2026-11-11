@@ -1822,6 +1822,7 @@ expr_profile = profile.to_expr_profile(HostContext.unresolved())
 |---|---|---|
 | `max_step_count` | steps in a job template | decode |
 | `max_env_count` | job + step environments | decode |
+| `max_step_environment_entries` | `environment:` entries in one Step's `dependencies`, as written (disabled and `required: false` entries count; `dependsOn` and `step` do not) | decode |
 | `max_task_count` | total tasks across all steps | `create_job`, after ranges resolve |
 | `max_step_script_size` | JSON-encoded step script, bytes | decode |
 | `max_environment_size` | JSON-encoded environment, bytes | decode |

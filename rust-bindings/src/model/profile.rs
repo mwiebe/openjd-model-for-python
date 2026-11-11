@@ -476,6 +476,13 @@ impl PyModelProfile {
 /// spec-recommended defaults (100 MB and 10 million operations);
 /// lowering them is spec-sanctioned configuration.
 ///
+/// ``max_step_environment_entries`` bounds the ``environment:`` entries
+/// (``ENV_PARAMS``) in one Step's ``dependencies``, which Template
+/// Schemas §3 leaves unbounded. Entries count as written: a disabled
+/// entry and a ``required: false`` entry that names no Environment
+/// count, ``dependsOn`` and ``step`` entries do not. It is checked at
+/// template validation only, since the count is literal.
+///
 /// Mirrors `openjd_model::CallerLimits`.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
@@ -497,6 +504,7 @@ impl PyCallerLimits {
         *,
         max_step_count=None,
         max_env_count=None,
+        max_step_environment_entries=None,
         max_task_count=None,
         max_step_script_size=None,
         max_environment_size=None,
@@ -510,6 +518,7 @@ impl PyCallerLimits {
     fn new(
         max_step_count: Option<usize>,
         max_env_count: Option<usize>,
+        max_step_environment_entries: Option<usize>,
         max_task_count: Option<u64>,
         max_step_script_size: Option<usize>,
         max_environment_size: Option<usize>,
@@ -523,6 +532,7 @@ impl PyCallerLimits {
             inner: CallerLimits {
                 max_step_count,
                 max_env_count,
+                max_step_environment_entries,
                 max_task_count,
                 max_step_script_size,
                 max_environment_size,
@@ -542,6 +552,10 @@ impl PyCallerLimits {
     #[getter]
     fn max_env_count(&self) -> Option<usize> {
         self.inner.max_env_count
+    }
+    #[getter]
+    fn max_step_environment_entries(&self) -> Option<usize> {
+        self.inner.max_step_environment_entries
     }
     #[getter]
     fn max_task_count(&self) -> Option<u64> {
@@ -582,12 +596,14 @@ impl PyCallerLimits {
 
     fn __repr__(&self) -> String {
         format!(
-            "CallerLimits(max_step_count={:?}, max_env_count={:?}, max_task_count={:?}, \
+            "CallerLimits(max_step_count={:?}, max_env_count={:?}, \
+             max_step_environment_entries={:?}, max_task_count={:?}, \
              max_step_script_size={:?}, max_environment_size={:?}, max_template_size={:?}, \
              max_resolved_arg_len={:?}, max_resolved_data_len={:?}, \
              max_eval_memory_bytes={:?}, max_eval_operations={:?})",
             self.inner.max_step_count,
             self.inner.max_env_count,
+            self.inner.max_step_environment_entries,
             self.inner.max_task_count,
             self.inner.max_step_script_size,
             self.inner.max_environment_size,
@@ -599,7 +615,7 @@ impl PyCallerLimits {
         )
     }
 
-    /// Pickle support — round-trips through `__init__` with all ten
+    /// Pickle support — round-trips through `__init__` with all eleven
     /// optional fields as keyword arguments.
     fn __reduce__<'py>(
         &self,
@@ -613,6 +629,10 @@ impl PyCallerLimits {
         let kwargs = PyDict::new(py);
         kwargs.set_item("max_step_count", self.inner.max_step_count)?;
         kwargs.set_item("max_env_count", self.inner.max_env_count)?;
+        kwargs.set_item(
+            "max_step_environment_entries",
+            self.inner.max_step_environment_entries,
+        )?;
         kwargs.set_item("max_task_count", self.inner.max_task_count)?;
         kwargs.set_item("max_step_script_size", self.inner.max_step_script_size)?;
         kwargs.set_item("max_environment_size", self.inner.max_environment_size)?;
@@ -626,12 +646,13 @@ impl PyCallerLimits {
     }
 
     /// Structural equality — required by the pickle round-trip
-    /// contract. Compares all ten fields; the underlying
+    /// contract. Compares all eleven fields; the underlying
     /// `CallerLimits` upstream doesn't derive `PartialEq`, so we
     /// implement equality field-by-field at the binding boundary.
     fn __eq__(&self, other: &Self) -> bool {
         self.inner.max_step_count == other.inner.max_step_count
             && self.inner.max_env_count == other.inner.max_env_count
+            && self.inner.max_step_environment_entries == other.inner.max_step_environment_entries
             && self.inner.max_task_count == other.inner.max_task_count
             && self.inner.max_step_script_size == other.inner.max_step_script_size
             && self.inner.max_environment_size == other.inner.max_environment_size

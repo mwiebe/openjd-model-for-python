@@ -342,6 +342,13 @@ class CallerLimits:
     spec-recommended defaults (100 MB and 10 million operations);
     lowering them is spec-sanctioned configuration.
 
+    ``max_step_environment_entries`` bounds the ``environment:`` entries
+    (``ENV_PARAMS``) in one Step's ``dependencies``, which Template
+    Schemas §3 leaves unbounded. Entries count as written: a disabled
+    entry and a ``required: false`` entry that names no Environment
+    count, ``dependsOn`` and ``step`` entries do not. It is checked at
+    template validation only, since the count is literal.
+
     Mirrors `openjd_model::CallerLimits`.
     """
 
@@ -349,6 +356,8 @@ class CallerLimits:
     def max_step_count(self) -> typing.Optional[builtins.int]: ...
     @property
     def max_env_count(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def max_step_environment_entries(self) -> typing.Optional[builtins.int]: ...
     @property
     def max_task_count(self) -> typing.Optional[builtins.int]: ...
     @property
@@ -370,6 +379,7 @@ class CallerLimits:
         *,
         max_step_count: typing.Optional[builtins.int] = None,
         max_env_count: typing.Optional[builtins.int] = None,
+        max_step_environment_entries: typing.Optional[builtins.int] = None,
         max_task_count: typing.Optional[builtins.int] = None,
         max_step_script_size: typing.Optional[builtins.int] = None,
         max_environment_size: typing.Optional[builtins.int] = None,
@@ -382,14 +392,14 @@ class CallerLimits:
     def __repr__(self) -> builtins.str: ...
     def __reduce__(self) -> tuple[typing.Any, tuple]:
         r"""
-        Pickle support — round-trips through `__init__` with all ten
+        Pickle support — round-trips through `__init__` with all eleven
         optional fields as keyword arguments.
         """
 
     def __eq__(self, other: CallerLimits) -> builtins.bool:
         r"""
         Structural equality — required by the pickle round-trip
-        contract. Compares all ten fields; the underlying
+        contract. Compares all eleven fields; the underlying
         `CallerLimits` upstream doesn't derive `PartialEq`, so we
         implement equality field-by-field at the binding boundary.
         """

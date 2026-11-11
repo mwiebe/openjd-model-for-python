@@ -130,6 +130,7 @@ def test_caller_limits_round_trip_default():
     limits = CallerLimits()
     loaded = pickle.loads(pickle.dumps(limits))
     assert loaded.max_step_count is None
+    assert loaded.max_step_environment_entries is None
     assert loaded.max_template_size is None
     assert loaded.max_resolved_arg_len is None
     assert loaded.max_eval_operations is None
@@ -141,6 +142,7 @@ def test_caller_limits_round_trip_populated():
     limits = CallerLimits(
         max_step_count=10,
         max_env_count=5,
+        max_step_environment_entries=70,
         max_task_count=1_000_000,
         max_step_script_size=2048,
         max_environment_size=1024,
@@ -153,6 +155,7 @@ def test_caller_limits_round_trip_populated():
     loaded = pickle.loads(pickle.dumps(limits))
     assert loaded.max_step_count == 10
     assert loaded.max_env_count == 5
+    assert loaded.max_step_environment_entries == 70
     assert loaded.max_task_count == 1_000_000
     assert loaded.max_step_script_size == 2048
     assert loaded.max_environment_size == 1024
@@ -161,7 +164,7 @@ def test_caller_limits_round_trip_populated():
     assert loaded.max_resolved_data_len == 65536
     assert loaded.max_eval_memory_bytes == 1_048_576
     assert loaded.max_eval_operations == 100_000
-    # Equality covers all ten fields, so this also pins that none was dropped
+    # Equality covers all eleven fields, so this also pins that none was dropped
     # from __reduce__: a field lost there would come back None and compare unequal.
     assert loaded == limits
 
@@ -276,6 +279,20 @@ def test_caller_limits_equality_negative():
     c = CallerLimits()
     assert a != b
     assert a != c
+
+
+def test_caller_limits_equality_compares_max_step_environment_entries():
+    """Equality reads max_step_environment_entries: limits that differ only there
+    compare unequal, and equal values compare equal."""
+    from openjd._openjd_rs import CallerLimits
+
+    assert CallerLimits(max_step_environment_entries=1) != CallerLimits(
+        max_step_environment_entries=2
+    )
+    assert CallerLimits(max_step_environment_entries=1) != CallerLimits()
+    assert CallerLimits(max_step_environment_entries=1) == CallerLimits(
+        max_step_environment_entries=1
+    )
 
 
 def test_validation_context_equality_after_pickle():
