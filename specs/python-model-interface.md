@@ -413,6 +413,16 @@ position in the Step's `dependencies`) and `environment` (the name it gave),
 in `dependencies` order. Each also gives a `created.warnings` entry. A
 disabled entry that names nothing has no effect and is not listed.
 
+An enabled `required: false` entry that names an attached Environment that
+declares no parameters (one from an Environment Template without `ENV_PARAMS`,
+say) and supplies some has its parameters ignored (Template Schemas §3.2.1
+item 1): it gives one `created.warnings` entry, at the entry's `parameters`,
+naming the Environment and the ignored keys, and `check_environment_templates`
+returns the same one. It is not in `not_found`, it still requests an
+`ON_REQUEST` Environment, and the Environment's item stays `ENTERED`, with no
+values for it in the Step's `environment_parameters`. With `required: true`
+(or `required` absent) the same entry is a `ModelValidationError`.
+
 The `ENTERED` items are exactly the Environments `Step.enters_environment`
 accepts and the Step's `step_environments`; the `DISABLED` and `SUPERSEDED`
 items are `created.disabled_environments`. A Job Template without

@@ -425,6 +425,94 @@ class TestCreateJobWithEnvironmentTemplates:
         assert str(exc.value) == _CONDA_REQUIRED_MISSING
 
 
+# An Environment Template written before ENV_PARAMS: ``Conda`` declares no
+# parameters.
+_OLD_CONDA_ENV_TEMPLATE: dict[str, Any] = {
+    "specificationVersion": "environment-2023-09",
+    "parameterDefinitions": [{"name": "CondaPackages", "type": "STRING", "default": ""}],
+    "environment": {"name": "Conda", "script": {"actions": {"onEnter": {"command": "x"}}}},
+}
+
+_IGNORED_WARNING = (
+    "JobTemplate -> steps[0] -> dependencies[0] -> parameters: Environment 'Conda' (queue) "
+    "declares no parameters, and this entry has 'required: false', so its parameters are "
+    "ignored: Channels, Packages. The Step's Sessions get no values from it (Template Schemas "
+    "§3.2.1 item 1)."
+)
+
+
+def _entry_template(required: bool | None) -> Any:
+    entry: dict[str, Any] = {
+        "environment": "Conda",
+        "parameters": {"Packages": "{{ Param.L[5] }}", "Channels": ["a", "b"]},
+    }
+    if required is not None:
+        entry["required"] = required
+    return _job_template(
+        {
+            "specificationVersion": "jobtemplate-2023-09",
+            "extensions": _EXTS,
+            "name": "Ignored",
+            "parameterDefinitions": [{"name": "L", "type": "LIST[INT]", "default": [1]}],
+            "steps": [{"name": "A", "dependencies": [entry], "script": _echo("A")}],
+        }
+    )
+
+
+class TestIgnoredParameters:
+    """Template Schemas §3.2.1 item 1: an attached Environment that declares no
+    parameters ignores an enabled ``required: false`` entry's parameters, with a
+    warning, and is still entered; ``required: true`` stays an error."""
+
+    def _old(self) -> Any:
+        return decode_environment_template(
+            template=_OLD_CONDA_ENV_TEMPLATE, supported_extensions=_EXTS
+        )
+
+    def test_job_creation_warns_and_enters(self) -> None:
+        created = create_job_with_environment_templates(
+            job_template=_entry_template(False),
+            job_parameter_values={},
+            environment_templates=[(self._old(), "queue")],
+        )
+        # The values are not resolved or checked: the index out of range and
+        # the list for what would be a STRING are not errors.
+        assert created.warnings == [_IGNORED_WARNING]
+        step = created.job.steps[0]
+        assert step.environment_parameters is None
+        assert step.enters_environment("Conda", Document.environment_template(0, "queue"))
+        statuses = created.environment_statuses[0]
+        assert [(e.name, e.status.name) for e in statuses.environments] == [("Conda", "ENTERED")]
+        assert statuses.not_found == []
+
+    def test_check_gives_the_same_warning(self) -> None:
+        assert check_environment_templates(
+            job_template=_entry_template(False), environment_templates=[(self._old(), "queue")]
+        ) == [_IGNORED_WARNING]
+
+    @pytest.mark.parametrize("required", [True, None])
+    def test_a_required_entry_is_rejected(self, required: bool | None) -> None:
+        expected = (
+            "1 validation error for Submission\n"
+            "JobTemplate -> steps[0] -> dependencies[0] -> parameters:\n"
+            "\tEnvironment 'Conda' (queue) declares no parameters, so this entry must not supply "
+            "any; it supplies Channels, Packages."
+        )
+        jt = _entry_template(required)
+        with pytest.raises(ModelValidationError) as exc:
+            check_environment_templates(
+                job_template=jt, environment_templates=[(self._old(), "queue")]
+            )
+        assert str(exc.value) == expected
+        with pytest.raises(ModelValidationError) as exc:
+            create_job_with_environment_templates(
+                job_template=jt,
+                job_parameter_values={},
+                environment_templates=[(self._old(), "queue")],
+            )
+        assert str(exc.value).startswith(expected)
+
+
 class TestValueTypes:
     def test_document(self) -> None:
         jt_doc = Document.job_template()
