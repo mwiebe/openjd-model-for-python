@@ -308,6 +308,30 @@ class TestStepParameterSpaceIterator:
         # Test twice. We do some caching of lengths. Test the caching flows.
         assert len(result) == 2 * 3 * 2
 
+    def test_negative_index_on_a_product_past_i64(self) -> None:
+        # GIVEN a product of about 1.6e19 tasks: more than i64::MAX, which
+        # openjd-rs counts as a u64 on every target (openjd-rs #482)
+        space = StepParameterSpace(
+            taskParameterDefinitions={
+                "Param1": _int_range("1-4000000000"),
+                "Param2": _int_range("1-4000000000"),
+            },
+            combination="Param1 * Param2",
+        )
+
+        # WHEN
+        it = StepParameterSpaceIterator(space=space)
+
+        # THEN negative indexes count back from the exact length
+        assert it[-1] == {"Param1": _v(_INT, "4000000000"), "Param2": _v(_INT, "4000000000")}
+        assert it[-2] == {"Param1": _v(_INT, "4000000000"), "Param2": _v(_INT, "3999999999")}
+        # The most negative index Python can pass still lands inside the space.
+        index = 4000000000 * 4000000000 - 2**63
+        assert it[-(2**63)] == {
+            "Param1": _v(_INT, str(index // 4000000000 + 1)),
+            "Param2": _v(_INT, str(index % 4000000000 + 1)),
+        }
+
     def test_associate_iteration(self) -> None:
         # GIVEN
         space = StepParameterSpace(
