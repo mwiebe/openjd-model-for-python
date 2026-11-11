@@ -510,7 +510,61 @@ class TestIgnoredParameters:
                 job_parameter_values={},
                 environment_templates=[(self._old(), "queue")],
             )
-        assert str(exc.value).startswith(expected)
+        assert str(exc.value) == expected
+
+    def test_an_ignored_entry_still_requests_an_on_request_environment(self) -> None:
+        # An ENV_PARAMS Environment Template whose ON_REQUEST Environment
+        # declares no parameters: Step A's ignored entry requests it, so A's
+        # Sessions enter it; Step B makes no request, so it is not listed.
+        lic = decode_environment_template(
+            template={
+                "specificationVersion": "environment-2023-09",
+                "extensions": _EXTS,
+                "environment": {
+                    "name": "Lic",
+                    "activation": "ON_REQUEST",
+                    "script": {"actions": {"onEnter": {"command": "x"}}},
+                },
+            },
+            supported_extensions=_EXTS,
+        )
+        jt = _job_template(
+            {
+                "specificationVersion": "jobtemplate-2023-09",
+                "extensions": _EXTS,
+                "name": "Requested",
+                "steps": [
+                    {
+                        "name": "A",
+                        "dependencies": [
+                            {"environment": "Lic", "required": False, "parameters": {"P": "x"}}
+                        ],
+                        "script": _echo("A"),
+                    },
+                    {"name": "B", "script": _echo("B")},
+                ],
+            }
+        )
+        warning = (
+            "JobTemplate -> steps[0] -> dependencies[0] -> parameters: Environment 'Lic' (lic) "
+            "declares no parameters, and this entry has 'required: false', so its parameters are "
+            "ignored: P. The Step's Sessions get no values from it (Template Schemas §3.2.1 item 1)."
+        )
+        assert check_environment_templates(
+            job_template=jt, environment_templates=[(lic, "lic")]
+        ) == [warning]
+        created = create_job_with_environment_templates(
+            job_template=jt, job_parameter_values={}, environment_templates=[(lic, "lic")]
+        )
+        assert created.warnings == [warning]
+        doc = Document.environment_template(0, "lic")
+        a, b = created.job.steps
+        assert a.enters_environment("Lic", doc)
+        assert not b.enters_environment("Lic", doc)
+        assert [(e.name, e.status.name) for e in created.environment_statuses[0].environments] == [
+            ("Lic", "ENTERED")
+        ]
+        assert created.environment_statuses[1].environments == []
 
 
 class TestValueTypes:
