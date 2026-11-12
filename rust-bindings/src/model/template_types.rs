@@ -948,6 +948,15 @@ impl PyEnvironment {
     /// does not set `activation` is `EnvironmentActivation.BY_DEFAULT`. The
     /// value applies to Job Environments and Environment Templates; a
     /// `stepEnvironments` entry cannot set it, and it means nothing there.
+    ///
+    /// This is the value as it applies in a document that lists
+    /// `ENV_PARAMS`. An Environment from a document that does not list it
+    /// behaves as `ALWAYS` with no `enableIf`, except that a Step's
+    /// disabled `environment:` entry for it has no effect and is not an
+    /// error. This getter does not know the document and returns
+    /// `BY_DEFAULT` for such an Environment; job creation applies the rule
+    /// to each attached Environment Template that does not list the
+    /// extension (`create_job_with_environment_templates`).
     #[getter]
     fn activation(&self) -> PyEnvironmentActivation {
         self.inner.activation().into()
@@ -1013,7 +1022,9 @@ impl PyEnvironment {
 
 /// Which Sessions of a Job enter an Environment (`ENV_PARAMS`, Template
 /// Schemas §4 item 4). An Environment that does not set `activation` is
-/// `BY_DEFAULT`.
+/// `BY_DEFAULT` in a document that lists `ENV_PARAMS`. An Environment from
+/// a document that does not list it behaves as `ALWAYS`, except that a
+/// disabled entry for it has no effect and is not an error.
 ///
 /// - `ALWAYS`: every Session enters it. It cannot be disabled or declined:
 ///   its `enableIf` being `false` for a Step, or a Step's disabled
@@ -1490,8 +1501,9 @@ impl PyStepDependency {
 
     /// ``ENV_PARAMS``: the Environment an ``environment:`` entry names, or
     /// ``None`` for a Step entry. An enabled entry requests it; a disabled
-    /// one declines a ``BY_DEFAULT`` Environment. The entry's ``enableIf``
-    /// and ``parameters`` are not exposed.
+    /// one declines a ``BY_DEFAULT`` Environment, and has no effect on one
+    /// from a document that does not list ``ENV_PARAMS``. The entry's
+    /// ``enableIf`` and ``parameters`` are not exposed.
     #[getter]
     fn environment(&self) -> Option<&str> {
         self.inner.environment()

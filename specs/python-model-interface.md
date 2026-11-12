@@ -362,6 +362,15 @@ be declined or disabled: a disabled entry for it, or its `enableIf` being
 `false` for a Step, is an error. A declined Environment is not entered and is
 not listed in `disabled_environments`.
 
+An Environment from a document that does not list `ENV_PARAMS` behaves as
+`ALWAYS` with no `enableIf`, except that a Step's disabled `environment:` entry
+for it has no effect and is not an error (Template Schemas §4 item 4). The
+`activation` getter does not know the document and reads `BY_DEFAULT` for such
+an Environment; `create_job_with_environment_templates` applies the rule, so an
+attached Environment Template without `ENV_PARAMS` is `ENTERED` for every Step,
+whatever its entries say. In a Job Template without `ENV_PARAMS` the two
+readings agree, since it has no entries and no `enableIf`.
+
 `exclusiveGroup` (§4 item 7): of the Environments a Step's Sessions would
 enter that share a group, only the first in the Job's Environment order
 (attached ones first) whose `enableIf` is not `false` is entered. The others
@@ -429,7 +438,9 @@ items are `created.disabled_environments`. A Job Template without
 `ENV_PARAMS` can't decline, disable or supersede its own Environments, so they
 are all `ENTERED`; an attached Environment Template that lists `ENV_PARAMS`
 can still be `DISABLED` or `SUPERSEDED` (not `DECLINED`, since only an
-`environment:` entry, which needs `ENV_PARAMS` in the Job Template, declines). Only
+`environment:` entry, which needs `ENV_PARAMS` in the Job Template, declines). An
+attached Environment Template that does not list `ENV_PARAMS` is always
+`ENTERED`, since no entry can decline it. Only
 `create_job_with_environment_templates` returns the statuses; call it with no
 `environment_templates` for a Job without attachments.
 
@@ -1197,6 +1208,7 @@ env.description                 # Optional[str]
 env.script                      # Optional[EnvironmentScript]
 env.variables                   # Optional[dict[str, FormatString]]
 env.activation                  # EnvironmentActivation — ENV_PARAMS §4 item 4; BY_DEFAULT when absent
+                                #   (a document without ENV_PARAMS behaves as ALWAYS; see above)
 env.exclusive_group             # Optional[str] (alias: exclusiveGroup) — ENV_PARAMS §4 item 7
 
 TemplateEnvironment(name="X", variables=None, script=None, description=None,

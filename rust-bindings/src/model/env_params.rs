@@ -484,7 +484,9 @@ pub(crate) enum PyEnvironmentStatus {
     ENTERED = 0,
     /// A ``BY_DEFAULT`` Environment that a disabled ``environment:`` entry
     /// of the Step declines (§3.2 item 3.2). Its ``enableIf`` is not
-    /// evaluated for the Step.
+    /// evaluated for the Step. Never an attached Environment whose
+    /// Environment Template does not list ``ENV_PARAMS``: it behaves as
+    /// ``ALWAYS``, and a disabled entry has no effect on it (§4 item 4).
     DECLINED = 1,
     /// Its own ``enableIf`` (§4 item 6) is false for the Step.
     DISABLED = 2,
@@ -798,7 +800,9 @@ impl PyOptionalEntryNotFound {
 /// A Step considers every ``ALWAYS`` and ``BY_DEFAULT`` Environment, every
 /// ``ON_REQUEST`` one an enabled ``environment:`` entry of the Step
 /// requests, and each of its Step Environments. An ``ON_REQUEST``
-/// Environment the Step does not request is not listed.
+/// Environment the Step does not request is not listed. An attached
+/// Environment whose Environment Template does not list ``ENV_PARAMS``
+/// behaves as ``ALWAYS``, so it is always ``ENTERED``.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass(module = "openjd._openjd_rs"))]
 #[pyclass(
     module = "openjd.model._v1.job",

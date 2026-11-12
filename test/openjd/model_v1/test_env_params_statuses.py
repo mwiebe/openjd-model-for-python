@@ -47,6 +47,7 @@ from openjd.model._v1.job import (
     StepEnvironmentStatuses,
     SupersedingEnvironment,
 )
+from openjd.model._v1.template import EnvironmentActivation
 
 _EXTS = ["ENV_PARAMS", "EXPR"]
 _ALL_EXTS = ["TASK_CHUNKING", "REDACTED_ENV_VARS", "FEATURE_BUNDLE_1", "EXPR", "WRAP_ACTIONS"] + [
@@ -479,6 +480,50 @@ class TestAttachedEnvironments:
         ]
         assert _not_found(created, 0) == [(1, "Missing"), (3, "Lost")]
         assert created.environment_statuses[1].not_found == []
+
+    @pytest.mark.parametrize("enable_if", [False, "Param.Mode == 'on'"])
+    def test_a_disabled_entry_has_no_effect_on_an_attachment_without_env_params(
+        self, enable_if: Any
+    ) -> None:
+        # Template Schemas §4 item 4: an Environment from a document that
+        # does not list ENV_PARAMS behaves as ALWAYS with no enableIf, and a
+        # disabled entry for it neither declines it nor is an error. The same
+        # Environment in a document that lists ENV_PARAMS is BY_DEFAULT, and
+        # the entry declines it.
+        jt = _job_template(
+            [],
+            [
+                {
+                    "name": "S",
+                    "dependencies": [
+                        {"environment": "Plain", "required": True, "enableIf": enable_if},
+                        {"environment": "Listed", "required": False, "enableIf": enable_if},
+                    ],
+                    "script": _ECHO,
+                },
+                {"name": "T", "script": _ECHO},
+            ],
+            params=[{"name": "Mode", "type": "STRING", "default": "off"}],
+        )
+        plain = decode_environment_template(
+            template={"specificationVersion": "environment-2023-09", "environment": _env("Plain")},
+            supported_extensions=_EXTS,
+        )
+        assert plain.environment.activation == EnvironmentActivation.BY_DEFAULT
+        created = _create(jt, [(plain, "plain"), (_env_template("Listed"), "listed")])
+        p, listed = Document.environment_template(0, "plain"), Document.environment_template(
+            1, "listed"
+        )
+        assert _rows(created, 0) == [
+            ("Plain", p, ATTACHED, ENTERED),
+            ("Listed", listed, ATTACHED, DECLINED),
+        ]
+        assert _rows(created, 1) == [
+            ("Plain", p, ATTACHED, ENTERED),
+            ("Listed", listed, ATTACHED, ENTERED),
+        ]
+        assert created.job.steps[0].enters_environment("Plain", p)
+        assert created.warnings == []
 
     @pytest.mark.parametrize(
         "name",

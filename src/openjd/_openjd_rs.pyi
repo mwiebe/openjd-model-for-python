@@ -2847,7 +2847,9 @@ class StepEnvironmentStatuses:
     A Step considers every ``ALWAYS`` and ``BY_DEFAULT`` Environment, every
     ``ON_REQUEST`` one an enabled ``environment:`` entry of the Step
     requests, and each of its Step Environments. An ``ON_REQUEST``
-    Environment the Step does not request is not listed.
+    Environment the Step does not request is not listed. An attached
+    Environment whose Environment Template does not list ``ENV_PARAMS``
+    behaves as ``ALWAYS``, so it is always ``ENTERED``.
     """
 
     @property
@@ -3421,6 +3423,15 @@ class TemplateEnvironment:
         does not set `activation` is `EnvironmentActivation.BY_DEFAULT`. The
         value applies to Job Environments and Environment Templates; a
         `stepEnvironments` entry cannot set it, and it means nothing there.
+
+        This is the value as it applies in a document that lists
+        `ENV_PARAMS`. An Environment from a document that does not list it
+        behaves as `ALWAYS` with no `enableIf`, except that a Step's
+        disabled `environment:` entry for it has no effect and is not an
+        error. This getter does not know the document and returns
+        `BY_DEFAULT` for such an Environment; job creation applies the rule
+        to each attached Environment Template that does not list the
+        extension (`create_job_with_environment_templates`).
         """
 
     @property
@@ -3591,8 +3602,9 @@ class TemplateStepDependency:
         r"""
         ``ENV_PARAMS``: the Environment an ``environment:`` entry names, or
         ``None`` for a Step entry. An enabled entry requests it; a disabled
-        one declines a ``BY_DEFAULT`` Environment. The entry's ``enableIf``
-        and ``parameters`` are not exposed.
+        one declines a ``BY_DEFAULT`` Environment, and has no effect on one
+        from a document that does not list ``ENV_PARAMS``. The entry's
+        ``enableIf`` and ``parameters`` are not exposed.
         """
 
     @property
@@ -3807,7 +3819,9 @@ class EnvironmentActivation(enum.Enum):
     r"""
     Which Sessions of a Job enter an Environment (`ENV_PARAMS`, Template
     Schemas §4 item 4). An Environment that does not set `activation` is
-    `BY_DEFAULT`.
+    `BY_DEFAULT` in a document that lists `ENV_PARAMS`. An Environment from
+    a document that does not list it behaves as `ALWAYS`, except that a
+    disabled entry for it has no effect and is not an error.
 
     - `ALWAYS`: every Session enters it. It cannot be disabled or declined:
       its `enableIf` being `false` for a Step, or a Step's disabled
@@ -3893,7 +3907,9 @@ class EnvironmentStatus(enum.Enum):
     r"""
     A ``BY_DEFAULT`` Environment that a disabled ``environment:`` entry
     of the Step declines (§3.2 item 3.2). Its ``enableIf`` is not
-    evaluated for the Step.
+    evaluated for the Step. Never an attached Environment whose
+    Environment Template does not list ``ENV_PARAMS``: it behaves as
+    ``ALWAYS``, and a disabled entry has no effect on it (§4 item 4).
     """
     DISABLED = ...
     r"""
