@@ -20,6 +20,6 @@ resolver = "2"
 # disk. To iterate against the working tree instead, use
 #   openjd-model = { path = "../openjd-rs-ep/crates/openjd-model" }  (etc.)
 [patch.crates-io]
-openjd-expr     = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "44b28da722e3fea1f9876e328a9cf1fd8abc4498" }
-openjd-model    = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "44b28da722e3fea1f9876e328a9cf1fd8abc4498" }
-openjd-sessions = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "44b28da722e3fea1f9876e328a9cf1fd8abc4498" }
+openjd-expr     = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "e7bb41ac64d129decd78ee5b05e532fbbef6609c" }
+openjd-model    = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "e7bb41ac64d129decd78ee5b05e532fbbef6609c" }
+openjd-sessions = { git = "file:///home/markw/projects/rfc-env-params/openjd-rs-ep", rev = "e7bb41ac64d129decd78ee5b05e532fbbef6609c" }

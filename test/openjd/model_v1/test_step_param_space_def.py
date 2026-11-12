@@ -265,7 +265,9 @@ class TestFloatTaskParameterDefinition:
         )
 
 
-def _resolve_range(type_: str, range_: list, extensions: list | None) -> list[str]:
+def _resolve_range(
+    type_: str, range_: list, extensions: list | None, string_default: str = " 4 "
+) -> list[str]:
     """Create a Job whose one Step has the task parameter ``P`` with
     ``range_`` and return the values its tasks get."""
     template: dict = {
@@ -273,7 +275,7 @@ def _resolve_range(type_: str, range_: list, extensions: list | None) -> list[st
         "name": "J",
         "parameterDefinitions": [
             {"name": "N", "type": "INT", "default": 7},
-            {"name": "S", "type": "STRING", "default": " 4 "},
+            {"name": "S", "type": "STRING", "default": string_default},
         ],
         "steps": [
             {
@@ -296,7 +298,9 @@ class TestNumericRangeListElements:
     """How job creation resolves an INT or FLOAT range list element written as
     a format string (openjd-rs #486). With EXPR each element is a list item of
     the parameter's type (Expression Language §1.3.2): ``null`` skips it and a
-    list flattens into several elements, and a ``string`` is an error. Without
+    list flattens into several elements. A ``string`` that is exactly a number,
+    ignoring surrounding white space, coerces to the element type (openjd-rs
+    #530; Template Schemas §7.5); any other ``string`` is an error. Without
     EXPR the element resolves to a string, which is parsed."""
 
     @pytest.mark.parametrize(
@@ -322,11 +326,15 @@ class TestNumericRangeListElements:
         "type_, target",
         [("INT", "int | list[int] | nulltype"), ("FLOAT", "float | int | list[float] | nulltype")],
     )
-    def test_with_expr_a_string_element_is_an_error(self, type_: str, target: str) -> None:
-        # Without EXPR the same template gives the parsed value.
+    def test_with_expr_a_numeric_string_element_coerces(self, type_: str, target: str) -> None:
+        # A string that is exactly a number, ignoring surrounding white space,
+        # coerces to the element type (openjd-rs #530; Template Schemas §7.5).
+        # Param.S is " 4 "; without EXPR the same template parses the string too.
         assert _resolve_range(type_, ["{{Param.S}}"], None) == ["4"]
+        assert _resolve_range(type_, ["{{Param.S}}"], ["EXPR"]) == ["4"]
+        # A string that is not a number is still an error.
         with pytest.raises(ExpressionError) as exc:
-            _resolve_range(type_, ["{{Param.S}}"], ["EXPR"])
+            _resolve_range(type_, ["{{Param.S}}"], ["EXPR"], string_default="not-a-number")
         assert str(exc.value) == (
             f"Task parameter 'P' range[0]: Cannot coerce string to {target}\n"
             "  Param.S\n"
