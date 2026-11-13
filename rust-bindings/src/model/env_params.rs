@@ -245,9 +245,11 @@ impl PyEnvironmentParameterValues {
         }
     }
 
-    /// Template Schemas §3.2.2 equality of the values (FLOAT by value,
-    /// RANGE_EXPR by the integers it denotes). Document and Environment
-    /// name are not compared.
+    /// Template Schemas §3.2.2 equality of the values: the same type and
+    /// string form for each, so a FLOAT by the text it was written with
+    /// (``3.10`` is not ``3.1``), a STRING by code points, and a RANGE_EXPR
+    /// by the integers it denotes. Document and Environment name are not
+    /// compared.
     fn values_equal(&self, other: &PyEnvironmentParameterValues) -> bool {
         self.inner.values_equal(&other.inner)
     }

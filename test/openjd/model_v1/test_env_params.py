@@ -250,6 +250,37 @@ class TestCreateJob:
         assert not red.environment_values_equal(blue)
         assert plain.same_environments(plain)
 
+    def test_floats_written_differently_are_not_equal(self) -> None:
+        # Template Schemas §3.2.2: a FLOAT keeps the text it was written with,
+        # so "3.10" and "3.1" are different values, while white space around
+        # the number is not part of its text.
+        template = {
+            "specificationVersion": "jobtemplate-2023-09",
+            "extensions": ["ENV_PARAMS", "EXPR"],
+            "name": "J",
+            "jobEnvironments": [
+                {
+                    "name": "Py",
+                    "envParameterDefinitions": [{"name": "V", "type": "FLOAT"}],
+                    "variables": {"V": "{{Env.Param.V}}"},
+                }
+            ],
+            "steps": [
+                {
+                    "name": name,
+                    "dependencies": [{"environment": "Py", "parameters": {"V": value}}],
+                    "script": {"actions": {"onRun": {"command": "x"}}},
+                }
+                for name, value in (("A", "3.10"), ("B", "3.1"), ("C", " 3.10 "))
+            ],
+        }
+        a, b, c = create_job(job_template=_job_template(template), job_parameter_values={}).steps
+        assert not a.environment_values_equal(b)
+        assert a.environment_values_equal(c)
+        a_values, b_values = a.environment_parameters_for("Py"), b.environment_parameters_for("Py")
+        assert a_values is not None and b_values is not None
+        assert not a_values.values_equal(b_values)
+
     def test_job_parameter_default_flows_into_env_param_default(self) -> None:
         job = create_job(
             job_template=_job_template(), job_parameter_values={"DefaultTool": "pkg-b"}
