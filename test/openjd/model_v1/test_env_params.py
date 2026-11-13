@@ -307,16 +307,19 @@ class TestCreateJob:
         template["steps"] = [
             {"name": "S", "dependencies": [{"environment": "Tool"}], "script": _echo("s")}
         ]
+        # Constraint 7 for a Job Environment is decided from the Steps' entries
+        # alone, so template validation reports it.
         with pytest.raises(ModelValidationError) as exc:
-            create_job(job_template=_job_template(template), job_parameter_values={})
+            _job_template(template)
         assert str(exc.value) == (
             "1 validation error for JobTemplate\n"
             "steps[0]:\n"
             "\tmust supply, in an 'environment:' dependency, every parameter without a default "
-            "of each Environment its Sessions enter (every jobEnvironments entry with activation "
+            "of each Environment that applies to it (every jobEnvironments entry with activation "
             "ALWAYS, each one with activation BY_DEFAULT that the Step does not decline, and each "
             "one with activation ON_REQUEST that the Step requests; Template Schemas §3.2 "
-            "constraint 7); missing: 'Flavor' of Environment 'Tool'."
+            "constraint 7), whatever that Environment's own enableIf is; "
+            "missing: 'Flavor' of Environment 'Tool'."
         )
 
 

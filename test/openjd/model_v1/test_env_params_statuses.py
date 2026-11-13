@@ -36,6 +36,7 @@ from openjd.model._v1 import (
     decode_environment_template,
     decode_job_template,
 )
+from openjd.model._v1.errors import ModelValidationError
 from openjd.model._v1.job import (
     CreatedJob,
     Document,
@@ -319,25 +320,55 @@ class TestJobEnvironments:
         created = _create(jt, values={"UseA": True})
         assert [r[3] for r in _rows(created, 0)] == [ENTERED, ENTERED, SUPERSEDED]
 
-    def test_a_superseded_member_with_an_unresolved_enable_if(self) -> None:
-        # B's enableIf reads a parameter no Step supplies; it is never
-        # evaluated because A is entered (spec JB-154).
-        jt = _job_template(
-            [
-                _env("A", exclusiveGroup="G"),
-                _env(
-                    "B",
-                    exclusiveGroup="G",
-                    envParameterDefinitions=[{"name": "On", "type": "BOOL"}],
-                    enableIf="Env.Param.On",
-                ),
-            ],
-            [{"name": "S", "script": _ECHO}],
+    def test_a_superseded_member_whose_enable_if_reads_an_unconvertible_value(self) -> None:
+        # B's enableIf reads On, and S's value for the BOOL On resolves to
+        # "maybe", which does not convert, so evaluating it would be an
+        # error. It is never evaluated because A is entered (spec JB-154).
+        a = _env("A", exclusiveGroup="G")
+        b = _env(
+            "B",
+            exclusiveGroup="G",
+            envParameterDefinitions=[{"name": "On", "type": "BOOL"}],
+            enableIf="Env.Param.On",
         )
-        assert _rows(_create(jt), 0) == [
+        steps = [
+            {
+                "name": "S",
+                "dependencies": [{"environment": "B", "parameters": {"On": "{{Param.X}}"}}],
+                "script": _ECHO,
+            }
+        ]
+        params = [{"name": "X", "type": "STRING", "default": "maybe"}]
+        assert _rows(_create(_job_template([a, b], steps, params=params)), 0) == [
             ("A", _JOB, JOB, ENTERED),
             ("B", _JOB, JOB, SUPERSEDED),
         ]
+        # Without A, B's enableIf reads a value that does not convert: it is
+        # not evaluated, and that value's error is reported, not an enableIf
+        # error.
+        with pytest.raises(ModelValidationError) as exc:
+            _create(_job_template([b], steps, params=params))
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "steps[0] -> dependencies[0] -> parameters -> On:\n"
+            "\tcould not be resolved as a value of type BOOL: Cannot convert 'maybe' to bool\n"
+            "  Param.X\n"
+            "  ~~~~~~^"
+        )
+        # B applies to S whatever its group or enableIf, so S must supply On
+        # (constraint 7), and template validation says so.
+        with pytest.raises(ModelValidationError) as exc:
+            _job_template([a, b], [{"name": "S", "script": _ECHO}])
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "steps[0]:\n"
+            "\tmust supply, in an 'environment:' dependency, every parameter without a default of "
+            "each Environment that applies to it (every jobEnvironments entry with activation "
+            "ALWAYS, each one with activation BY_DEFAULT that the Step does not decline, and each "
+            "one with activation ON_REQUEST that the Step requests; Template Schemas §3.2 "
+            "constraint 7), whatever that Environment's own enableIf is; missing: 'On' of "
+            "Environment 'B'."
+        )
 
     def test_optional_entry_that_names_nothing(self) -> None:
         jt = _job_template(
@@ -378,8 +409,8 @@ class TestAttachedEnvironments:
 
     def test_group_spanning_an_attachment_and_a_job_environment(self) -> None:
         # The attached Conda comes first in the Job's Environment order, so
-        # it supersedes the Job Template's Docker, whose required Image no
-        # Step supplies.
+        # it supersedes the Job Template's Docker. Docker still applies to S,
+        # so S supplies its Image, which has no default (constraint 7).
         jt = _job_template(
             [
                 _env(
@@ -388,7 +419,13 @@ class TestAttachedEnvironments:
                     envParameterDefinitions=[{"name": "Image", "type": "STRING"}],
                 ),
             ],
-            [{"name": "S", "script": _ECHO}],
+            [
+                {
+                    "name": "S",
+                    "dependencies": [{"environment": "Docker", "parameters": {"Image": "i"}}],
+                    "script": _ECHO,
+                }
+            ],
         )
         conda = _env_template("Conda", exclusiveGroup="Soft")
         created = _create(jt, [(conda, "queue")])
@@ -525,14 +562,12 @@ class TestAttachedEnvironments:
         assert created.job.steps[0].enters_environment("Plain", p)
         assert created.warnings == []
 
-    @pytest.mark.parametrize(
-        "name",
-        [
-            "4--exclusive-group-superseded-not-held-to-constraint-7.test.yaml",
-            "4--exclusive-group-superseded-enable-if-not-evaluated.test.yaml",
-        ],
-    )
-    def test_conformance_copies_attached(self, name: str) -> None:
+    def test_conformance_copy_superseded_enable_if_not_evaluated(self) -> None:
+        # The Step requests the ON_REQUEST Docker, which Conda supersedes, so
+        # Docker is listed SUPERSEDED. (The companion copy,
+        # 4--exclusive-group-superseded-held-to-constraint-7.invalid, is
+        # rejected and has no statuses: test_env_params_activation.py.)
+        name = "4--exclusive-group-superseded-enable-if-not-evaluated.test.yaml"
         test = yaml.safe_load((_COPIES / name).read_text())
         jt = decode_job_template(template=test["template"], supported_extensions=_ALL_EXTS)
         envs = [
@@ -540,8 +575,7 @@ class TestAttachedEnvironments:
             for e in test.get("environments", [])
         ]
         created = _create(jt, envs, dict(test.get("parameters", {})))
-        rows = _rows(created, 0)
-        assert rows[:2] == [
+        assert _rows(created, 0) == [
             ("Conda", Document.environment_template(0), ATTACHED, ENTERED),
             ("Docker", Document.environment_template(1), ATTACHED, SUPERSEDED),
         ]

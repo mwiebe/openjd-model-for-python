@@ -341,11 +341,19 @@ Job's Environment order). Job Parameter value errors are raised first, as
 JobTemplate -> steps[0] -> dependencies[0] -> environment:
 	names Environment 'Missing', which is not a jobEnvironments entry of the Job Template, and none of the attached Environment Templates (queue) defines it. ...
 JobTemplate -> steps[1]:
-	must supply, in an 'environment:' dependency, every parameter without a default of each Environment its Sessions enter (...); missing: 'Seats' of Environment 'Lic'.
+	must supply, in an 'environment:' dependency, every parameter without a default of each Environment that applies to it (...), whatever that Environment's own enableIf is; missing: 'Seats' of Environment 'Lic'.
 ```
 
 A Step with an error from §7.4.1 steps 1–4 gets no checks from steps 5–8, so
-its value and constraint 7 errors appear once those are fixed. Before
+its value and constraint 7 errors appear once those are fixed. Constraint 7
+(every parameter without a `default` supplied) is checked at step 5 for every
+Environment that applies to the Step by its `activation` and the Step's
+entries, whatever the Environment's own `enableIf` or `exclusiveGroup`
+decides, so a disabled or superseded Environment still needs its values.
+An Environment's `enableIf` is evaluated with the Step's concrete values;
+one that reads a value that is missing, fails to resolve or does not
+convert is not evaluated, and that value is the error (Template Schemas
+§3.2 constraint 7, §3.2.2 item 2, §7.4.1). Before
 openjd-rs c0333380, a Job Template's own errors were reported alone, for
 `JobTemplate`, and the submission-stage errors only when there were none; so a
 Job without `ENV_PARAMS` that has Environment Templates attached now reports
@@ -375,8 +383,9 @@ readings agree, since it has no entries and no `enableIf`.
 enter that share a group, only the first in the Job's Environment order
 (attached ones first) whose `enableIf` is not `false` is entered. The others
 are superseded for the Step: they are not entered, have no
-`environment_parameters` entry, are not held to constraint 7, and their
-`enableIf` is not evaluated for that Step. An attached Environment can
+`environment_parameters` entry, their values are not checked, and their
+`enableIf` is not evaluated for that Step. They still apply to it, so it must
+supply their parameters without a `default` (constraint 7). An attached Environment can
 supersede a Job Environment. `disabled_environments` lists the superseded
 Environments with those their `enableIf` disabled; `environment_statuses`
 (below) says which reason applied.

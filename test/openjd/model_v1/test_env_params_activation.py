@@ -92,6 +92,22 @@ def _refs(*names: str, document: Document = _JOB) -> list[EnvironmentRef]:
     return [EnvironmentRef(document=document, environment=n) for n in names]
 
 
+def _missing(param: str, env: str) -> str:
+    """The constraint 7 message for a Job Environment."""
+    return (
+        "\tmust supply, in an 'environment:' dependency, every parameter without a default of "
+        "each Environment that applies to it (every jobEnvironments entry with activation "
+        "ALWAYS, each one with activation BY_DEFAULT that the Step does not decline, and each "
+        "one with activation ON_REQUEST that the Step requests; Template Schemas §3.2 "
+        "constraint 7), whatever that Environment's own enableIf is; "
+        f"missing: '{param}' of Environment '{env}'."
+    )
+
+
+# Supplies B's INT Seats with a value that does not convert.
+_SEATS_MANY = {"environment": "B", "parameters": {"Seats": "many"}}
+
+
 def _create_copy(name: str) -> CreatedJob:
     test = yaml.safe_load((_COPIES / name).read_text())
     jt = decode_job_template(template=test["template"], supported_extensions=_ALL_EXTS)
@@ -293,38 +309,61 @@ class TestExclusiveGroup:
         assert created.job.steps[0].environments == _refs("B")
         assert created.disabled_environments[0].environments == _refs("A")
 
-    def test_superseded_not_held_to_constraint_7(self) -> None:
-        # B's Seats has no default and no Step supplies it; B is superseded.
-        jt = _job_template(
-            [
-                _env("A", exclusiveGroup="G"),
-                _env(
-                    "B",
-                    exclusiveGroup="G",
-                    envParameterDefinitions=[{"name": "Seats", "type": "INT"}],
-                ),
-            ],
-            [{"name": "S", "script": _ECHO}],
+    def test_superseded_is_held_to_constraint_7_but_its_values_are_not_checked(self) -> None:
+        # B is superseded by A for S, but it still applies to S (it is
+        # BY_DEFAULT and S does not decline it), so constraint 7 holds for it
+        # whatever its exclusiveGroup: S must supply its Seats, which has no
+        # default. Being disabled for S, B's values are not checked
+        # (constraint 6).
+        envs = [
+            _env("A", exclusiveGroup="G"),
+            _env(
+                "B", exclusiveGroup="G", envParameterDefinitions=[{"name": "Seats", "type": "INT"}]
+            ),
+        ]
+        with pytest.raises(ModelValidationError) as exc:
+            _job_template(envs, [{"name": "S", "script": _ECHO}])
+        assert str(exc.value) == "1 validation error for JobTemplate\nsteps[0]:\n" + _missing(
+            "Seats", "B"
         )
-        created = create_job_with_environment_templates(job_template=jt, job_parameter_values={})
+
+        supplies = [{"name": "S", "dependencies": [_SEATS_MANY], "script": _ECHO}]
+        created = create_job_with_environment_templates(
+            job_template=_job_template(envs, supplies), job_parameter_values={}
+        )
         step = created.job.steps[0]
         assert step.environments == _refs("A")
         assert step.environment_parameters_for("B") is None
+        assert created.disabled_environments[0].environments == _refs("B")
+        # Without A, B is entered and the same value is checked.
+        with pytest.raises(ModelValidationError) as exc:
+            create_job_with_environment_templates(
+                job_template=_job_template(envs[1:], supplies), job_parameter_values={}
+            )
+        assert str(exc.value) == (
+            "1 validation error for JobTemplate\n"
+            "steps[0] -> dependencies[0] -> parameters -> Seats:\n"
+            "\tis not a valid INT value: Cannot parse 'many' as integer"
+        )
 
     def test_attached_environment_supersedes_a_job_environment(self) -> None:
         # Attached Environments come first in the Job's Environment order, so
-        # the attached Conda supersedes the Job Template's Docker, whose
-        # required Image no Step supplies.
-        jt = _job_template(
-            [
-                _env(
-                    "Docker",
-                    exclusiveGroup="Soft",
-                    envParameterDefinitions=[{"name": "Image", "type": "STRING"}],
-                )
-            ],
-            [{"name": "S", "script": _ECHO}],
+        # the attached Conda supersedes the Job Template's Docker.
+        docker = _env(
+            "Docker",
+            exclusiveGroup="Soft",
+            envParameterDefinitions=[{"name": "Image", "type": "STRING"}],
         )
+        # Docker applies to S whatever its group, so S must supply its Image
+        # (constraint 7), and template validation says so.
+        with pytest.raises(ModelValidationError) as exc:
+            _job_template([docker], [{"name": "S", "script": _ECHO}])
+        assert str(exc.value) == "1 validation error for JobTemplate\nsteps[0]:\n" + _missing(
+            "Image", "Docker"
+        )
+
+        entry = {"environment": "Docker", "parameters": {"Image": "ubuntu"}}
+        jt = _job_template([docker], [{"name": "S", "dependencies": [entry], "script": _ECHO}])
         conda = _env_template("Conda", exclusiveGroup="Soft")
         created = create_job_with_environment_templates(
             job_template=jt, job_parameter_values={}, environment_templates=[(conda, "queue")]
@@ -334,29 +373,42 @@ class TestExclusiveGroup:
         assert step.environments == _refs("Conda", document=queue)
         assert step.enters_environment("Conda", queue)
         assert not step.enters_environment("Docker")
+        assert step.environment_parameters_for("Docker") is None
         assert created.disabled_environments[0].environments == _refs("Docker")
-        # Without the attachment, Docker is entered and its Image is missing.
-        with pytest.raises(ModelValidationError) as exc:
-            create_job(job_template=jt, job_parameter_values={})
-        assert str(exc.value) == (
-            "1 validation error for JobTemplate\n"
-            "steps[0]:\n"
-            "\tmust supply, in an 'environment:' dependency, every parameter without a default "
-            "of each Environment its Sessions enter (every jobEnvironments entry with activation "
-            "ALWAYS, each one with activation BY_DEFAULT that the Step does not decline, and each "
-            "one with activation ON_REQUEST that the Step requests; Template Schemas §3.2 "
-            "constraint 7); missing: 'Image' of Environment 'Docker'."
+        # Without the attachment, Docker is entered with the Step's Image.
+        created = create_job_with_environment_templates(job_template=jt, job_parameter_values={})
+        step = created.job.steps[0]
+        # None: the Step enters every Job Environment.
+        assert step.environments is None
+        assert step.enters_environment("Docker")
+        assert created.disabled_environments[0].environments == []
+        docker_values = step.environment_parameters_for("Docker")
+        assert docker_values is not None
+        assert docker_values.values.to_json_str() == (
+            '[{"name":"Image","type":"string","value":"ubuntu"}]'
         )
 
-    @pytest.mark.parametrize(
-        "name",
-        [
-            "4--exclusive-group-superseded-not-held-to-constraint-7.test.yaml",
-            "4--exclusive-group-superseded-enable-if-not-evaluated.test.yaml",
-        ],
-    )
-    def test_conformance_copies_attached(self, name: str) -> None:
-        created = _create_copy(name)
+    def test_conformance_copy_superseded_held_to_constraint_7(self) -> None:
+        # Docker, attached second, would be superseded by Conda, but it applies
+        # to the Step, so its Image, which has no default, must be supplied.
+        with pytest.raises(ModelValidationError) as exc:
+            _create_copy("4--exclusive-group-superseded-held-to-constraint-7.invalid.test.yaml")
+        assert str(exc.value) == (
+            "1 validation error for Submission\n"
+            "JobTemplate -> steps[0]:\n"
+            "\tmust supply, in an 'environment:' dependency, every parameter without a default "
+            "of each Environment that applies to it (every attached Environment with activation "
+            "ALWAYS, each one with activation BY_DEFAULT that the Step does not decline, and each "
+            "one with activation ON_REQUEST that the Step requests; Template Schemas §3.2.1), "
+            "whatever that Environment's own enableIf is; missing: 'Image' of Environment "
+            "'Docker' (EnvironmentTemplate[1])."
+        )
+
+    def test_conformance_copy_superseded_enable_if_not_evaluated(self) -> None:
+        # The Step requests the superseded ON_REQUEST Docker with a Seats that
+        # does not convert to INT; its enableIf is not evaluated and its values
+        # are not checked.
+        created = _create_copy("4--exclusive-group-superseded-enable-if-not-evaluated.test.yaml")
         conda = Document.environment_template(0)
         docker = Document.environment_template(1)
         step = created.job.steps[0]
@@ -371,32 +423,34 @@ class TestExclusiveGroup:
 
 
 # A Job whose Step S names a missing Environment (§7.4.1 step 3) and whose
-# Step T requests Lic without its required Seats (step 7). Lic's enableIf is
-# an expression, so template validation leaves constraint 7 to job creation.
+# Step T requests Lic with a Seats that does not convert to INT (step 7), an
+# error template validation cannot see.
 def _two_error_template() -> Any:
     return _job_template(
         [
             _env(
                 "Lic",
                 activation="ON_REQUEST",
-                enableIf="Param.UseLic",
                 envParameterDefinitions=[{"name": "Seats", "type": "INT"}],
             )
         ],
         [
             {"name": "S", "dependencies": [{"environment": "Missing"}], "script": _ECHO},
-            {"name": "T", "dependencies": [{"environment": "Lic"}], "script": _ECHO},
+            {
+                "name": "T",
+                "dependencies": [{"environment": "Lic", "parameters": {"Seats": "{{Param.N}}"}}],
+                "script": _ECHO,
+            },
         ],
-        params=[{"name": "UseLic", "type": "BOOL", "default": True}],
+        params=[{"name": "N", "type": "STRING", "default": "many"}],
     )
 
 
-_LIC_MISSING = (
-    "\tmust supply, in an 'environment:' dependency, every parameter without a default of each "
-    "Environment its Sessions enter (every jobEnvironments entry with activation ALWAYS, each one "
-    "with activation BY_DEFAULT that the Step does not decline, and each one with activation "
-    "ON_REQUEST that the Step requests; Template Schemas §3.2 constraint 7); missing: 'Seats' of "
-    "Environment 'Lic'."
+_LIC_SEATS_INVALID = (
+    "\tcould not be resolved as a value of type INT: Cannot convert 'many' to int: invalid "
+    "digit found in string\n"
+    "  Param.N\n"
+    "  ~~~~~~^"
 )
 
 
@@ -411,7 +465,28 @@ class TestErrorShape:
             "Template, and no Environment Template is attached. The entry is required; set "
             "'required: false' if the Step can run without the Environment (Template Schemas "
             "§3.2.1 item 2).\n"
-            "steps[1]:\n" + _LIC_MISSING
+            "steps[1] -> dependencies[0] -> parameters -> Seats:\n" + _LIC_SEATS_INVALID
+        )
+
+    def test_an_enable_if_does_not_defer_constraint_7(self) -> None:
+        # Lic applies to T, which requests it without its Seats. Constraint 7
+        # does not depend on Lic's own enableIf, so template validation reports
+        # it even though the enableIf is not known there.
+        with pytest.raises(ModelValidationError) as exc:
+            _job_template(
+                [
+                    _env(
+                        "Lic",
+                        activation="ON_REQUEST",
+                        enableIf="Param.UseLic",
+                        envParameterDefinitions=[{"name": "Seats", "type": "INT"}],
+                    )
+                ],
+                [{"name": "T", "dependencies": [{"environment": "Lic"}], "script": _ECHO}],
+                params=[{"name": "UseLic", "type": "BOOL", "default": True}],
+            )
+        assert str(exc.value) == "1 validation error for JobTemplate\nsteps[0]:\n" + _missing(
+            "Seats", "Lic"
         )
 
     @pytest.mark.parametrize("label", [None, "queue"])
@@ -432,7 +507,8 @@ class TestErrorShape:
             f"Template, and none of the attached Environment Templates ({name}) defines it. The "
             "entry is required; set 'required: false' if the Step can run without the "
             "Environment (Template Schemas §3.2.1 item 2).\n"
-            "JobTemplate -> steps[1]:\n" + _LIC_MISSING
+            "JobTemplate -> steps[1] -> dependencies[0] -> parameters -> Seats:\n"
+            + _LIC_SEATS_INVALID
         )
 
     def test_without_env_params(self) -> None:
