@@ -495,6 +495,14 @@ POSIX semantics (Expression Language §1.2.1), so a value written as a single
 with `/`. The Session maps the stored value with its own rules when it binds
 `Env.Param.*`; `Env.RawParam.*` gets it unchanged.
 
+A STRING or PATH Environment parameter value, and each element of a
+LIST[STRING] or LIST[PATH] one, has at most 1024 characters (Template Schemas
+§4.5 item 5), counted as characters, not bytes. A longer literal value or
+literal `default` is rejected by `decode_job_template` and
+`decode_environment_template`; a longer resolved value is rejected by job
+creation. Neither is checked for a Step for which the Environment is
+disabled.
+
 #### `preprocess_job_parameters`
 
 Validate and coerce job parameter values. Accepts `str` or `pathlib.Path`

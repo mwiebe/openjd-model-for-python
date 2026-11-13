@@ -322,6 +322,55 @@ class TestCreateJob:
             "missing: 'Flavor' of Environment 'Tool'."
         )
 
+    @staticmethod
+    def _long_value_template(value: str, enable_if: str = "true") -> dict[str, Any]:
+        return {
+            "specificationVersion": "jobtemplate-2023-09",
+            "extensions": ["ENV_PARAMS", "EXPR"],
+            "name": "J",
+            "parameterDefinitions": [
+                {"name": "Half", "type": "STRING", "default": "y" * 600},
+                {"name": "F", "type": "BOOL", "default": False},
+            ],
+            "jobEnvironments": [
+                {
+                    "name": "E",
+                    "enableIf": enable_if,
+                    "envParameterDefinitions": [{"name": "V", "type": "STRING"}],
+                    "variables": {"V": "{{Env.Param.V}}"},
+                }
+            ],
+            "steps": [
+                {
+                    "name": "A",
+                    "dependencies": [{"environment": "E", "parameters": {"V": value}}],
+                    "script": _echo("a"),
+                }
+            ],
+        }
+
+    def test_value_length_limit(self) -> None:
+        # Template Schemas §4.5 item 5: at most 1024 characters, counted as
+        # characters ('é' is two bytes in UTF-8).
+        _job_template(self._long_value_template("é" * 1024))
+        with pytest.raises(ModelValidationError) as exc:
+            _job_template(self._long_value_template("x" * 1025))
+        assert "value has 1025 characters, more than the 1024" in str(exc.value)
+        # A resolved value is checked when the Job is created ...
+        resolved = "{{Param.Half}}{{Param.Half}}"
+        with pytest.raises(ModelValidationError) as exc:
+            create_job(
+                job_template=_job_template(self._long_value_template(resolved)),
+                job_parameter_values={},
+            )
+        assert "value has 1200 characters, more than the 1024" in str(exc.value)
+        # ... but not for a Step for which the Environment is disabled.
+        job = create_job(
+            job_template=_job_template(self._long_value_template(resolved, "Param.F")),
+            job_parameter_values={},
+        )
+        assert job.steps[0].environments == []
+
 
 # With no Environment Template attached, a job-creation error is reported for
 # ``JobTemplate`` at paths relative to it (openjd-rs one-pass error shape).
