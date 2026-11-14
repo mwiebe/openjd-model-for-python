@@ -792,7 +792,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "openjd-expr"
 version = "0.14.0"
-source = "git+https://github.com/mwiebe/openjd-rs?rev=1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b#1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b"
+source = "git+https://github.com/mwiebe/openjd-rs?rev=78ff6e7233186929cae6e5ac097536324c01ab19#78ff6e7233186929cae6e5ac097536324c01ab19"
 dependencies = [
  "regex",
  "regex-syntax",
@@ -808,7 +808,7 @@ dependencies = [
 [[package]]
 name = "openjd-model"
 version = "0.15.0"
-source = "git+https://github.com/mwiebe/openjd-rs?rev=1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b#1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b"
+source = "git+https://github.com/mwiebe/openjd-rs?rev=78ff6e7233186929cae6e5ac097536324c01ab19#78ff6e7233186929cae6e5ac097536324c01ab19"
 dependencies = [
  "indexmap",
  "openjd-expr",
@@ -839,7 +839,7 @@ dependencies = [
 [[package]]
 name = "openjd-sessions"
 version = "0.9.0"
-source = "git+https://github.com/mwiebe/openjd-rs?rev=1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b#1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b"
+source = "git+https://github.com/mwiebe/openjd-rs?rev=78ff6e7233186929cae6e5ac097536324c01ab19#78ff6e7233186929cae6e5ac097536324c01ab19"
 dependencies = [
  "bitflags",
  "futures-util",

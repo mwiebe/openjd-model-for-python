@@ -19,6 +19,6 @@ resolver = "2"
 # against a local checkout instead, use
 #   openjd-model = { path = "../openjd-rs-ep/crates/openjd-model" }  (etc.)
 [patch.crates-io]
-openjd-expr     = { git = "https://github.com/mwiebe/openjd-rs", rev = "1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b" }
-openjd-model    = { git = "https://github.com/mwiebe/openjd-rs", rev = "1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b" }
-openjd-sessions = { git = "https://github.com/mwiebe/openjd-rs", rev = "1e68c2bd8cc911e8eb39bf2cbae81de54dcacd2b" }
+openjd-expr     = { git = "https://github.com/mwiebe/openjd-rs", rev = "78ff6e7233186929cae6e5ac097536324c01ab19" }
+openjd-model    = { git = "https://github.com/mwiebe/openjd-rs", rev = "78ff6e7233186929cae6e5ac097536324c01ab19" }
+openjd-sessions = { git = "https://github.com/mwiebe/openjd-rs", rev = "78ff6e7233186929cae6e5ac097536324c01ab19" }
