@@ -272,6 +272,61 @@ class TestRoundToEven:
         assert result.item() == expected
         assert result.type.type_code == TypeCode.INT
 
+    @pytest.mark.parametrize(
+        "expr,expected",
+        [
+            ("round(1234.5, -1)", 1230),
+            ("round(1250.0, -2)", 1200),  # rounds to even
+            ("round(3.7, 0)", 4),
+            ("round(2.5, 0)", 2),  # rounds to even
+            ("round(-3.5, 0)", -4),
+            ("round(5.0, -400)", 0),
+        ],
+    )
+    def test_round_float_nonpositive_ndigits_returns_int(self, expr: str, expected: int) -> None:
+        """round(float, ndigits <= 0) returns int (Expression Language §2.2.2)."""
+        result = evaluate_expression(expr)
+        assert result.item() == expected
+        assert isinstance(result.item(), int)
+        assert result.type.type_code == TypeCode.INT
+
+    def test_round_float_positive_ndigits_returns_float(self) -> None:
+        result = evaluate_expression("round(3.14159, 2)")
+        assert result.item() == pytest.approx(3.14)
+        assert result.type.type_code == TypeCode.FLOAT
+
+    @pytest.mark.parametrize(
+        "expr,expected",
+        [
+            # The exact binary values are just below the tie, as in CPython.
+            ("round(2.675, 2)", 2.67),
+            ("round(0.285, 2)", 0.28),
+        ],
+    )
+    def test_round_float_rounds_exact_value(self, expr: str, expected: float) -> None:
+        result = evaluate_expression(expr)
+        assert result.item() == expected
+        assert result.type.type_code == TypeCode.FLOAT
+
+    @pytest.mark.parametrize(
+        "expr,expected",
+        [
+            # Above 2**53, where a float can't hold the operand exactly.
+            ("round(9007199254740993, -1)", 9007199254740990),
+            ("round(9007199254740995, -1)", 9007199254741000),  # rounds to even
+        ],
+    )
+    def test_round_large_int_negative_ndigits_is_exact(self, expr: str, expected: int) -> None:
+        result = evaluate_expression(expr)
+        assert result.item() == expected
+        assert result.type.type_code == TypeCode.INT
+
+    @pytest.mark.parametrize("expr", ["round(1e300, -1)", "round(1e300, 0)"])
+    def test_round_float_nonpositive_ndigits_overflow(self, expr: str) -> None:
+        """A result outside the 64-bit signed range is an integer overflow error."""
+        with pytest.raises(ExpressionError, match="(?i)integer overflow"):
+            evaluate_expression(expr)
+
 
 class TestFloorCeilReturnType:
     """Tests that floor and ceil always return int."""

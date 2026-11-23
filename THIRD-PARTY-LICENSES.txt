@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------
-** pydantic; version 2.14.3 -- https://pypi.org/project/pydantic/
+** pydantic; version 2.14.4 -- https://pypi.org/project/pydantic/
 The MIT License (MIT)
 
 Copyright (c) 2017 to present Pydantic Services Inc. and individual contributors.
@@ -48,7 +48,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------
-** pydantic_core; version 2.50.4 -- https://pypi.org/project/pydantic_core/
+** pydantic_core; version 2.50.5 -- https://pypi.org/project/pydantic_core/
 The MIT License (MIT)
 
 Copyright (c) 2022 Samuel Colvin
@@ -72,7 +72,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------
-** PyYAML; version 6.0.3 -- https://pypi.org/project/PyYAML/
+** PyYAML; version 6.0.4 -- https://pypi.org/project/PyYAML/
 Copyright (c) 2017-2021 Ingy döt Net
 Copyright (c) 2006-2016 Kirill Simonov
 
@@ -2110,7 +2110,7 @@ limitations under the License.
 ** regex-automata; version 0.4.18 -- https://crates.io/crates/regex-automata
 ** regex-syntax; version 0.8.11 -- https://crates.io/crates/regex-syntax
 ** regex; version 1.13.1 -- https://crates.io/crates/regex
-** ruff_unicode_names2; version 0.0.21 -- https://crates.io/crates/ruff_unicode_names2
+** ruff_unicode_names2; version 0.0.22 -- https://crates.io/crates/ruff_unicode_names2
 ** signal-hook-registry; version 1.4.8 -- https://crates.io/crates/signal-hook-registry
 ** smallvec; version 1.15.2 -- https://crates.io/crates/smallvec
 ** stacker; version 0.1.25 -- https://crates.io/crates/stacker
@@ -2740,9 +2740,9 @@ limitations under the License.
 ** itoa; version 1.0.18 -- https://crates.io/crates/itoa
 ** libc; version 0.2.189 -- https://crates.io/crates/libc
 ** manyhow-macros; version 0.14.1 -- https://crates.io/crates/manyhow-macros
-** openjd-expr; version 0.15.0 -- https://crates.io/crates/openjd-expr
-** openjd-model; version 0.16.0 -- https://crates.io/crates/openjd-model
-** openjd-sessions; version 0.10.0 -- https://crates.io/crates/openjd-sessions
+** openjd-expr; version 0.17.0 -- https://crates.io/crates/openjd-expr
+** openjd-model; version 0.16.2 -- https://crates.io/crates/openjd-model
+** openjd-sessions; version 0.11.1 -- https://crates.io/crates/openjd-sessions
 ** pin-project-lite; version 0.2.17 -- https://crates.io/crates/pin-project-lite
 ** portable-atomic; version 1.15.0 -- https://crates.io/crates/portable-atomic
 ** proc-macro2; version 1.0.107 -- https://crates.io/crates/proc-macro2
@@ -3198,11 +3198,11 @@ SOFTWARE.
 
 
 ------
-** ruff_python_ast; version 0.0.21 -- https://crates.io/crates/ruff_python_ast
-** ruff_python_parser; version 0.0.21 -- https://crates.io/crates/ruff_python_parser
-** ruff_python_trivia; version 0.0.21 -- https://crates.io/crates/ruff_python_trivia
-** ruff_source_file; version 0.0.21 -- https://crates.io/crates/ruff_source_file
-** ruff_text_size; version 0.0.21 -- https://crates.io/crates/ruff_text_size
+** ruff_python_ast; version 0.0.22 -- https://crates.io/crates/ruff_python_ast
+** ruff_python_parser; version 0.0.22 -- https://crates.io/crates/ruff_python_parser
+** ruff_python_trivia; version 0.0.22 -- https://crates.io/crates/ruff_python_trivia
+** ruff_source_file; version 0.0.22 -- https://crates.io/crates/ruff_source_file
+** ruff_text_size; version 0.0.22 -- https://crates.io/crates/ruff_text_size
 MIT License
 
 Copyright (c) <year> <copyright holders>
@@ -3328,7 +3328,7 @@ THE SOFTWARE.
 
 
 ------
-** nix; version 0.31.3 -- https://crates.io/crates/nix
+** nix; version 0.32.0 -- https://crates.io/crates/nix
 The MIT License (MIT)
 
 Copyright (c) 2015 Carl Lerche + nix-rust Authors
@@ -3396,7 +3396,7 @@ authorization of the copyright holder.
 
 
 ------
-** ruff_unicode_names2; version 0.0.21 -- https://crates.io/crates/ruff_unicode_names2
+** ruff_unicode_names2; version 0.0.22 -- https://crates.io/crates/ruff_unicode_names2
 UNICODE, INC. LICENSE AGREEMENT - DATA FILES AND SOFTWARE
 
 Unicode Data Files include all data files under the directories http://www.unicode.org/Public/, http://www.unicode.org/reports/, http://www.unicode.org/cldr/data/, http://source.icu-project.org/repos/icu/, and http://www.unicode.org/utility/trac/browser/.

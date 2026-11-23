@@ -989,6 +989,15 @@ including a shortest-digit tie, which rounds to even:
 `string(1000000000000000.25 * 1.0)` is `"1000000000000000.2"`
 (openjd-expr 0.15.0, openjd-rs#539; before, ties rounded up).
 
+`round(x, ndigits)` with a float `x` returns an `int` when
+`ndigits <= 0` and a `float` when `ndigits > 0`, as the expression
+language spec says: `round(1234.5, -1)` is `1230` and `round(3.7, 0)`
+is `4`. It rounds the exact value of `x`, as CPython does, so
+`round(2.675, 2)` is `2.67`, and an `int` `x` with a negative `ndigits`
+rounds with exact integer arithmetic. An `int` result outside the 64-bit
+signed range raises `ExpressionError` for integer overflow (openjd-expr
+0.17.0, openjd-rs#567).
+
 
 | Exception | Base |
 |---|---|
